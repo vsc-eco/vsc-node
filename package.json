@@ -1,0 +1,31 @@
+{
+  "name": "video-encoder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^4.4.4",
+    "@types/jest": "^26.0.24",
+    "@typescript-eslint/eslint-plugin": "^4.28.3",
+    "@typescript-eslint/parser": "^4.28.3",
+    "eslint": "^7.30.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0",
+    "jest": "^27.0.6",
+    "prettier": "^2.4.1",
+    "ts-jest": "^27.0.5",
+    "ts-node": "^10.2.1",
+    "ts-node-dev": "^1.1.8"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev src/index.ts",
+    "lint:fix": "eslint --fix \"src/**/*.{ts,tsx}\"",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "test:report": "sensible-browser ./coverage/lcov-report/index.html",
+    "test": "jest --coverage"
+  },
+  "author": "",
+  "license": "ISC"
+}

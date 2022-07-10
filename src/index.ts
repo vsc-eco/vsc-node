@@ -1,4 +1,9 @@
+import { CoreService } from "./services"
+
+
 async function startup(): Promise<void> {
+  const core = new CoreService()
+  await core.start()
   console.log(`startup`)
 }
 

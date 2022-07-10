@@ -1,12 +1,36 @@
 {
-  "name": "video-encoder",
+  "name": "@vaultec/vsc-node",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
-  "dependencies": {},
+  "dependencies": {
+    "@ceramicnetwork/docid": "^0.5.2",
+    "@ceramicnetwork/http-client": "^1.4.0",
+    "@ceramicnetwork/stream-tile": "^1.5.7",
+    "@hiveio/dhive": "^1.2.2",
+    "@nestjs/common": "^8.4.7",
+    "@nestjs/core": "^8.4.7",
+    "@nestjs/platform-express": "^8.4.7",
+    "bloom-filters": "^3.0.0",
+    "datastore-fs": "^7.0.0",
+    "dids": "^2.4.3",
+    "dlv": "^1.1.3",
+    "dotenv": "^16.0.1",
+    "express-graphql": "^0.12.0",
+    "fast-json-patch": "^3.1.1",
+    "graphql-type-json": "^0.3.2",
+    "ipfs-http-client": "^55.0.0",
+    "it-pushable": "^1.4.2",
+    "key-did-provider-ed25519": "^1.1.0",
+    "key-did-resolver": "^1.4.0",
+    "mongodb": "^4.7.0",
+    "node-schedule": "^2.1.0",
+    "p-queue": "^7.2.0",
+    "uuid": "^8.3.2",
+    "vm2": "^3.9.9"
+  },
   "devDependencies": {
-    "typescript": "^4.4.4",
-    "@types/jest": "^26.0.24",
+    "@types/jest": "^27.0.6",
     "@typescript-eslint/eslint-plugin": "^4.28.3",
     "@typescript-eslint/parser": "^4.28.3",
     "eslint": "^7.30.0",
@@ -15,11 +39,13 @@
     "jest": "^27.0.6",
     "prettier": "^2.4.1",
     "ts-jest": "^27.0.5",
-    "ts-node": "^10.2.1",
-    "ts-node-dev": "^1.1.8"
+    "ts-node": "^10.8.1",
+    "ts-node-dev": "^1.1.8",
+    "typescript": "^4.4.4"
   },
   "scripts": {
     "build": "tsc",
+    "start": "ts-node src/index.ts",
     "dev": "ts-node-dev src/index.ts",
     "lint:fix": "eslint --fix \"src/**/*.{ts,tsx}\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
@@ -27,5 +53,6 @@
     "test": "jest --coverage"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "type": "module"
 }

@@ -1,3 +1,4 @@
+import { ApiModule } from "./modules/api/index"
 import { CoreService } from "./services"
 
 
@@ -5,6 +6,9 @@ async function startup(): Promise<void> {
   const core = new CoreService()
   await core.start()
   console.log(`startup`)
+
+  const api = new ApiModule(1337, core)
+  await api.listen()
 }
 
 void startup()

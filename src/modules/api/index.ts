@@ -5,7 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { graphqlHTTP } from 'express-graphql'
 import { buildSchema } from 'graphql'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { CoreService } from '../modules/core/core.service'
+import { CoreService } from '../../services/index'
 import { ApiController } from './api.controller'
 import { Resolvers } from './graphql/resolvers'
 import { schema } from './graphql/schema'
@@ -25,7 +25,7 @@ class ControllerModule {}
 /**
  * see api requirements here https://github.com/3speaknetwork/research/discussions/3
  */
-export class EncoderApiModule {
+export class ApiModule {
   constructor(
     private readonly listenPort: number,
     private readonly self: CoreService

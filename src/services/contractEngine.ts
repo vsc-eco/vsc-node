@@ -1,8 +1,10 @@
 import { Collection } from 'mongodb'
 import { NodeVM, VM, VMScript } from 'vm2'
 import { CID } from 'multiformats'
-import { CoreService } from './index.js'
+import { CoreService } from './index'
 import * as jsonpatch from 'fast-json-patch'
+import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
+import { verifyMultiJWS } from '../utils'
 
 let codeTemplate = `
 function wrapper () {
@@ -39,41 +41,11 @@ function wrapper () {
   wrapper();
 `
 
-interface Contract {
-  id: string
-  name: string
-  code: string
-  stateMerkle?: string //V0 of contract state
-  creation_tx?: string
-  created_at?: Date
-}
-
-interface JsonPatchOp {
-  op: string
-  path: string
-  value: string | object | number
-}
-
-interface ContractOutput {
-  id: string //Calculated when created/signed
-  included_in: string //Generated when being included into an Anchor Block
-  inputs: Array<{
-    id: string
-  }>
-  stateMerkle: string
-  //log: JsonPatchOp[]
-  //Matrix of subdocuments --> individual logs
-  log_matrix: Record<
-    string,
-    {
-      log: JsonPatchOp[]
-    }
-  >
-}
-
 export class ContractEngine {
   self: CoreService
   contractDb: Collection<Contract>
+  contractLog: Collection<ContractOutput>
+
   constructor(self: CoreService) {
     this.self = self
   }
@@ -144,6 +116,7 @@ export class ContractEngine {
       } else {
         if (contract.stateMerkle) {
           stateCid = CID.parse(contract.stateMerkle)
+          stateCid = await this.self.ipfs.object.new()
         } else {
           stateCid = await this.self.ipfs.object.new()
         }
@@ -223,7 +196,7 @@ export class ContractEngine {
    */
   async contractExecuteRaw(id, operations): Promise<{}> {
     let stateMerkle
-    let startMerkle;
+    let startMerkle
     for (let op of operations) {
       const contractInfo = await this.contractDb.findOne({
         id,
@@ -237,7 +210,7 @@ export class ContractEngine {
 
       const state = await this.contractStateRaw(id, stateMerkle)
       const script = new VMScript(code).compile()
-      if(!startMerkle) {
+      if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
       const executeOutput = (await new Promise((resolve, reject) => {
@@ -260,68 +233,81 @@ export class ContractEngine {
       stateMerkle = executeOutput.stateMerkle
     }
     let startMerkleObj = await this.self.ipfs.dag.get(CID.parse(startMerkle))
-    startMerkleObj.value.Links = startMerkleObj.value.Links.map(e => {
-        return {
-            ...e,
-            Hash: e.Hash.toString()
-        }
+    startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
+      return {
+        ...e,
+        Hash: e.Hash.toString(),
+      }
     })
     let stateMerkleObj = await this.self.ipfs.dag.get(CID.parse(stateMerkle))
-    stateMerkleObj.value.Links = stateMerkleObj.value.Links.map(e => {
-        return {
-            ...e,
-            Hash: e.Hash.toString()
-        }
+    stateMerkleObj.value.Links = stateMerkleObj.value.Links.map((e) => {
+      return {
+        ...e,
+        Hash: e.Hash.toString(),
+      }
     })
-    console.log(JSON.stringify({stateMerkleObj, startMerkleObj}))
+    console.log(JSON.stringify({ stateMerkleObj, startMerkleObj }))
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
 
     let log_matrix = {}
-    for(let logOp of merkleDiff) {
-        if(['add', 'replace'].includes(logOp.op)) {
-            console.log(logOp)
-            let initObj = {}
-            let endObj = {}
-            if(logOp.op === "replace") {
-                const obj = await this.self.ipfs.dag.resolve(startMerkle, {
-                    path: `${logOp.value.Name}`,
-                  })
-                initObj = (await this.self.ipfs.dag.get(obj.cid)).value
-            }
-            //If statement for typescript reasons
-            if(logOp.op === "add" || logOp.op === "replace") {
-                try {
-                    const obj = await this.self.ipfs.dag.resolve(stateMerkle, {
-                      path: `${logOp.value.Name}`,
-                    })
-                    endObj = (await this.self.ipfs.dag.get(obj.cid)).value
-                    
-                } catch (ex) {
-                    return null
-                }
-                console.log({initObj, endObj})
-                log_matrix[logOp.value.Name] = jsonpatch.compare(initObj, endObj)
-            }
+    for (let logOp of merkleDiff) {
+      if (['add', 'replace'].includes(logOp.op)) {
+        console.log(logOp)
+        let initObj = {}
+        let endObj = {}
+        if (logOp.op === 'replace') {
+          const obj = await this.self.ipfs.dag.resolve(startMerkle, {
+            path: `${logOp.value.Name}`,
+          })
+          initObj = (await this.self.ipfs.dag.get(obj.cid)).value
         }
+        //If statement for typescript reasons
+        if (logOp.op === 'add' || logOp.op === 'replace') {
+          try {
+            const obj = await this.self.ipfs.dag.resolve(stateMerkle, {
+              path: `${logOp.value.Name}`,
+            })
+            endObj = (await this.self.ipfs.dag.get(obj.cid)).value
+          } catch (ex) {
+            return null
+          }
+          console.log({ initObj, endObj })
+          log_matrix[logOp.value.Name] = jsonpatch.compare(initObj, endObj)
+        }
+      }
     }
-    
-    console.log(await this.self.ipfs.dag.put(log_matrix))
-    console.log(JSON.stringify({
-        log_matrix
-    }, null, 2))
 
-    return {}
+    console.log(await this.self.ipfs.dag.put(log_matrix))
+    console.log(
+      JSON.stringify(
+        {
+          log_matrix,
+        },
+        null,
+        2,
+      ),
+    )
+
+    return {
+      inputs: operations.map(e => {
+        return {
+          id: e.id
+        }
+      }),
+      state_merkle: CID.parse(stateMerkle.toString()),
+      log_matrix,
+    }
   }
 
-
   async createSmartContract() {
-    const executorId = this.self.identity.id;
+    const executorId = this.self.identity.id
     console.log(executorId)
   }
 
-
   async start() {
     this.contractDb = this.self.db.collection('contracts')
+    this.contractLog = this.self.db.collection('contract_log')
+
     try {
       this.contractDb.createIndex(
         {
@@ -332,11 +318,37 @@ export class ContractEngine {
         },
       )
     } catch {}
+
+    try {
+      this.contractLog.createIndex(
+        {
+          id: -1,
+        },
+        {
+          unique: true,
+        },
+      )
+    } catch {}
+
+    try {
+      this.contractLog.createIndex(
+        {
+          contract_id: -1,
+        },
+        {
+          unique: true,
+        },
+      )
+    } catch {}
+
     //await this.executeContract('kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz', 'init', {})
-    await this.contractExecuteRaw(
+
+    console.log('executing contract call')
+    const output = await this.contractExecuteRaw(
       'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
       [
         {
+          id: 'bafyreietntvizm42d25qd2ppnng6mf7jkxyxpsgnsicomnqxxfowdcfsr4',
           action: 'set',
           payload: {
             key: 'hello',
@@ -344,6 +356,7 @@ export class ContractEngine {
           },
         },
         {
+          id: "bafyreid2fn42ptf3v464nxmm6z24llvk23gsncggpzw34fuz5q6esgmldy",
           action: 'set',
           payload: {
             key: 'test-2',
@@ -351,6 +364,7 @@ export class ContractEngine {
           },
         },
         {
+          id: 'bafyreicmyzlywkgizjsigz6j7evzpurflnqmbdmnr2ayj4nm7ewl3ipr2e',
           action: 'set',
           payload: {
             key: 'test',
@@ -359,5 +373,54 @@ export class ContractEngine {
         },
       ],
     )
+    
+    console.log(output)
+    const dag = await this.self.identity.createDagJWS(output)
+    let signers = [this.self.identity, this.self.wallet]
+    
+    let signatures = []
+    let signedDag
+    for(let signer of signers) {
+      signedDag = await signer.createDagJWS(output)
+      console.log('signedDag', signedDag) 
+      signatures.push(...signedDag.jws.signatures)
+    }
+
+    let completeDag = {
+      jws: {
+        payload: signedDag.jws.payload,
+        signatures,
+        link: signedDag.jws.link
+      },
+      linkedBlock: await this.self.ipfs.block.put(signedDag.linkedBlock, {
+        format: 'dag-cbor'
+      })
+    }
+    console.log(signatures)
+    
+    try {
+      const payload = await verifyMultiJWS(completeDag.jws, this.self.identity)
+      console.log(payload)
+    } catch(ex) {
+      console.log(ex)
+    }
+    
+    const completeDagCid = await this.self.ipfs.dag.put(completeDag)
+
+    //console.log(dag, completeDagCid)
+    //console.log(dag)
+    const test = await this.self.ipfs.dag.put(output)
+    //console.log(test)
+    //console.log(Buffer.from(dag.linkedBlock).toString())
+    const linkedBlock = await this.self.ipfs.block.put(dag.linkedBlock, {
+      format: 'dag-cbor'
+    })
+    //console.log(linkedBlock)
+    const test2 = await this.self.ipfs.dag.put({
+      jws: dag.jws,
+      linkedBlock
+    })
+    //console.log(test2)
+
   }
 }

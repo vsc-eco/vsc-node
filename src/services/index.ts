@@ -68,7 +68,5 @@ export class CoreService {
 
         this.contractEngine = new ContractEngine(this)
         await this.contractEngine.start()
-
-        
     }
 }

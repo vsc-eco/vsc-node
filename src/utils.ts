@@ -3,6 +3,7 @@ import EventEmitter from 'events'
 //import PQueue from 'p-queue'
 import { BlockchainMode, BlockchainStreamOptions, Client } from '@hiveio/dhive'
 import Pushable from 'it-pushable'
+import { DagJWS, DID } from 'dids'
 console.log('pushable', Pushable)
 
 export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.deathwing.me')
@@ -167,3 +168,25 @@ export function sleep(ms: number) {
   
 
 export const NULL_DID = 'did:key:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDnP' // Null address should go to an empty ed25519 key
+
+
+export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
+  let auths = []; 
+
+  for(let sig of dagJws.signatures) {
+    const obj = {
+      link: dagJws.link,
+      signatures: [sig],
+      payload: dagJws.payload,
+    }
+    const {kid} = await signer.verifyJWS(obj)
+    
+    auths.push(kid.split('#')[0])
+  }
+
+  return {
+    payload: dagJws.payload,
+    link: dagJws.link,
+    auths
+  }
+}

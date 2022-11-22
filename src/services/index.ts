@@ -14,7 +14,13 @@ import { ChainBridge } from "./chainBridge";
 //@ts-ignore
 import type { CeramicClient } from "@ceramicnetwork/http-client";
 import { ContractEngine } from "./contractEngine";
+import { P2PService } from "./pubsub";
 
+interface CoreOptions {
+    pathSuffix?: string
+    dbSuffix?: string
+    ipfsApi?: string
+}
 
 export class CoreService {
     ipfs: IPFSHTTPClient;
@@ -25,13 +31,24 @@ export class CoreService {
     db: Db;
     chainBridge: ChainBridge;
     ceramic: CeramicClient;
-    contractEngine: ContractEngine
+    contractEngine: ContractEngine;
+    options: CoreOptions;
+    p2pService: P2PService;
+
+    constructor(options?: CoreOptions) {
+        this.options = options || {};
+
+        if(!this.options.ipfsApi) {
+            this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"
+        }
+    }
 
     async start() {
-        this.ipfs = IPFS.create();
-        this.config = new Config(Path.join(os.homedir(), '.vsc-node'))
+        this.ipfs = IPFS.create(this.options.ipfsApi);
+        const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
+        this.config = new Config(homeDir)
         await this.config.open()
-        this.db = mongo.db('vsc')
+        this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
         await mongo.connect()
 
         for(let key of ['node', 'wallet']) {
@@ -42,7 +59,6 @@ export class CoreService {
               privateKey = Crypto.randomBytes(32)
               const hex = privateKey.toString('base64')
               this.config.set(`identity.${key}Private`, hex)
-              
             }
             const keyPrivate = new Ed25519Provider(privateKey)
             const did = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
@@ -68,5 +84,8 @@ export class CoreService {
 
         this.contractEngine = new ContractEngine(this)
         await this.contractEngine.start()
+
+        this.p2pService = new P2PService(this)
+        await this.p2pService.start()
     }
 }

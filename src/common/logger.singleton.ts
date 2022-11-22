@@ -11,12 +11,12 @@ const consoleFormat = winston.format.combine(
     format: 'MM/DD/YYYY HH:m:s',
   }),
   winston.format.printf(
-    (info) => ` ${info.label}  ${info.timestamp}  ${info.level} : ${info.message}`,
+    (info) => `${info.label}  ${info.timestamp}  ${info.level} : ${info.message}`,
   ),
 )
 
 export const logger = winston.createLogger({
-  level: 'info',
+  level: 'verbose', //Or Info
   format: winston.format.json(),
   defaultMeta: { service: 'vsc-node' },
   transports: [

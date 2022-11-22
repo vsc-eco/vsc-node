@@ -127,6 +127,10 @@ export class Config {
         walletPrivate: null,
         walletPublic: null,
       },
+      //Contract executor
+      witness: {
+        enabled: false
+      },
       node: {},
       ipfs: {
         apiAddr: '/ip4/127.0.0.1/tcp/5001',

@@ -4,7 +4,7 @@ import NodeSchedule from 'node-schedule'
 import dhive, { PrivateKey } from '@hiveio/dhive'
 import { CoreService } from '.'
 import { BlockRecord, TransactionDbStatus, TransactionDbType, TransactionOps } from '../types'
-import { fastStream, HiveClient } from '@/utils'
+import { fastStream, HiveClient } from '../utils'
 import 'dotenv/config'
 import { Collection } from 'mongodb'
 
@@ -67,7 +67,6 @@ export class ChainBridge {
         if (tx.op === 'create_contract') {
           //console.log(tx, payload)
 
-          console.log(tx)
           const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
           const { name, code } = tileDoc.content as any
           try {
@@ -82,7 +81,6 @@ export class ChainBridge {
          * @todo validate updates
          */
         if(tx.op === TransactionOps.updateContract) {
-          console.log(tx)
           const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
           const { name, code, revision } = tileDoc.content as any
           try {

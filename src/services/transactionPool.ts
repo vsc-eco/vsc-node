@@ -173,7 +173,6 @@ export class TransactionPoolService {
       code: args.codeCid.toString(),
       revision: ((tileDoc.content as any).revision || 0) + 1
     } as any)
-    console.log(tileDoc.id, tileDoc.commitId)
 
     const {id} = await this.createTransaction({
       op: TransactionOps.updateContract,
@@ -225,22 +224,22 @@ export class TransactionPoolService {
       api: {},
     }
 
-    const vm = new NodeVM({
-      sandbox: {
-        test: async () => {
-          return await this.self.ipfs.id()
-        },
-      },
-    })
+    // const vm = new NodeVM({
+    //   sandbox: {
+    //     test: async () => {
+    //       return await this.self.ipfs.id()
+    //     },
+    //   },
+    // })
 
     try {
       const newCid = (await this.self.ipfs.add(await fs.readFile('./src/services/contracts/basic-contract.js'))).cid.toString()
       console.log('new contract cid', newCid)
-      await this.updateContract({
-        id: "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz",
-        name: 'test contract',
-        codeCid: newCid
-      })
+      // await this.updateContract({
+      //   id: "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz",
+      //   name: 'test contract',
+      //   codeCid: newCid
+      // })
 
     } catch(ex) {
       console.log(ex)

@@ -5,6 +5,7 @@ import { CoreService } from './index'
 import * as jsonpatch from 'fast-json-patch'
 import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
 import { verifyMultiJWS } from '../utils'
+import { logger } from '../common/logger.singleton'
 
 let codeTemplate = `
 function wrapper () {
@@ -55,7 +56,7 @@ export class ContractEngine {
     let contract = await this.contractDb.findOne({
       id,
     })
-    console.log(contract)
+    // console.log(contract)
     if (contract) {
       if (contract.stateMerkle) {
         stateCid = CID.parse(contract.stateMerkle)
@@ -66,7 +67,7 @@ export class ContractEngine {
 
     return {
       pull: async (key: string) => {
-        console.log(stateCid)
+        // console.log(stateCid)
         try {
           const obj = await this.self.ipfs.dag.resolve(stateCid, {
             path: `${key}`,
@@ -84,7 +85,7 @@ export class ContractEngine {
           Hash: outCid,
         })
 
-        console.log(merkleCid)
+        logger.verbose(`[Smart Contract Execution] Updated  Merkle Root to ${merkleCid}`)
         //TODO make this happen after contract call has been completely executed
         await this.contractDb.findOneAndUpdate(contract, {
           $set: {
@@ -109,7 +110,9 @@ export class ContractEngine {
     let contract = await this.contractDb.findOne({
       id,
     })
-    console.log(contract)
+    if(!contract) {
+      throw new Error("Contract Not Indexed Or Does Not Exist")
+    }
     if (contract) {
       if (stateMerkle) {
         stateCid = stateMerkle
@@ -166,6 +169,10 @@ export class ContractEngine {
     const contractInfo = await this.contractDb.findOne({
       id,
     })
+
+    if(!contractInfo) {
+      throw new Error("Contract Not Indexed Or Does Not Exist")
+    }
     //console.log(contractInfo, await this.self.ipfs.cat(contractInfo.code))
     let codeRaw = ''
     for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
@@ -201,6 +208,9 @@ export class ContractEngine {
       const contractInfo = await this.contractDb.findOne({
         id,
       })
+      if(!contractInfo) {
+        throw new Error("Contract Not Indexed Or Does Not Exist")
+      }
       let codeRaw = ''
       for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
         codeRaw = codeRaw + chunk.toString()
@@ -221,7 +231,7 @@ export class ContractEngine {
               payload: op.payload,
             },
             done: (msg) => {
-              console.log('message is', msg, state.finish())
+              // console.log('message is',  msg, state.finish())
               return resolve(state.finish())
             },
             state: state.client,
@@ -229,7 +239,6 @@ export class ContractEngine {
         })
         vm.run(script, 'vm.js')
       })) as { stateMerkle: string }
-      console.log(executeOutput)
       stateMerkle = executeOutput.stateMerkle
     }
     let startMerkleObj = await this.self.ipfs.dag.get(CID.parse(startMerkle))
@@ -246,13 +255,12 @@ export class ContractEngine {
         Hash: e.Hash.toString(),
       }
     })
-    console.log(JSON.stringify({ stateMerkleObj, startMerkleObj }))
+
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
 
     let log_matrix = {}
     for (let logOp of merkleDiff) {
       if (['add', 'replace'].includes(logOp.op)) {
-        console.log(logOp)
         let initObj = {}
         let endObj = {}
         if (logOp.op === 'replace') {
@@ -271,22 +279,22 @@ export class ContractEngine {
           } catch (ex) {
             return null
           }
-          console.log({ initObj, endObj })
+          // console.log({ initObj, endObj })
           log_matrix[logOp.value.Name] = jsonpatch.compare(initObj, endObj)
         }
       }
     }
 
-    console.log(await this.self.ipfs.dag.put(log_matrix))
-    console.log(
-      JSON.stringify(
-        {
-          log_matrix,
-        },
-        null,
-        2,
-      ),
-    )
+    // console.log(await this.self.ipfs.dag.put(log_matrix))
+    // console.log(
+    //   JSON.stringify(
+    //     {
+    //       log_matrix,
+    //     },
+    //     null,
+    //     2,
+    //   ),
+    // )
 
     return {
       inputs: operations.map(e => {
@@ -301,7 +309,6 @@ export class ContractEngine {
 
   async createSmartContract() {
     const executorId = this.self.identity.id
-    console.log(executorId)
   }
 
   async start() {
@@ -343,83 +350,81 @@ export class ContractEngine {
 
     //await this.executeContract('kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz', 'init', {})
 
-    console.log('executing contract call')
-    const output = await this.contractExecuteRaw(
-      'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
-      [
-        {
-          id: 'bafyreietntvizm42d25qd2ppnng6mf7jkxyxpsgnsicomnqxxfowdcfsr4',
-          action: 'set',
-          payload: {
-            key: 'hello',
-            value: Math.random(),
-          },
-        },
-        {
-          id: "bafyreid2fn42ptf3v464nxmm6z24llvk23gsncggpzw34fuz5q6esgmldy",
-          action: 'set',
-          payload: {
-            key: 'test-2',
-            value: Math.random(),
-          },
-        },
-        {
-          id: 'bafyreicmyzlywkgizjsigz6j7evzpurflnqmbdmnr2ayj4nm7ewl3ipr2e',
-          action: 'set',
-          payload: {
-            key: 'test',
-            value: Math.random(),
-          },
-        },
-      ],
-    )
+    // const output = await this.contractExecuteRaw(
+    //   'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
+    //   [
+    //     {
+    //       id: 'bafyreietntvizm42d25qd2ppnng6mf7jkxyxpsgnsicomnqxxfowdcfsr4',
+    //       action: 'set',
+    //       payload: {
+    //         key: 'hello',
+    //         value: Math.random(),
+    //       },
+    //     },
+    //     {
+    //       id: "bafyreid2fn42ptf3v464nxmm6z24llvk23gsncggpzw34fuz5q6esgmldy",
+    //       action: 'set',
+    //       payload: {
+    //         key: 'test-2',
+    //         value: Math.random(),
+    //       },
+    //     },
+    //     {
+    //       id: 'bafyreicmyzlywkgizjsigz6j7evzpurflnqmbdmnr2ayj4nm7ewl3ipr2e',
+    //       action: 'set',
+    //       payload: {
+    //         key: 'test',
+    //         value: Math.random(),
+    //       },
+    //     },
+    //   ],
+    // )
     
-    console.log(output)
-    const dag = await this.self.identity.createDagJWS(output)
-    let signers = [this.self.identity, this.self.wallet]
+    // const dag = await this.self.identity.createDagJWS(output)
+    // let signers = [this.self.identity, this.self.wallet]
     
-    let signatures = []
-    let signedDag
-    for(let signer of signers) {
-      signedDag = await signer.createDagJWS(output)
-      console.log('signedDag', signedDag) 
-      signatures.push(...signedDag.jws.signatures)
-    }
+    // let signatures = []
+    // let signedDag
+    // for(let signer of signers) {
+    //   signedDag = await signer.createDagJWS(output)
+    //   // console.log('signedDag', signedDag) 
+    //   signatures.push(...signedDag.jws.signatures)
+    // }
 
-    let completeDag = {
-      jws: {
-        payload: signedDag.jws.payload,
-        signatures,
-        link: signedDag.jws.link
-      },
-      linkedBlock: await this.self.ipfs.block.put(signedDag.linkedBlock, {
-        format: 'dag-cbor'
-      })
-    }
-    console.log(signatures)
+    // let completeDag = {
+    //   jws: {
+    //     payload: signedDag.jws.payload,
+    //     signatures,
+    //     link: signedDag.jws.link
+    //   },
+    //   linkedBlock: await this.self.ipfs.block.put(signedDag.linkedBlock, {
+    //     format: 'dag-cbor'
+    //   })
+    // }
+    // // console.log(signatures)
     
-    try {
-      const payload = await verifyMultiJWS(completeDag.jws, this.self.identity)
-      console.log(payload)
-    } catch(ex) {
-      console.log(ex)
-    }
+    // try {
+    //   const payload = await verifyMultiJWS(completeDag.jws, this.self.identity)
+    //   // console.log(payload)
+    // } catch(ex) {
+    //   console.log(ex)
+    // }
     
-    const completeDagCid = await this.self.ipfs.dag.put(completeDag)
+    // const completeDagCid = await this.self.ipfs.dag.put(completeDag)
 
-    //console.log(dag, completeDagCid)
-    //console.log(dag)
-    const test = await this.self.ipfs.dag.put(output)
-    //console.log(test)
-    //console.log(Buffer.from(dag.linkedBlock).toString())
-    const linkedBlock = await this.self.ipfs.block.put(dag.linkedBlock, {
-      format: 'dag-cbor'
-    })
-    //console.log(linkedBlock)
-    const test2 = await this.self.ipfs.dag.put({
-      jws: dag.jws,
-      linkedBlock
-    })
+    // //console.log(dag, completeDagCid)
+    // //console.log(dag)
+    // const test = await this.self.ipfs.dag.put(output)
+    // //console.log(test)
+    // //console.log(Buffer.from(dag.linkedBlock).toString())
+    // const linkedBlock = await this.self.ipfs.block.put(dag.linkedBlock, {
+    //   format: 'dag-cbor'
+    // })
+    // //console.log(linkedBlock)
+    // const test2 = await this.self.ipfs.dag.put({
+    //   jws: dag.jws,
+    //   linkedBlock
+    // })
     //console.log(test2)
 
   }

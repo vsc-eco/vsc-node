@@ -64,5 +64,17 @@ export interface ContractOutputRaw {
         log: JsonPatchOp[]
       }
     >
-  }
+}
   
+
+export enum InputHeaderFlags {
+  INDEX_SEARCH = "index_search"
+}
+
+export interface InputHeader {
+  flags: Array<InputHeaderFlags>
+  sender: {
+    id: string
+    type: "HIVE" | "DID"
+  }
+}

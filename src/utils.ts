@@ -4,6 +4,7 @@ import EventEmitter from 'events'
 import { BlockchainMode, BlockchainStreamOptions, Client } from '@hiveio/dhive'
 import Pushable from 'it-pushable'
 import { DagJWS, DID } from 'dids'
+import PQueue from 'p-queue'
 console.log('pushable', Pushable)
 
 export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.deathwing.me')
@@ -12,93 +13,95 @@ export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3
 
 export const CERAMIC_HOST = process.env.CERAMIC_HOST || "https://ceramic.3speak.tv"
 
-export async function fastStream(streamOpts: {startBlock: number, endBlock?: number}) {
-  const PQueue = (await import('p-queue')).default
-  const queue = new PQueue({ concurrency: 35 })
-  if(!streamOpts.endBlock) {
-      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16)
-      streamOpts.endBlock = block_height;
-  }
-  let setSize = 20
-  //let startBlock = 42837;
-  //Use 30874325 in the state store (database) to parse from the beginning of 3speak
-  let endSet = (streamOpts.endBlock - streamOpts.startBlock) / setSize
 
-  /*const numbSets = endSet % setSize
+export class fastStream {
 
-  console.log(numbSets)
-  console.log(Math.floor(endSet / setSize))*/
+  replayComplete: boolean
+  blockMap: Record<string, any>
 
+  eventQueue: NodeJS.Timer
+  events: EventEmitter
+  streamPaused: boolean
+  streamOut: Pushable.Pushable<any>
+  currentBlock: number
+  parser_height: number
+  endSet: number
+  setSize: number
+  queue: PQueue
+  
+  constructor(queue: PQueue, streamOpts) {
+    this.queue = queue
+    this.events = new EventEmitter()    
+    this.streamOut = Pushable()
+    this.currentBlock = streamOpts.startBlock || 1
+    this.parser_height = streamOpts.startBlock || 0
+    this.setSize = 20;
+    this.endSet = (streamOpts.endBlock - streamOpts.startBlock) / this.setSize
 
-  let currentBlock = streamOpts.startBlock || 1
-  const events = new EventEmitter()
-  const streamOut = Pushable()
-  let streamPaused = false;
+    this.blockMap = {}
 
-  let parser_height = streamOpts.startBlock || 0
-
-
-  const blockMap = {}
-  /*events.on('block', (height, block) => {
     
-    console.log(Object.keys(blockMap))
-    if (blockMap[parser_height]) {
-      const block_height = parseInt(blockMap[parser_height].block_id.slice(0, 8), 16)
-      console.log(`parser_height is ${parser_height}`)
-      parser_height = block_height + 1;
-      events.emit('block', block_height, blockMap[block_height])
-      delete blockMap[block_height]
-    }
-  })*/
-  let activeLength = 0
+    this.startStream = this.startStream.bind(this)
+    this.resumeStream = this.resumeStream.bind(this)
+    this.pauseStream = this.pauseStream.bind(this)
+    this.onDone = this.onDone.bind(this)
 
-  const eventQueue = setInterval(() => {
-    if (blockMap[parser_height]) {
-      const block_height = parseInt(blockMap[parser_height].block_id.slice(0, 8), 16)
-      
-      parser_height = block_height + 1;
-      events.emit('block', block_height, blockMap[block_height])
-      delete blockMap[block_height]
-    }
-    for(let key of Object.keys(blockMap)) {
-      if(Number(key) < parser_height) {
-        delete blockMap[key]; //Memory safety
+    this.events.on('block', (block_height, block) => {
+      // console.log('emitting', block_height)
+      // console.log(block_height)
+      this.streamOut.push([block_height, block])
+    })
+  
+    this.eventQueue = setInterval(() => {
+      if (this.blockMap[this.parser_height]) {
+        const block_height = parseInt(this.blockMap[this.parser_height].block_id.slice(0, 8), 16)
+        
+        this.parser_height = block_height + 1;
+        this.events.emit('block', block_height, this.blockMap[block_height])
+        delete this.blockMap[block_height]
       }
-    }
-  }, 1)
-
-  const startStream = async () => {
+      for(let key of Object.keys(this.blockMap)) {
+        if(Number(key) < this.parser_height) {
+          delete this.blockMap[key]; //Memory safety
+        }
+      }
+    }, 1)
+  }
+  
+  async startStream() {
+    let activeLength = 0
     let finalBlock;
-    for (let x = 1; x <= endSet; x++) {
+    for (let x = 1; x <= this.endSet; x++) {
       activeLength = activeLength + 1
       const streamOptsInput:BlockchainStreamOptions = {
-        from: currentBlock,
-        to: currentBlock + setSize - 1,
+        from: this.currentBlock,
+        to: this.currentBlock + this.setSize - 1,
         mode: BlockchainMode.Latest
       }
-      currentBlock = currentBlock + setSize
+      this.currentBlock = this.currentBlock + this.setSize
 
       finalBlock = streamOptsInput.to;
-      queue.add(() => {
+      this.queue.add(() => {
         const stream = HiveClient.blockchain.getBlockStream(streamOptsInput)
         return new Promise((resolve) => {
           stream
-            .on('data', async function (block) {
+            .on('data', (async function (block) {
               const block_height = parseInt(block.block_id.slice(0, 8), 16)
-              if (parser_height === block_height) {
-                parser_height = block_height + 1;
-                events.emit('block', block_height, block)
-              } else if(block_height > parser_height) {
-                blockMap[block_height] = block
+              // console.log(this, this.parser_height,  block_height)
+              if (this.parser_height === block_height) {
+                this.parser_height = block_height + 1;
+                this.events.emit('block', block_height, block)
+              } else if(block_height > this.parser_height) {
+                this.blockMap[block_height] = block
               }
-            })
-            .on('error', (error) => {
-              clearInterval(eventQueue)
+            }).bind(this))
+            .on('error', ((error) => {
+              clearInterval(this.eventQueue)
               console.log('error is', error)
-              streamOut.end(error)
-            })
-            .on('end', function () {
+              this.streamOut.end(error)
+            }).bind(this))
+            .on('end', (function (e) {
+              
               // done
               activeLength = activeLength - 1
               if (activeLength === 0) {
@@ -107,82 +110,82 @@ export async function fastStream(streamOpts: {startBlock: number, endBlock?: num
               ;(stream as any).end();
               stream.removeAllListeners()
               return resolve(null)
-            })
+            }).bind(this))
         })
       })
-      await queue.onSizeLessThan(1250)
-      if(streamPaused === true) {
-        queue.pause()
+      await this.queue.onSizeLessThan(50)
+      if(this.streamPaused === true) {
+        this.queue.pause()
         await new Promise(async (resolve) => {
-          events.once("unpause", () => {
+          this.events.once("unpause", () => {
             resolve(null)
-            queue.start()
+            this.queue.start()
           })
         })
       }
     }
-    await queue.onIdle();
-    console.log("ITS IDLE")
+    await this.queue.onIdle();
+    console.log("ITS IDLE", {
+      finalBlock
+    })
+    
     const finalStream = HiveClient.blockchain.getBlockStream({
         from: finalBlock,
         mode: BlockchainMode.Latest
     })
     await new Promise((resolve) => {
       finalStream
-        .on('data', async function (block) {
+        .on('data', (async function (block) {
           const block_height = parseInt(block.block_id.slice(0, 8), 16)
-          if (parser_height === block_height) {
-            parser_height = block_height + 1;
-            events.emit('block', block_height, block)
-          } else if(block_height > parser_height) {
-            blockMap[block_height] = block
+          // console.log('getting', block_height)
+          if (this.parser_height === block_height) {
+            this.parser_height = block_height + 1;
+            this.events.emit('block', block_height, block)
+          } else if(block_height > this.parser_height) {
+            this.blockMap[block_height] = block
           }
-        })
-        .on('error', (error) => {
-          clearInterval(eventQueue)
-          streamOut.end(error)
-        })
-        .on('end', function () {
+        }).bind(this))
+        .on('error', ((error) => {
+          clearInterval(this.eventQueue)
+          this.streamOut.end(error)
+        }).bind(this))
+        .on('end', (function () {
           // done
           activeLength = activeLength - 1
           if (activeLength === 0) {
             //events.emit('end')
           }
-          console.log('utils 137 end')
           finalStream.removeAllListeners()
           return resolve(null)
-        })
+        }).bind(this))
     })
   }
 
-  const onDone = async () => {
-    await queue.onIdle();
-  }
-  
-  const resumeStream = async () => {
-    streamPaused = false
-    events.emit('unpause')
-  }
-  
-  const stopStream = async () => {
-    streamPaused = true
+  async resumeStream() {
+    this.streamPaused = true
   }
 
-  events.on('block', (block_height, block) => {
-      streamOut.push([block_height, block])
-  })    
+  async pauseStream() {
+    this.streamPaused = false
+    this.events.emit('unpause')
+  }
 
-  return {
-    events,
-    startStream,
-    resumeStream,
-    stopStream,
-    onDone,
-    stream: streamOut
+  async onDone() {
+    await this.queue.onIdle();
+  }
+
+  static async create(streamOpts: {startBlock: number, endBlock?: number}) {
+    const PQueue = (await import('p-queue')).default
+    const queue = new PQueue({ concurrency: 35 })
+    if(!streamOpts.endBlock) {
+      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
+      const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      streamOpts.endBlock = block_height;
+    }
+    
+    return new fastStream(queue, streamOpts)
   }
 }
-
-
   
 export function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));

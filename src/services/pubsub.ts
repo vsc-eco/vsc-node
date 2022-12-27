@@ -159,7 +159,6 @@ export class PeerChannel {
         //console.log(peerLs)
         const differences = jsonpatch.compare(this._peers.map(p => p.toString()), peerLs.map(p => p.toString()))
 
-        console.log(peerLs, differences)
         for(let itm of differences) {
             if(itm.op === "add") {
                 // this.events.emit('peer joined', itm.value)
@@ -502,7 +501,7 @@ export class P2PService {
 
                 const {result} = await channel.call('node_info')
 
-                console.log('Call Test Result', await result())
+                // console.log('Call Test Result', await result())
 
                 
                 //console.log(channel)
@@ -513,7 +512,6 @@ export class P2PService {
                         connected: true
                     }
                 })
-                console.log('PeerConnections', this.directPeers)
                 this.directPeers.push(peer)
                 logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
             }

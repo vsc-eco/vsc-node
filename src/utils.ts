@@ -28,8 +28,14 @@ export class fastStream {
   endSet: number
   setSize: number
   queue: PQueue
+  headHeight: number
+  headTracker: NodeJS.Timer
   
-  constructor(queue: PQueue, streamOpts) {
+  constructor(queue: PQueue, streamOpts: {
+    startBlock: number,
+    endBlock?: number
+    trackHead?: boolean
+  }) {
     this.queue = queue
     this.events = new EventEmitter()    
     this.streamOut = Pushable()
@@ -68,7 +74,19 @@ export class fastStream {
     }, 1)
   }
   
+
+  get blockLag() {
+    return this.headHeight - this.currentBlock
+  }
+
   async startStream() {
+    
+    this.headTracker = setInterval(async() => {
+      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
+      this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
+
+    }, 3000)
+
     let activeLength = 0
     let finalBlock;
     for (let x = 1; x <= this.endSet; x++) {
@@ -140,9 +158,26 @@ export class fastStream {
           // console.log('getting', block_height)
           if (this.parser_height === block_height) {
             this.parser_height = block_height + 1;
+            this.currentBlock = block_height;
             this.events.emit('block', block_height, block)
+            console.log({
+              fault: 6,
+              block_height,
+              parser_height: this.parser_height
+            })
           } else if(block_height > this.parser_height) {
             this.blockMap[block_height] = block
+            console.log({
+              fault: 61,
+              block_height,
+              parser_height: this.parser_height
+            })
+          } else {
+            console.log({
+              fault: 60,
+              block_height,
+              parser_height: this.parser_height
+            })
           }
         }).bind(this))
         .on('error', ((error) => {
@@ -174,7 +209,7 @@ export class fastStream {
     await this.queue.onIdle();
   }
 
-  static async create(streamOpts: {startBlock: number, endBlock?: number}) {
+  static async create(streamOpts: {startBlock: number, endBlock?: number, trackHead?: boolean}) {
     const PQueue = (await import('p-queue')).default
     const queue = new PQueue({ concurrency: 35 })
     if(!streamOpts.endBlock) {

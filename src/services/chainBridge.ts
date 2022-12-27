@@ -7,6 +7,9 @@ import { BlockRecord, TransactionDbStatus, TransactionDbType, TransactionOps } f
 import { fastStream, HiveClient } from '../utils'
 import 'dotenv/config'
 import { Collection } from 'mongodb'
+import networks from './networks'
+import { WitnessService } from './witness'
+import type PQueue from 'p-queue'
 
 
 console.log(dhive, PrivateKey)
@@ -16,9 +19,16 @@ export class ChainBridge {
   hiveKey: dhive.PrivateKey
   blockHeaders: Collection
   stateHeaders: Collection
+  witness: WitnessService
+  witnessDb: any
+
+  blockQueue: PQueue
+  block_height: number
 
   constructor(self: CoreService) {
     this.self = self
+
+    
   }
 
   async createBlock() {
@@ -168,6 +178,7 @@ export class ChainBridge {
           id: 'vsc.announce_block',
           json: JSON.stringify({
             block_hash: blockHash.toString(),
+            net_id: this.self.config.get('network.id'),
           }),
         },
         this.hiveKey,
@@ -236,13 +247,70 @@ export class ChainBridge {
 
   }
 
+  async processBlock(block_hash: string) {
+    await this.self.ipfs.dag.get(block_hash)
+  }
+
+
+  async processTransaction(tx: any, json: any, txInfo: {
+    account: string,
+    block_height: string
+  }) {
+    if(json.net_id !== this.self.config.get('network.id')) {
+      return;
+    }
+    if(json.action === "enable_witness") {
+      await this.witnessDb.findOneAndUpdate({
+        name: txInfo.account
+      }, {
+        $set: {
+          did: json.did,
+          node_id: json.node_id,
+          active: true
+        }
+      }, {
+        upsert: true
+      })
+    } else if (json.action === 'disable_witness') {
+      await this.witnessDb.findOneAndUpdate({
+        name: txInfo.account
+      }, {
+        $set: {
+          active: false
+        }
+      }, {
+        upsert: true
+      })
+    } else if (json.action === 'announce_block') {
+
+      /**
+       * TODO: Calculate expected witness account
+       */
+      const expectedAccount = ""
+      if(txInfo.account === expectedAccount) {
+
+      }
+
+
+
+    } else {
+      //Unrecognized transaction
+    }
+  }
+  
+
   async start() {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
+    this.witnessDb = this.self.db.collection('witnesses')
 
     //await this.countHeight('bafyreibopg2xjdj37dcljsdcq5bxrcyxtqdfeufpoiecfy25hir3aorux4')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
+
+    this.blockQueue = new (await import('p-queue')).default({concurrency: 1})
+
+    this.witness = new WitnessService(this.self)
 
     NodeSchedule.scheduleJob('* * * * *', async () => {
       //console.log('Creating scheduled block')
@@ -253,7 +321,58 @@ export class ChainBridge {
       await this.verifyMempool()
     })
 
-    //await this.createBlock()
+    const network_id = this.self.config.get('network.id')
+
+    console.log('network_id', network_id)
+    this.witness.enableWitness()
+    
+    const stream = await fastStream.create({
+      startBlock: networks[network_id].genesisDay,
+      trackHead: true
+    })
+    
+
+    void (async () => {
+      for await(let [block_height, block] of stream.streamOut) {
+        this.block_height = block_height;
+        for(let tx of block.transactions) {
+          for(let [op_id, payload] of tx.operations) {
+            if(op_id === "custom_json") {
+              if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
+                const json = JSON.parse(payload.json)
+                await this.processTransaction(tx, json, {
+                  account: payload.required_posting_auths[0],
+                  block_height
+                })
+              }
+            }
+          }
+        }
+      }
+    })()
+    stream.startStream()
+    
+
+    let producingBlock = false;
+    setInterval(async() => {
+      if(this.self.config.get('identity.nodePublic') === "did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5") {
+        console.log(this.self.config.get("identity.nodePublic"), stream.blockLag)
+        if(stream.blockLag < 4) {
+          //Can produce a block
+          const offsetBlock = stream.currentBlock - networks[network_id].genesisDay
+          if((offsetBlock %  networks[network_id].roundLength) === 0) {
+            if(!producingBlock) {
+              console.log('Can produce block!! at', stream.currentBlock)
+              producingBlock = true;
+              //await this.createBlock()
+            }
+          } else {
+            producingBlock = false;
+          }
+        }
+      }
+    }, 300)
+    // await this.createBlock()
 
     /*let startBlock =
       (

@@ -121,6 +121,9 @@ export class Config {
    */
   async init(config?) {
     const defaultConfig = {
+      network: {
+        id: 'testnet/ab8b6cf1-b344-4ad3-8f81-f2d72c61f6b2',
+      },
       identity: {
         nodePrivate: null,
         nodePublic: null,

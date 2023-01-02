@@ -6,9 +6,15 @@ interface ContractGenesis {
   creators: string[] //list of DIDs that created the contract
 }
 
-interface ContractManifest {
-  code_url: string //
-  name: string //Arbitrary name of the contract. Not unique
+
+
+
+export interface ContractManifest {
+  name: string; //None unique name of the contract
+  description: string; //None unique description of the contract
+  controllers: string[]; //List of DIDs that have update permission over the control
+  code: string;
+  lock_block: string;
 }
 
 export interface Contract {
@@ -33,23 +39,7 @@ interface CoreState {
   stateMap: string //IPFS URL to map of all state variables
 }
 
-export interface ContractOutput {
-  id: string //Calculated when created/signed
-  contract_id: string
-  included_in: string //Generated when being included into an Anchor Block
-  inputs: Array<{
-    id: string
-  }>
-  stateMerkle: string
-  //log: JsonPatchOp[]
-  //Matrix of subdocuments --> individual logs
-  log_matrix: Record<
-    string,
-    {
-      log: JsonPatchOp[]
-    }
-  >
-}
+
 
 export interface ContractOutputRaw {
     inputs: Array<{

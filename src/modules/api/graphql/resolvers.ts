@@ -29,4 +29,10 @@ export const Resolvers = {
       first_seen: tx.first_seen.toISOString(),
     }
   },
+  localNodeInfo: async () => {
+    const idInfo = await coreContainer.self.ipfs.id()
+    return {
+      peer_id: idInfo.id
+    }
+  }
 }

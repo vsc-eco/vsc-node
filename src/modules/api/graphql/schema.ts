@@ -45,11 +45,16 @@ export const schema = `
         status: String
         contract: Contract
     }
+    type LocalNodeInfo {
+        peer_id: String
+        did: String
+    }
     type Query {
         contractState(id: String): ContractState
         findTransaction(id: String): Transaction
         findContract(id: String): FindContractResult
 
         submitTransaction(id: String): TransactionSubmitResult
+        localNodeInfo: LocalNodeInfo
     }
 `

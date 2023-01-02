@@ -134,7 +134,9 @@ export class Config {
       witness: {
         enabled: false
       },
-      node: {},
+      node: {
+        storageType: "archive" //For now until chain state is properly replicated across many nodes.
+      },
       ipfs: {
         apiAddr: '/ip4/127.0.0.1/tcp/5001',
       },

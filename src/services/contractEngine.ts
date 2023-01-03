@@ -4,7 +4,7 @@ import { CID } from 'multiformats'
 import { CoreService } from './index'
 import * as jsonpatch from 'fast-json-patch'
 import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
-import { verifyMultiJWS } from '../utils'
+import { verifyMultiJWS, Benchmark } from '../utils'
 import { logger } from '../common/logger.singleton'
 
 let codeTemplate = `
@@ -46,9 +46,12 @@ export class ContractEngine {
   self: CoreService
   contractDb: Collection<Contract>
   contractLog: Collection<ContractOutput>
+  contractCache: Record<string, string>
 
   constructor(self: CoreService) {
     this.self = self
+
+    this.contractCache = {}
   }
 
   private async contractStateExecutor(id: string) {
@@ -129,7 +132,6 @@ export class ContractEngine {
     return {
       client: {
         pull: async (key: string) => {
-          console.log(stateCid)
           try {
             const obj = await this.self.ipfs.dag.resolve(stateCid, {
               path: `${key}`,
@@ -144,11 +146,14 @@ export class ContractEngine {
           if (!value) {
             return
           }
-          console.log(value)
-          const outCid = await this.self.ipfs.dag.put(value)
+          const outCid = await this.self.ipfs.dag.put(value, {
+            pin: false
+          })
           const merkleCid = await this.self.ipfs.object.patch.addLink(stateCid, {
             Name: key,
             Hash: outCid,
+          }, {
+            pin: false
           })
 
           stateCid = merkleCid.toString()
@@ -189,7 +194,7 @@ export class ContractEngine {
           payload: 'hello',
         },
         done: (msg) => {
-          console.log(msg)
+          // console.log(msg)
         },
         state: await this.contractStateExecutor(id),
       },
@@ -201,25 +206,40 @@ export class ContractEngine {
    * Executes a list of operations
    * @param id
    */
-  async contractExecuteRaw(id, operations): Promise<{}> {
-    let stateMerkle
-    let startMerkle
-    for (let op of operations) {
-      const contractInfo = await this.contractDb.findOne({
-        id,
-      })
-      if(!contractInfo) {
-        throw new Error("Contract Not Indexed Or Does Not Exist")
-      }
-      let codeRaw = ''
+  async contractExecuteRaw(id, operations, options: {
+    benchmark: Benchmark
+  }): Promise<{}> {
+    const benchmark = options.benchmark
+    if(operations.length === 0) {
+      throw new Error('A minimum of one contract operation should be specified')
+    }
+    const contractInfo = await this.contractDb.findOne({
+      id,
+    })
+    let codeRaw = ''
+    if(!this.contractCache[id]) {
       for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
         codeRaw = codeRaw + chunk.toString()
       }
+      this.contractCache[id] = codeRaw
+    } else {
+      codeRaw = this.contractCache[id]
+    }
+    
+    let code = codeTemplate.replace('###ACTIONS###', codeRaw)
+    
+    const script = new VMScript(code).compile()
 
-      let code = codeTemplate.replace('###ACTIONS###', codeRaw)
-
+    let stateMerkle
+    let startMerkle
+    for (let op of operations) {
+      //Performance: access should be instant
+      if(!contractInfo) {
+        throw new Error("Contract Not Indexed Or Does Not Exist")
+      }
+      //Performance: access should be loaded from disk unless content is remote
+      
       const state = await this.contractStateRaw(id, stateMerkle)
-      const script = new VMScript(code).compile()
       if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
@@ -230,10 +250,10 @@ export class ContractEngine {
               action: op.action,
               payload: op.payload,
             },
-            done: (msg) => {
-              // console.log('message is',  msg, state.finish())
+            done: () => {
               return resolve(state.finish())
             },
+            console: "redirect",
             state: state.client,
           },
         })
@@ -241,14 +261,19 @@ export class ContractEngine {
       })) as { stateMerkle: string }
       stateMerkle = executeOutput.stateMerkle
     }
-    let startMerkleObj = await this.self.ipfs.dag.get(CID.parse(startMerkle))
+    benchmark.stage('4')
+    
+    if(!(startMerkle instanceof CID)) {
+      startMerkle = CID.parse(startMerkle);
+    }
+    let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
     startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
       return {
         ...e,
         Hash: e.Hash.toString(),
       }
     })
-    let stateMerkleObj = await this.self.ipfs.dag.get(CID.parse(stateMerkle))
+    let stateMerkleObj = await this.self.ipfs.dag.get(stateMerkle)
     stateMerkleObj.value.Links = stateMerkleObj.value.Links.map((e) => {
       return {
         ...e,
@@ -256,7 +281,12 @@ export class ContractEngine {
       }
     })
 
+    console.log(startMerkleObj, stateMerkleObj)
+    benchmark.stage('4.5')
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
+
+    benchmark.stage('5')
+
 
     let log_matrix = {}
     for (let logOp of merkleDiff) {
@@ -284,6 +314,8 @@ export class ContractEngine {
         }
       }
     }
+
+    benchmark.stage('6')
 
     // console.log(await this.self.ipfs.dag.put(log_matrix))
     // console.log(

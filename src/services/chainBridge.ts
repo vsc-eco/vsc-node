@@ -124,6 +124,10 @@ export class ChainBridge {
     console.log('here 2')
     let block: BlockRecord = {
       __t: 'vsc-block',
+      /**
+       * State updates
+       * Calculated from transactions output(s)
+       */
       state_updates,
       txs: transactions,
       previous: previous,

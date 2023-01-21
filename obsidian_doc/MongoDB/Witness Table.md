@@ -1,0 +1,1 @@
+contains informations about other nodes

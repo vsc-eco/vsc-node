@@ -1,0 +1,1 @@
+checks the [[Transactionpool Table]] for *unconfirmed* transactions, checks their availability on the IPFS [[Data API]] and locally sets the "accessible" property for successful findings to true

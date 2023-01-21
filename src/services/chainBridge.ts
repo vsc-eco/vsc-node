@@ -19,6 +19,7 @@ export class ChainBridge {
   hiveKey: dhive.PrivateKey
   blockHeaders: Collection
   stateHeaders: Collection
+  contracts: Collection
   witness: WitnessService
   witnessDb: any
 
@@ -294,9 +295,16 @@ export class ChainBridge {
       if(txInfo.account === expectedAccount) {
 
       }
+    } else if (json.action === 'create_contract') {
+      try {
 
 
-
+        await this.self.contractEngine.contractDb.insertOne({
+          id: payload.payload.stream_id,
+          name,
+          code,
+        })
+      } catch {}
     } else {
       //Unrecognized transaction
     }

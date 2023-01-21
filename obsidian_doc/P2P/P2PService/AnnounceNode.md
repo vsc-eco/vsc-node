@@ -1,0 +1,1 @@
+used by a node to announce the participation with its peers, uses [[Pubsub]] to notify the other nodes and the [[Data API]] to settle additional information on the IPFS graph

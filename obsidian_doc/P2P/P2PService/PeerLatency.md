@@ -1,0 +1,1 @@
+gets the latency of a peer node given a Id

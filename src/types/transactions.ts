@@ -12,6 +12,14 @@ export interface EnableWitness {
     net_id: string;
 }
 
+export interface CreateContract {
+  action: 'create_contract';
+  id: string;
+  name: string;
+  code: string; 
+  state_merkle: string;
+}
+
 export interface TransactionContractOutput {
     __t: "vsc.transaction_output"
     id: string //Calculated when created/signed

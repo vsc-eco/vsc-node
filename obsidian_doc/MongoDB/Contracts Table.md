@@ -1,0 +1,1 @@
+stores the currently known smart contracts

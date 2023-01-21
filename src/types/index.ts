@@ -31,13 +31,6 @@ export interface TransactionContainer {
 
 export const CoreTransactionTypes = ['announce_node', 'create_contract']
 
-export enum TransactionOps {
-  createContract = 'create_contract',
-  updateContract = 'update_contract',
-  deleteContract = 'delete_contract',
-  callContract = 'call_contract',
-}
-
 export interface TransactionDbRecord {
   id: string
   account_auth: string

@@ -76,17 +76,7 @@ export class ChainBridge {
           state_updates['node-info'] = protoBuf
         }
         if (tx.op === 'create_contract') {
-          //console.log(tx, payload)
-
-          const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
-          const { name, code } = tileDoc.content as any
-          try {
-            await this.self.contractEngine.contractDb.insertOne({
-              id: payload.payload.stream_id,
-              name,
-              code,
-            })
-          } catch {}
+          // DEPRECATED, contract creation takes place in the processing of received blocks
         }
         /**
          * @todo validate updates
@@ -256,8 +246,14 @@ export class ChainBridge {
     await this.self.ipfs.dag.get(block_hash)
   }
 
+  async processVSCBlockTransaction(tx: any, json: any, txInfo: {
+    account: string,
+    block_height: string
+  }) {
+    //tbd
+  }
 
-  async processTransaction(tx: any, json: any, txInfo: {
+  async processCoreTransaction(tx: any, json: any, txInfo: {
     account: string,
     block_height: string
   }) {
@@ -296,15 +292,23 @@ export class ChainBridge {
 
       }
     } else if (json.action === 'create_contract') {
+      // pla: are we going to verify the functionality of a contract by "dry running" it?
+
       try {
-
-
         await this.self.contractEngine.contractDb.insertOne({
-          id: payload.payload.stream_id,
-          name,
-          code,
+          id: json.id,
+          name: json.name,
+          code: json.code,
+          state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'})
         })
-      } catch {}
+      } catch {
+        console.error('not able to inject contract into the database')
+        // pla: reprocess block?, invalidate contract code state?
+        // how do we differentiate between normal database insertion errors and issues with the contract itself
+        // in regards to the contract state.. maybe an is_executable flag? i guess the nodes that include the tx
+        // into a block should verify the validity of the tx (that should include checking the code i guess) but can we trust them?
+        // is it going to be possible to execute code that crashes and emits an error message as the output of the contract?
+      }
     } else {
       //Unrecognized transaction
     }
@@ -352,7 +356,7 @@ export class ChainBridge {
             if(op_id === "custom_json") {
               if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
                 const json = JSON.parse(payload.json)
-                await this.processTransaction(tx, json, {
+                await this.processCoreTransaction(tx, json, {
                   account: payload.required_posting_auths[0],
                   block_height
                 })

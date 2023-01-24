@@ -14,10 +14,10 @@ export interface EnableWitness {
 
 export interface CreateContract {
   action: 'create_contract';
-  id: string;
+  id?: string;
   name: string;
   code: string; 
-  state_merkle: string;
+  state_merkle?: string;
 }
 
 export interface TransactionContractOutput {

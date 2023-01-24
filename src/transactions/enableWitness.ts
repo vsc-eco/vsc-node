@@ -1,7 +1,8 @@
 import { PrivateKey } from '@hiveio/dhive'
 import Axios from 'axios'
-import {init} from './core'
-import {HiveClient} from '../utils'
+import {init} from './core.js'
+import {HiveClient} from '../utils.js'
+import { EnableWitness } from '../types/transactions.js'
 
 void (async () => {
     const {identity, config} = await init()
@@ -27,7 +28,7 @@ void (async () => {
             net_id: config.get('network.id'),
             did: identity.id,
             node_id: nodeInfo.peer_id
-        })
+        } as EnableWitness)
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     console.log(transaction)
 

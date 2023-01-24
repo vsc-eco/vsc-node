@@ -1,25 +1,47 @@
 import {init} from './core'
 import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
+import { CreateContract } from '../types/transactions.js'
+import * as fs from 'fs';
 
 void (async () => {
     
-    const execPath = process.argv[2]
+    const name = process.argv[2]
+    const execPath = process.argv[3]
+
+    // sample usage
+    // npx ts-node-dev src/transactions/createContract.ts testname src/services/contracts/basic-contract.js
     
     if(!execPath) {
-        console.log('Usage: createContract.ts <path to contract>')
+        console.log('Usage: createContract.ts <name of contract> <path to contract>')
         process.exit(0)
     }
-    const {identity} = await init()
-    
-    // await HiveClient.broadcast.json({
-    //     id: "vsc.enable_witness",
-    //     required_auths: [],
-    //     required_posting_auths: [process.env.HIVE_ACCOUNT!],
-    //     json: JSON.stringify({
+    const {identity, config} = await init()
 
-    //     })
-    // }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    let code = ""
+    try {
+        const data = fs.readFileSync(execPath, 'utf8');
+        //console.log(data);
+        code = data
+    } catch (err) {
+        console.error('not able to load contract file', err);
+        process.exit(0)
+    }
+    // pla: at this point a client might execute this so he doesnt have access to 
+    // ipfs, the vm sandbox etc and can just trial n error publish his code, correct?
+    
+    await HiveClient.broadcast.json({
+        id: "vsc.create_contract",
+        required_auths: [],
+        required_posting_auths: [process.env.HIVE_ACCOUNT!],
+        json: JSON.stringify({
+            payload: {
+                action: 'create_contract',
+                name: name,
+                code: code
+              } as CreateContract
+        })
+    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     
     process.exit(0)
 })()

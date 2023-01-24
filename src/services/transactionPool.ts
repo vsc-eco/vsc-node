@@ -12,6 +12,8 @@ import { CommitID } from '@ceramicnetwork/docid'
 import { VM, NodeVM, VMScript } from 'vm2'
 import { TileDocument } from '@ceramicnetwork/stream-tile'
 import fs from 'fs/promises'
+import { CreateContract } from '../types/transactions.js'
+import { isNamedType } from 'graphql/type/definition.js'
 
 const INDEX_RULES = {}
 
@@ -91,10 +93,7 @@ export class TransactionPoolService {
   }
 
   async createContract(args: { name: string; code: string }) {
-    const { TileDocument } = await import('@ceramicnetwork/stream-tile')
-
-    
-
+    // pla: are we going to verify the functionality of a contract by "dry running" it?
     let script
     try {
       script = new VMScript(args.code)
@@ -102,52 +101,31 @@ export class TransactionPoolService {
       console.log(ex)
       return
     }
-    
 
+    // maybe its a good idea to check if the code already exists on ipfs by generating the CID
+    // locally and then checking for it like with the existing method used in the verifymempool method?
+    // https://stackoverflow.com/questions/60046604/node-less-way-to-generate-a-cid-that-matches-ipfs-desktop-cid
+
+    // try {
+    //   const out = await this.self.ipfs.dag.get(CID.parse(tx.id), {
+    //     timeout: 10 * 1000,
+    //   })
+    //   ....
+    // } catch {}
+    
     const codeCid = await this.self.ipfs.add(args.code)
     console.log(codeCid)
 
-    /*const tileDoc = await TileDocument.load(
-      this.self.ceramic,
-      'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
-    )*/
-    const tileDoc = await TileDocument.create(this.self.ceramic, {
-        name: args.name,
-        code: codeCid.cid.toString()
-    })
-    console.log(tileDoc.id)
-    /*await tileDoc.update({
-        name: args.name,
-        code: codeCid.cid.toString(),
-        test: 'true!'
-    } as any)*/
     const {id} = await this.createTransaction({
         op: TransactionOps.createContract,
         payload: {
-            stream_id: tileDoc.id.toString(),
-            commit_id: tileDoc.commitId.toString()
-        }
+          action: 'create_contract',
+          id: codeCid,
+          name: args.name,
+          code: args.code 
+        } as CreateContract
     })
     console.log(id)
-    /*console.log(tileDoc.content)
-
-    await tileDoc.update({
-        ...(tileDoc.content as any || {}),
-        code: codeCid
-    } as any, {}, {
-        
-    })*/
-    /*let tip;
-    tileDoc.state.log.forEach((e) => {
-      if (e.type === 0) {
-        tip = e.cid
-      }
-    })
-    const commit = new CommitID(0, tip)
-    console.log(commit)
-    console.log(tileDoc.id, tileDoc.commitId)
-    const tileDoc2 = await TileDocument.load(this.self.ceramic, commit.toString())
-    console.log(tileDoc2.id)*/
   }
 
   async updateContract(args: {

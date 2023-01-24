@@ -153,7 +153,7 @@
     "P2P/P2PService/DefaultRegister.md",
     "MongoDB/MongoDB.md",
     "ChainBridge/CountHeight.md",
-    "ChainBridge/ProcessTransaction.md",
+    "ChainBridge/processCoreTransaction.md",
     "ContractEngine/ContractExecuteRaw.md",
     "Help/Filters.md",
     "TransactionPoolService/CreateTransaction.md",

@@ -206,10 +206,10 @@ export class TransactionPoolService {
     this.self.ipfs.pubsub.subscribe('/vsc/memorypool', async (data) => {
       const json = JSON.parse(String.fromCharCode.apply(null, data.data))
       //console.log(json)
-      const verify = await this.self.wallet.verifyJWS(json.payload)
-      const { kid } = verify
-      const [did] = kid.split('#')
-      //console.log(did, verify)
+      // const verify = await this.self.wallet.verifyJWS(json.payload)
+      // const { kid } = verify
+      // const [did] = kid.split('#')
+      // //console.log(did, verify)
     })
 
    

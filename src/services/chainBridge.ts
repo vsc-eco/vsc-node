@@ -10,6 +10,8 @@ import { Collection } from 'mongodb'
 import networks from './networks'
 import { WitnessService } from './witness'
 import type PQueue from 'p-queue'
+import { VMScript } from 'vm2'
+import * as vm from 'vm';
 
 
 console.log(dhive, PrivateKey)
@@ -292,7 +294,12 @@ export class ChainBridge {
 
       }
     } else if (json.action === 'create_contract') {
-      // pla: are we going to verify the functionality of a contract by "dry running" it?
+      console.log("creatin")
+      try {
+        new vm.Script(json.code);
+      } catch (err) {
+        console.error(`provided script is invalid, not injecting contract into local database\nid: {json.id}`);
+      }
 
       try {
         await this.self.contractEngine.contractDb.insertOne({
@@ -302,12 +309,11 @@ export class ChainBridge {
           state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'})
         })
       } catch {
-        console.error('not able to inject contract into the database')
+        console.error(`not able to inject contract into the local database\nid: {json.id}`)
         // pla: reprocess block?, invalidate contract code state?
         // how do we differentiate between normal database insertion errors and issues with the contract itself
         // in regards to the contract state.. maybe an is_executable flag? i guess the nodes that include the tx
         // into a block should verify the validity of the tx (that should include checking the code i guess) but can we trust them?
-        // is it going to be possible to execute code that crashes and emits an error message as the output of the contract?
       }
     } else {
       //Unrecognized transaction

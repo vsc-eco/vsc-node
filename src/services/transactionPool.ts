@@ -14,6 +14,7 @@ import { TileDocument } from '@ceramicnetwork/stream-tile'
 import fs from 'fs/promises'
 import { CreateContract } from '../types/transactions.js'
 import { isNamedType } from 'graphql/type/definition.js'
+import * as vm from 'vm';
 
 const INDEX_RULES = {}
 
@@ -93,15 +94,12 @@ export class TransactionPoolService {
   }
 
   async createContract(args: { name: string; code: string }) {
-    // pla: are we going to verify the functionality of a contract by "dry running" it?
-    let script
     try {
-      script = new VMScript(args.code)
-    } catch (ex) {
-      console.log(ex)
-      return
+      new vm.Script(args.code);
+    } catch (err) {
+      console.error(`provided script is invalid, not able to create contract\nid: {json.id}`);
     }
-
+    
     // maybe its a good idea to check if the code already exists on ipfs by generating the CID
     // locally and then checking for it like with the existing method used in the verifymempool method?
     // https://stackoverflow.com/questions/60046604/node-less-way-to-generate-a-cid-that-matches-ipfs-desktop-cid

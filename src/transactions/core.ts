@@ -22,12 +22,12 @@ export async function init() {
     if(!privateKey) {
         throw new Error("No identity found. Please initial a daemon")
     }
-    if(!process.env.HIVE_ACCOUNT_POSTING || !process.env.HIVE_ACCOUNT_POSTING) {
-        throw new Error("No HIVE account found in .env file")
-    }
     const keyPrivate = new Ed25519Provider(Buffer.from(privateKey, 'base64'))
     const identity = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
     await identity.authenticate()
+    if(!process.env.HIVE_ACCOUNT_POSTING || !process.env.HIVE_ACCOUNT_POSTING) {
+        throw new Error("No HIVE account found in .env file")
+    }
     console.log("Logged In With", identity.id, `and ${process.env.HIVE_ACCOUNT}`)
 
     return {

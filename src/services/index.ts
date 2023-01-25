@@ -72,20 +72,27 @@ export class CoreService {
             }
         }
 
-        const {CeramicClient} = await import('@ceramicnetwork/http-client')
-        this.ceramic = new CeramicClient('https://ceramic.web3telekom.xyz')
-        await this.ceramic.setDID(this.wallet)
+        try 
+        {
+            const {CeramicClient} = await import('@ceramicnetwork/http-client')
+            this.ceramic = new CeramicClient('https://ceramic.web3telekom.xyz')
+            await this.ceramic.setDID(this.wallet)
+    
+            this.transactionPool = new TransactionPoolService(this)
+            await this.transactionPool.start()
+            
+            this.chainBridge = new ChainBridge(this)
+            await this.chainBridge.start();
+    
+            this.contractEngine = new ContractEngine(this)
+            await this.contractEngine.start()
+    
+            this.p2pService = new P2PService(this)
+            await this.p2pService.start()
 
-        this.transactionPool = new TransactionPoolService(this)
-        await this.transactionPool.start()
-        
-        this.chainBridge = new ChainBridge(this)
-        await this.chainBridge.start();
-
-        this.contractEngine = new ContractEngine(this)
-        await this.contractEngine.start()
-
-        this.p2pService = new P2PService(this)
-        await this.p2pService.start()
+        }
+        catch (err) {
+            console.trace(err)
+        }
     }
 }

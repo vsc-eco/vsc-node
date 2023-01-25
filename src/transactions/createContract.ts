@@ -3,6 +3,7 @@ import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
 import { CreateContract } from '../types/transactions.js'
 import * as fs from 'fs';
+import * as vm from 'vm';
 
 void (async () => {
     
@@ -24,9 +25,17 @@ void (async () => {
         //console.log(data);
         code = data
     } catch (err) {
-        console.error('not able to load contract file', err);
+        console.error('not able to load contract file:\n', err);
         process.exit(0)
     }
+
+    try {
+        new vm.Script(code);
+    } catch (err) {
+        console.error('provided script is invalid:\n', err);
+        process.exit(0)
+    }
+
     // pla: at this point a client might execute this so he doesnt have access to 
     // ipfs, the vm sandbox etc and can just trial n error publish his code, correct?
     

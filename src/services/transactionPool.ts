@@ -100,27 +100,20 @@ export class TransactionPoolService {
       console.error(`provided script is invalid, not able to create contract\nid: {json.id}`);
     }
     
-    // maybe its a good idea to check if the code already exists on ipfs by generating the CID
-    // locally and then checking for it like with the existing method used in the verifymempool method?
-    // https://stackoverflow.com/questions/60046604/node-less-way-to-generate-a-cid-that-matches-ipfs-desktop-cid
-
-    // try {
-    //   const out = await this.self.ipfs.dag.get(CID.parse(tx.id), {
-    //     timeout: 10 * 1000,
-    //   })
-    //   ....
-    // } catch {}
-    
-    const codeCid = await this.self.ipfs.add(args.code)
-    console.log(codeCid)
+    let codeCid = null;
+    try {
+      codeCid = await this.self.ipfs.add(args.code)
+    } catch {
+      codeCid = await this.self.ipfs.add(args.code, {onlyHash: true})
+    }
 
     const {id} = await this.createTransaction({
         op: TransactionOps.createContract,
         payload: {
           action: 'create_contract',
-          id: codeCid,
           name: args.name,
-          code: args.code 
+          code: args.code,
+          net_id: this.self.config.get('network.id')
         } as CreateContract
     })
     console.log(id)

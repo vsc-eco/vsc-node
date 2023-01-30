@@ -260,9 +260,6 @@ export class ChainBridge {
     account: string,
     block_height: string
   }) {
-    console.log('helol')
-    console.log(tx)
-    console.log(txInfo)
     if(json.net_id !== this.self.config.get('network.id')) {
       return;
     }
@@ -298,28 +295,45 @@ export class ChainBridge {
 
       }
     } else if (json.action === 'create_contract') {
-      console.log("creatin")
       try {
         new vm.Script(json.code);
       } catch (err) {
         console.error(`provided script is invalid, not injecting contract into local database\nid: {json.id}`);
       }
 
+      // pla: tried to compute the hash offline and wanted to check ipfs for the hash afterwards with 
+      // ipfs, but didnt work that well so a stupid try catch for now
+      // const codeCid = await this.self.ipfs.add(json.code, {onlyHash: true})
+      // await this.self.ipfs.get(CID.parse(codeCid.path))
+
+      let codeCid = null
+
+      try {
+        codeCid = await this.self.ipfs.add(json.code)
+      } catch {
+        codeCid = await this.self.ipfs.add(json.code, {onlyHash: true})
+      }
+
       try {
         await this.self.contractEngine.contractDb.insertOne({
-          id: json.id,
+          id: tx.transaction_id,
           name: json.name,
+          code_cid: codeCid.path,
           code: json.code,
           state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'}),
-          creation_tx: tx.id
+          creation_tx: tx.transaction_id,
+          created_at: tx.expiration
         } as Contract)
       } catch {
-        console.error(`not able to inject contract into the local database\nid: {json.id}`)
+        console.error('not able to inject contract into the local database\n id: ' + tx.transaction_id)
         // pla: reprocess block?, invalidate contract code state?
         // how do we differentiate between normal database insertion errors and issues with the contract itself
         // in regards to the contract state.. maybe an is_executable flag? i guess the nodes that include the tx
         // into a block should verify the validity of the tx (that should include checking the code i guess) but can we trust them?
       }
+    } else if (json.action === 'join_contract') {
+      //tbd
+
     } else {
       //Unrecognized transaction
     }
@@ -353,8 +367,10 @@ export class ChainBridge {
     console.log('network_id', network_id)
     this.witness.enableWitness()
     
+    // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
-      startBlock: networks[network_id].genesisDay,
+      //startBlock: networks[network_id].genesisDay,
+      startBlock: 71879100,
       trackHead: true
     })
     

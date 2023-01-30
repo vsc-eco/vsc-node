@@ -14,9 +14,16 @@ export interface EnableWitness {
 
 export interface CreateContract {
   action: 'create_contract';
-  id?: string;
   name: string;
   code: string;
+  net_id: string;
+}
+
+export interface JoinContract {
+  action: 'join_contract';
+  id: string;
+  net_id: string;
+  node_id: string;
 }
 
 export interface TransactionContractOutput {

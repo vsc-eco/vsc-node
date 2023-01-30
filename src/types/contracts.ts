@@ -18,9 +18,10 @@ export interface ContractManifest {
 }
 
 export interface Contract {
-  id: string
+  id: string // also the creation_tx
   name: string
   code: string
+  code_cid: string
   state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date

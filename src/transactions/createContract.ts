@@ -36,20 +36,16 @@ void (async () => {
         process.exit(0)
     }
 
-    // pla: at this point a client might execute this so he doesnt have access to 
-    // ipfs, the vm sandbox etc and can just trial n error publish his code, correct?
-    
     await HiveClient.broadcast.json({
         id: "vsc.create_contract",
         required_auths: [],
         required_posting_auths: [process.env.HIVE_ACCOUNT!],
         json: JSON.stringify({
-            payload: {
-                action: 'create_contract',
-                name: name,
-                code: code
-              } as CreateContract
-        })
+            action: 'create_contract',
+            name: name,
+            code: code,
+            net_id: config.get('network.id')
+        } as CreateContract)
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     
     process.exit(0)

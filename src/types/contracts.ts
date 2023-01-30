@@ -21,7 +21,7 @@ export interface Contract {
   id: string
   name: string
   code: string
-  stateMerkle?: string //V0 of contract state
+  state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date
 }

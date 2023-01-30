@@ -12,6 +12,7 @@ import { WitnessService } from './witness'
 import type PQueue from 'p-queue'
 import { VMScript } from 'vm2'
 import * as vm from 'vm';
+import { Contract } from '../types/contracts.js'
 
 
 console.log(dhive, PrivateKey)
@@ -259,6 +260,9 @@ export class ChainBridge {
     account: string,
     block_height: string
   }) {
+    console.log('helol')
+    console.log(tx)
+    console.log(txInfo)
     if(json.net_id !== this.self.config.get('network.id')) {
       return;
     }
@@ -306,8 +310,9 @@ export class ChainBridge {
           id: json.id,
           name: json.name,
           code: json.code,
-          state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'})
-        })
+          state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'}),
+          creation_tx: tx.id
+        } as Contract)
       } catch {
         console.error(`not able to inject contract into the local database\nid: {json.id}`)
         // pla: reprocess block?, invalidate contract code state?

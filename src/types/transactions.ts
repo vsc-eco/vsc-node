@@ -16,8 +16,7 @@ export interface CreateContract {
   action: 'create_contract';
   id?: string;
   name: string;
-  code: string; 
-  state_merkle?: string;
+  code: string;
 }
 
 export interface TransactionContractOutput {

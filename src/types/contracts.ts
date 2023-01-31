@@ -6,9 +6,6 @@ interface ContractGenesis {
   creators: string[] //list of DIDs that created the contract
 }
 
-
-
-
 export interface ContractManifest {
   name: string; //None unique name of the contract
   description: string; //None unique description of the contract
@@ -18,13 +15,24 @@ export interface ContractManifest {
 }
 
 export interface Contract {
-  id: string // also the creation_tx
+  manifest_id: string // the CID of the manifest
   name: string
   code: string
-  code_cid: string
   state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date
+}
+
+export interface ContractCommitment {
+  creation_tx: string
+  contract_id: string
+  node_id: string
+  node_identity: string
+  created_at: Date
+  latest_state_merkle: string
+  latest_update_date: Date
+  last_pinged: Date
+  pinged_state_merkle: string
 }
 
 export interface JsonPatchOp {

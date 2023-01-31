@@ -302,17 +302,6 @@ export class ChainBridge {
       //pla: process VSC block 
       // processVSCBlockTransaction(...)
     } else if (json.action === 'create_contract') {
-      try {
-        new vm.Script(json.code);
-      } catch (err) {
-        console.error(`provided script is invalid, not injecting contract into local database\nid: {json.id}`);
-      }
-
-      // pla: tried to compute the hash offline and wanted to check ipfs for the hash afterwards with 
-      // ipfs, but didnt work that well so a stupid try catch for now
-      // const codeCid = await this.self.ipfs.add(json.code, {onlyHash: true})
-      // await this.self.ipfs.get(CID.parse(codeCid.path))
-
       let codeCid = null
 
       try {
@@ -323,10 +312,9 @@ export class ChainBridge {
 
       try {
         await this.self.contractEngine.contractDb.insertOne({
-          id: tx.transaction_id,
+          manifest_id: '',// manifest_id HERE
           name: json.name,
-          code_cid: codeCid.path,
-          code: json.code,
+          code: codeCid.path,
           state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'}),
           creation_tx: tx.transaction_id,
           created_at: tx.expiration

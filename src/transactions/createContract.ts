@@ -36,11 +36,16 @@ void (async () => {
         process.exit(0)
     }
 
+    // pla: create manifest here, also prompt the user for more data (the stuff required for the manifest)
+    // upload it to ipfs
+    // take the cid of the upload as id for the contract creation/ contract
+
     await HiveClient.broadcast.json({
         id: "vsc.create_contract",
         required_auths: [],
         required_posting_auths: [process.env.HIVE_ACCOUNT!],
         json: JSON.stringify({
+            manifest_id: '', // CID OF MANIFEST HERE
             action: 'create_contract',
             name: name,
             code: code,

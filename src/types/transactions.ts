@@ -17,6 +17,7 @@ export interface EnableWitness extends BaseTransaction {
 }
 
 export interface CreateContract extends BaseTransaction {
+  manifest_id: string;
   action: 'create_contract';
   name: string;
   code: string;

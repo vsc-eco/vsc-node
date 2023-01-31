@@ -1,25 +1,45 @@
-import {init} from './core.js'
-import {HiveClient} from '../utils.js'
+import {init} from './core'
+import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
+import { JoinContract } from '../types/transactions.js'
+import Axios from 'axios'
 
 void (async () => {
     
-    const execPath = process.argv[2]
+    const contract_id = process.argv[2]
+
+    // sample usage
+    // npx ts-node-dev src/transactions/joinContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a
     
-    if(!execPath) {
-        console.log('Usage: joinContract.ts <id of contract>')
+    if(!contract_id) {
+        console.log('Usage: joinContract.ts <contract id>')
         process.exit(0)
     }
-    const {identity} = await init()
-    
-    // await HiveClient.broadcast.json({
-    //     id: "vsc.enable_witness",
-    //     required_auths: [],
-    //     required_posting_auths: [process.env.HIVE_ACCOUNT!],
-    //     json: JSON.stringify({
+    const {identity, config} = await init()
 
-    //     })
-    // }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
+        query: `
+        {
+            localNodeInfo {
+              peer_id
+              did
+            }
+          }
+        `
+    })
+    const nodeInfo = data.data.localNodeInfo;
+    
+    await HiveClient.broadcast.json({
+        id: "vsc.join_contract",
+        required_auths: [],
+        required_posting_auths: [process.env.HIVE_ACCOUNT!],
+        json: JSON.stringify({
+            action: 'join_contract',
+            contract_id: contract_id,
+            node_id: nodeInfo.peer_id,
+            net_id: config.get('network.id')
+        } as JoinContract)
+    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     
     process.exit(0)
 })()

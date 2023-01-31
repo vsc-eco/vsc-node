@@ -253,6 +253,10 @@ export class ChainBridge {
     account: string,
     block_height: string
   }) {
+    // pla: if if(json.action === "execute_contract")
+    // nodes (executors) need to watch out for contracts that they are destined for processing
+    // keep an array of contracts ids that they are assigned to in memory and
+    // check if they shall execute the contract here
     //tbd
   }
 
@@ -294,6 +298,9 @@ export class ChainBridge {
       if(txInfo.account === expectedAccount) {
 
       }
+
+      //pla: process VSC block 
+      // processVSCBlockTransaction(...)
     } else if (json.action === 'create_contract') {
       try {
         new vm.Script(json.code);
@@ -332,7 +339,14 @@ export class ChainBridge {
         // into a block should verify the validity of the tx (that should include checking the code i guess) but can we trust them?
       }
     } else if (json.action === 'join_contract') {
-      //tbd
+      console.log(json)
+      // tbd
+      // pla: 
+      // check if contract exists on ipfs
+      // check if contract exists in local db
+      // get contract object
+      // append node_id to executors list
+      
 
     } else {
       //Unrecognized transaction
@@ -370,7 +384,7 @@ export class ChainBridge {
     // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
-      startBlock: 71879100,
+      startBlock: 71907941,
       trackHead: true
     })
     

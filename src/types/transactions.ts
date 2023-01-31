@@ -1,28 +1,30 @@
 import { JsonPatchOp } from "./contracts";
 import CID from 'cids'
 
-export interface AnnounceBlock {
-    block_hash: string;
-    net_id: string;
+export interface BaseTransaction {
+  action: string;
+  net_id: string;
 }
 
-export interface EnableWitness {
-    action: 'enable_witness';
-    node_id: string;
-    net_id: string;
+export interface AnnounceBlock extends BaseTransaction {
+  action: 'enable_witness';
+  block_hash: string;
 }
 
-export interface CreateContract {
+export interface EnableWitness extends BaseTransaction {
+  action: 'announce_block';
+  node_id: string;
+}
+
+export interface CreateContract extends BaseTransaction {
   action: 'create_contract';
   name: string;
   code: string;
-  net_id: string;
 }
 
-export interface JoinContract {
+export interface JoinContract extends BaseTransaction {
   action: 'join_contract';
-  id: string;
-  net_id: string;
+  contract_id: string;
   node_id: string;
 }
 

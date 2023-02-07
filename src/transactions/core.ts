@@ -18,6 +18,8 @@ export async function init() {
     const config = new Config(homeDir)
     await config.open()
 
+    const ipfsClient = IPFS.create(config.get('ipfs.apiAddr'));
+
     const privateKey = config.get('identity.walletPrivate');
     if(!privateKey) {
         throw new Error("No identity found. Please initial a daemon")
@@ -28,10 +30,11 @@ export async function init() {
     if(!process.env.HIVE_ACCOUNT_POSTING || !process.env.HIVE_ACCOUNT_POSTING) {
         throw new Error("No HIVE account found in .env file")
     }
-    console.log("Logged In With", identity.id, `and ${process.env.HIVE_ACCOUNT}`)
+    console.log("Logged In With", identity.id, `and ${process.env.HIVE_ACCOUNT} connected to ipfs gw: ${config.get('ipfs.apiAddr')}`)
 
     return {
         identity,
-        config
+        config,
+        ipfsClient
     }
 }

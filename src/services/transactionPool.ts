@@ -12,9 +12,13 @@ import { CommitID } from '@ceramicnetwork/docid'
 import { VM, NodeVM, VMScript } from 'vm2'
 import { TileDocument } from '@ceramicnetwork/stream-tile'
 import fs from 'fs/promises'
-import { CreateContract } from '../types/transactions.js'
+import { CreateContract } from '../types/transactions'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
+import { PrivateKey } from '@hiveio/dhive'
+import { HiveClient } from '../utils'
+import { init } from '../transactions/core'
+import { ContractManifest } from '../types/contracts'
 
 const INDEX_RULES = {}
 
@@ -93,30 +97,47 @@ export class TransactionPoolService {
     }
   }
 
-  async createContract(args: { name: string; code: string }) {
+  static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient}) {
     try {
       new vm.Script(args.code);
     } catch (err) {
-      console.error(`provided script is invalid, not able to create contract\nid: {json.id}`);
+      console.error(`provided script is invalid, not able to create contract\n`, err);  
+      process.exit(0)
     }
     
     let codeCid = null;
     try {
-      codeCid = await this.self.ipfs.add(args.code)
+      codeCid = await setup.ipfsClient.add(args.code)
     } catch {
-      codeCid = await this.self.ipfs.add(args.code, {onlyHash: true})
+      codeCid = await setup.ipfsClient.add(args.code, {onlyHash: true})
     }
 
-    const {id} = await this.createTransaction({
-        op: TransactionOps.createContract,
-        payload: {
+    let codeManifest = JSON.stringify({
+      name: args.name,
+      description: args.description,
+      controllers: [ setup.identity.id ],
+      code: codeCid.path,
+      lock_block: '' // pla: to be filled
+    } as ContractManifest);
+    let codeManifestCid = null;
+    try {
+      codeManifestCid = await setup.ipfsClient.add(codeManifest)
+    } catch {
+      codeManifestCid = await setup.ipfsClient.add(codeManifest, {onlyHash: true})
+    }
+
+    await HiveClient.broadcast.json({
+      id: "vsc.create_contract",
+      required_auths: [],
+      required_posting_auths: [process.env.HIVE_ACCOUNT!],
+      json: JSON.stringify({
+          manifest_id: codeManifestCid.path,
           action: 'create_contract',
           name: args.name,
-          code: args.code,
-          net_id: this.self.config.get('network.id')
-        } as CreateContract
-    })
-    console.log(id)
+          code: codeCid.path,
+          net_id: setup.config.get('network.id')
+      } as CreateContract)
+    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
   }
 
   async updateContract(args: {

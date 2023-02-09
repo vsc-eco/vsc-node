@@ -19,7 +19,7 @@ export interface EnableWitness extends BaseTransaction {
 export interface CreateContract extends BaseTransaction {
   manifest_id: string;
   action: 'create_contract';
-  name: string;
+  name: string; // pla: obsolete as its already contained in the manifest, correct?
   code: string;
 }
 

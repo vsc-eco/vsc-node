@@ -16,7 +16,7 @@ export interface ContractManifest {
 
 export interface Contract {
   manifest_id: string // the CID of the manifest
-  name: string
+  name: string // pla: obsolete as its already contained in the manifest, correct?
   code: string
   state_merkle?: string //V0 of contract state
   creation_tx?: string

@@ -264,6 +264,7 @@ export class ChainBridge {
     account: string,
     block_height: string
   }) {
+    console.log("TESTING")
     if(json.net_id !== this.self.config.get('network.id')) {
       return;
     }
@@ -302,29 +303,18 @@ export class ChainBridge {
       //pla: process VSC block 
       // processVSCBlockTransaction(...)
     } else if (json.action === 'create_contract') {
-      let codeCid = null
-
-      try {
-        codeCid = await this.self.ipfs.add(json.code)
-      } catch {
-        codeCid = await this.self.ipfs.add(json.code, {onlyHash: true})
-      }
-
+      // pla: no checks of code/ manifest to ensure performance
       try {
         await this.self.contractEngine.contractDb.insertOne({
-          manifest_id: '',// manifest_id HERE
+          manifest_id: json.manifest_id,
           name: json.name,
-          code: codeCid.path,
-          state_merkle: this.self.ipfs.object.new({template: 'unixfs-dir'}),
+          code: json.code,
+          state_merkle: await this.self.ipfs.object.new({template: 'unixfs-dir'}),
           creation_tx: tx.transaction_id,
           created_at: tx.expiration
         } as Contract)
-      } catch {
+      } catch (err){
         console.error('not able to inject contract into the local database\n id: ' + tx.transaction_id)
-        // pla: reprocess block?, invalidate contract code state?
-        // how do we differentiate between normal database insertion errors and issues with the contract itself
-        // in regards to the contract state.. maybe an is_executable flag? i guess the nodes that include the tx
-        // into a block should verify the validity of the tx (that should include checking the code i guess) but can we trust them?
       }
     } else if (json.action === 'join_contract') {
       console.log(json)
@@ -372,7 +362,7 @@ export class ChainBridge {
     // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
-      startBlock: 71907941,
+      startBlock: 72167591,
       trackHead: true
     })
     

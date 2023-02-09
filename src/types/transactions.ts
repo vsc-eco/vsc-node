@@ -26,6 +26,7 @@ export interface CreateContract extends BaseTransaction {
 export interface JoinContract extends BaseTransaction {
   action: 'join_contract';
   contract_id: string;
+  node_identity: string;
   node_id: string;
 }
 

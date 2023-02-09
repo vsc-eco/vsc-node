@@ -6,6 +6,7 @@ import * as jsonpatch from 'fast-json-patch'
 import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
 import { verifyMultiJWS, Benchmark } from '../utils'
 import { logger } from '../common/logger.singleton'
+import { ContractCommitment } from '../types/contracts'
 
 let codeTemplate = `
 function wrapper () {
@@ -45,6 +46,7 @@ function wrapper () {
 export class ContractEngine {
   self: CoreService
   contractDb: Collection<Contract>
+  contractCommitmentDb: Collection<ContractCommitment>
   contractLog: Collection<ContractOutput>
   contractCache: Record<string, string>
 
@@ -345,10 +347,22 @@ export class ContractEngine {
 
   async start() {
     this.contractDb = this.self.db.collection('contracts')
+    this.contractCommitmentDb = this.self.db.collection('contract_commitment')
     this.contractLog = this.self.db.collection('contract_log')
 
     try {
       this.contractDb.createIndex(
+        {
+          id: -1,
+        },
+        {
+          unique: true,
+        },
+      )
+    } catch {}
+
+    try {
+      this.contractCommitmentDb.createIndex(
         {
           id: -1,
         },

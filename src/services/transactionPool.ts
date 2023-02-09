@@ -19,6 +19,8 @@ import { PrivateKey } from '@hiveio/dhive'
 import { HiveClient } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
+import Axios from 'axios'
+import { JoinContract } from '../types/transactions'
 
 const INDEX_RULES = {}
 
@@ -126,7 +128,7 @@ export class TransactionPoolService {
       codeManifestCid = await setup.ipfsClient.add(codeManifest, {onlyHash: true})
     }
 
-    await HiveClient.broadcast.json({
+    const result = await HiveClient.broadcast.json({
       id: "vsc.create_contract",
       required_auths: [],
       required_posting_auths: [process.env.HIVE_ACCOUNT!],
@@ -138,6 +140,35 @@ export class TransactionPoolService {
           net_id: setup.config.get('network.id')
       } as CreateContract)
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    console.log(result)
+  }
+
+  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+    const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
+        query: `
+        {
+            localNodeInfo {
+              peer_id
+              did
+            }
+          }
+        `
+    })
+    const nodeInfo = data.data.localNodeInfo;
+    
+    const result = await HiveClient.broadcast.json({
+        id: "vsc.join_contract",
+        required_auths: [],
+        required_posting_auths: [process.env.HIVE_ACCOUNT!],
+        json: JSON.stringify({
+            action: 'join_contract',
+            contract_id: args.contract_id,
+            node_id: nodeInfo.peer_id,
+            node_identity: setup.identity.id,
+            net_id: setup.config.get('network.id')
+        } as JoinContract)
+    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    console.log(result)
   }
 
   async updateContract(args: {

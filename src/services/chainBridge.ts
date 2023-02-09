@@ -12,7 +12,7 @@ import { WitnessService } from './witness'
 import type PQueue from 'p-queue'
 import { VMScript } from 'vm2'
 import * as vm from 'vm';
-import { Contract } from '../types/contracts.js'
+import { Contract, ContractCommitment } from '../types/contracts.js'
 
 
 console.log(dhive, PrivateKey)
@@ -264,7 +264,6 @@ export class ChainBridge {
     account: string,
     block_height: string
   }) {
-    console.log("TESTING")
     if(json.net_id !== this.self.config.get('network.id')) {
       return;
     }
@@ -306,10 +305,12 @@ export class ChainBridge {
       // pla: no checks of code/ manifest to ensure performance
       try {
         await this.self.contractEngine.contractDb.insertOne({
+          id: tx.transaction_id,
           manifest_id: json.manifest_id,
           name: json.name,
           code: json.code,
-          state_merkle: await this.self.ipfs.object.new({template: 'unixfs-dir'}),
+          executers: [],
+          state_merkle: (await this.self.ipfs.object.new({template: 'unixfs-dir'})).toString(),
           creation_tx: tx.transaction_id,
           created_at: tx.expiration
         } as Contract)
@@ -317,15 +318,41 @@ export class ChainBridge {
         console.error('not able to inject contract into the local database\n id: ' + tx.transaction_id)
       }
     } else if (json.action === 'join_contract') {
-      console.log(json)
-      // tbd
-      // pla: 
-      // check if contract exists on ipfs
-      // check if contract exists in local db
-      // get contract object
-      // append node_id to executors list
-      
+      try {
+        await this.self.contractEngine.contractCommitmentDb.insertOne({
+          id: tx.transaction_id,
+          node_id: json.node_id,
+          node_identity: json.node_identity,
+          contract_id: json.contract_id,
+          creation_tx: tx.transaction_id,
+          created_at: tx.expiration,
+          latest_state_merkle: null,
+          latest_update_date: null,
+          last_pinged: null,
+          pinged_state_merkle: null
+        } as ContractCommitment)
+      } catch (err) {
+        console.error('not able to inject contract commitment into the local database\n id: ' + tx.transaction_id)
+      }
 
+      // pla: theres probably a way to check if the node is already an executer and adding it if not without 2 queries - needs to be refactored
+      const contract = await this.self.contractEngine.contractDb.findOne({
+        creation_tx: json.contract_id
+      })
+
+      if (contract == null) {
+        console.log('not able to join contract as the contract does not exist in local database!')
+      } else if (contract.executers.includes(json.node_identity)) {
+        console.log('not able to join contract as the node is already an executor of the contract!')
+      } else {
+        await this.self.contractEngine.contractDb.findOneAndUpdate({
+          creation_tx: json.contract_id
+        }, {
+            $push: {
+                executers: json.node_identity
+            }
+        })
+      }
     } else {
       //Unrecognized transaction
     }
@@ -362,7 +389,7 @@ export class ChainBridge {
     // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
-      startBlock: 72167591,
+      startBlock: 72170300,
       trackHead: true
     })
     

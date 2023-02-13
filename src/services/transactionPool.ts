@@ -21,6 +21,7 @@ import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
 import { JoinContract } from '../types/transactions'
+import { TransactionTypes } from '../types/transactions'
 
 const INDEX_RULES = {}
 
@@ -143,25 +144,25 @@ export class TransactionPoolService {
     console.log(result)
   }
 
-  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
     const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
-        query: `
-        {
-            localNodeInfo {
-              peer_id
-              did
-            }
+      query: `
+      {
+          localNodeInfo {
+            peer_id
+            did
           }
-        `
+        }
+      `
     })
     const nodeInfo = data.data.localNodeInfo;
     
     const result = await HiveClient.broadcast.json({
-        id: "vsc.join_contract",
+        id: `vsc.${action}`,
         required_auths: [],
         required_posting_auths: [process.env.HIVE_ACCOUNT!],
         json: JSON.stringify({
-            action: 'join_contract',
+            action: action,
             contract_id: args.contract_id,
             node_id: nodeInfo.peer_id,
             node_identity: setup.identity.id,
@@ -169,6 +170,14 @@ export class TransactionPoolService {
         } as JoinContract)
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     console.log(result)
+  }
+
+  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+    this.contractCommitmentOperation(args, setup, TransactionTypes.create_contract);
+  }
+
+  static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+    this.contractCommitmentOperation(args, setup, TransactionTypes.leave_contract);
   }
 
   async updateContract(args: {

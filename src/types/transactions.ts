@@ -7,24 +7,31 @@ export interface BaseTransaction {
 }
 
 export interface AnnounceBlock extends BaseTransaction {
-  action: 'enable_witness';
+  action: TransactionTypes.enable_witness;
   block_hash: string;
 }
 
 export interface EnableWitness extends BaseTransaction {
-  action: 'announce_block';
+  action: TransactionTypes.announce_block;
   node_id: string;
 }
 
 export interface CreateContract extends BaseTransaction {
   manifest_id: string;
-  action: 'create_contract';
+  action: TransactionTypes.create_contract;
   name: string; // pla: obsolete as its already contained in the manifest, correct?
   code: string;
 }
 
 export interface JoinContract extends BaseTransaction {
-  action: 'join_contract';
+  action: TransactionTypes.join_contract;
+  contract_id: string;
+  node_identity: string;
+  node_id: string;
+}
+
+export interface LeaveContract extends BaseTransaction {
+  action: TransactionTypes.leave_contract;
   contract_id: string;
   node_identity: string;
   node_id: string;

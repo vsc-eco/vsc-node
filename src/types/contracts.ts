@@ -19,7 +19,6 @@ export interface Contract {
   manifest_id: string // the CID of the manifest
   name: string // pla: obsolete as its already contained in the manifest, correct?
   code: string
-  executers: Array<string>
   state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date
@@ -32,6 +31,7 @@ export interface ContractCommitment {
   node_id: string
   node_identity: string
   created_at: Date
+  status: CommitmentStatus
   latest_state_merkle: string
   latest_update_date: Date
   last_pinged: Date
@@ -51,8 +51,6 @@ interface CoreState {
   stateMap: string //IPFS URL to map of all state variables
 }
 
-
-
 export interface ContractOutputRaw {
     inputs: Array<{
       id: string
@@ -68,6 +66,10 @@ export interface ContractOutputRaw {
     >
 }
   
+export enum CommitmentStatus {
+  inactive,
+  active
+}
 
 export enum InputHeaderFlags {
   INDEX_SEARCH = "index_search"

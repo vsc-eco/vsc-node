@@ -6,14 +6,29 @@ export interface BlockRecord {
   __t: 'vsc-block'
   state_updates: Record<string, string>
   //txs
-  txs: Array<{
-    t: TransactionDbType
-    op: string
-    id: string
-  }>
+  txs: Array<VSCTransaction>
 
   previous?: any
   timestamp: Date | string
+}
+
+export interface VSCTransaction {
+  t: TransactionDbType
+  op: string
+  id: string
+}
+
+export interface ContractInput {
+  contract_id: string,
+  action: string,
+  payload: any
+}
+
+export interface ContractOutput {
+  contract_id: string,
+  updated_merkle: string
+  // action: string,
+  // payload: any
 }
 
 export interface TransactionContainer {
@@ -68,6 +83,13 @@ export interface BlockHeader {
 export interface TransactionRaw {
   op: string
   payload: any
+}
+
+export enum VSCOperations {
+  call_contract = "call_contract",
+  contract_output = "contract_output",
+
+  update_contract = "update_contract",
 }
 
 export enum NodeStorageType {

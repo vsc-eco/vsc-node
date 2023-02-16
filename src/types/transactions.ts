@@ -64,7 +64,6 @@ export interface TransactionContractLogMatrix {
     log: JsonPatchOp[]
 }
 
-
 export enum TransactionTypes {
     announce_block = "announce_block",
     announce_leaf = "announce_leaf",
@@ -73,11 +72,9 @@ export enum TransactionTypes {
     enable_executor = "enable_executor",
     disable_executor = "disable_executor",
     create_contract = "create_contract",
-    call_contract = "call_contract",
-
-    //Experimental contract relevant calls
     join_contract = "join_contract", //Joins a contract as an executor
     leave_contract = "leave_contract", //Leaves a contract as an executor
+    call_contract = "call_contract",
 
     //Maybe? Not sure where it fits
     link_did = "link_did",

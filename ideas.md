@@ -1,4 +1,6 @@
+### unconfirmed ideas
 
+- differentiate more between tx/ ops naming wise for pubsub tx/ VscblockTx/ coretx
 
 
 Interfaces:
@@ -29,4 +31,5 @@ Tasks:
   - List of transactions + status (auto pins relevant transctions)
 - Identity
   - Register DID tied into a HIVE account
+- impl winston logger
 

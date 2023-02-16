@@ -12,10 +12,13 @@ import { WitnessService } from './witness'
 import type PQueue from 'p-queue'
 import { VMScript } from 'vm2'
 import * as vm from 'vm';
+import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'
+import { ContractInput, VSCTransaction } from '@/types/index.js'
 
 
 console.log(dhive, PrivateKey)
+
 
 export class ChainBridge {
   self: CoreService
@@ -25,6 +28,8 @@ export class ChainBridge {
   contracts: Collection
   witness: WitnessService
   witnessDb: any
+  events: EventEmitter
+  streamOut: Pushable.Pushable<any>
 
   blockQueue: PQueue
   block_height: number
@@ -246,16 +251,41 @@ export class ChainBridge {
     await this.self.ipfs.dag.get(block_hash)
   }
 
-  async processVSCBlockTransaction(tx: any, json: any, txInfo: {
-    account: string,
-    block_height: string
-  }) {
-    
-    // pla: if if(json.action === "execute_contract")
-    // nodes (executors) need to watch out for contracts that they are destined for processing
-    // keep an array of contracts ids that they are assigned to in memory and
-    // check if they shall execute the contract here
-    //tbd
+  async hasExecuterJoinedContract(contract_id: string): boolean {
+    return await this.self.contractEngine.contractCommitmentDb.findOne({
+      contract_id: contract_id,
+      status: CommitmentStatus.active,
+      node_identity: this.self.identity.id
+
+    }) !== null ? true: false;
+  }
+
+  async processVSCBlockTransaction(tx: VSCTransaction) {
+    if (tx.op === VSCOperations.call_contract) {
+      // pla: value needs to be taken of global variable
+      const isNodeExecuter = true;
+
+      if (isNodeExecuter) {
+        // maybe add the contract id to the VSCTransaction to prevent unnecessary fetches
+        const contractInputTx: ContractInput = this.self.ipfs.cat(tx.id)
+        if (await this.hasExecuterJoinedContract(contractInputTx.contract_id)) {
+
+          this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
+        }
+      }
+    } else if (tx.op === VSCOperations.contract_output) {
+      const contractOutputTx: ContractOutput = this.self.ipfs.cat(tx.id)
+      await this.contractEngine.contractDb.findOneAndUpdate({
+        contract_id: contractOutputTx.contract_id
+      }, {
+        $set: {
+          state_merkle: contractOutputTx.updated_merkle
+        }
+      })
+    }
+    else if (tx.op === VSCOperations.contract_update) {
+      // pla: TBD update general stuff in regards to the contract... description etc.
+    }
   }
 
   async processCoreTransaction(tx: any, json: any, txInfo: {
@@ -297,8 +327,8 @@ export class ChainBridge {
 
       }
 
-      //pla: process VSC block 
-      // processVSCBlockTransaction(...)
+      // DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
+      this.events.emit('vsc_block', json)
     } else if (json.action === 'create_contract') {
       // pla: no checks of code/ manifest to ensure performance
       try {
@@ -379,6 +409,14 @@ export class ChainBridge {
 
     this.witness = new WitnessService(this.self)
 
+    this.streamOut = Pushable()
+
+    this.events.on('vsc_block', (block) => {
+      // console.log('emitting', block_height)
+      // console.log(block_height)
+      this.streamOut.push(block)
+    })
+  
     NodeSchedule.scheduleJob('* * * * *', async () => {
       //console.log('Creating scheduled block')
       //await this.createBlock()
@@ -400,6 +438,13 @@ export class ChainBridge {
       trackHead: true
     })
     
+    void (async () => {
+      for await(let block of stream.streamOut) {
+        for(let tx of block.txs) {
+          this.processVSCBlockTransaction(tx);
+        }
+      }
+    })()
 
     void (async () => {
       for await(let [block_height, block] of stream.streamOut) {

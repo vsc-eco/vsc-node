@@ -14,7 +14,7 @@ import { VMScript } from 'vm2'
 import * as vm from 'vm';
 import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'
-import { ContractInput, VSCTransaction } from '@/types/index.js'
+import { ContractInput, TransactionRaw, VSCOperations } from '@/types/index.js'
 
 
 console.log(dhive, PrivateKey)
@@ -52,28 +52,37 @@ export class ChainBridge {
     let state_updates = {}
     let txHashes = []
     let transactions = []
-    for (let tx of txs) {
+    for (let txContainer of txs) {
       //Verify CID is available
       try {
         //console.log('1', tx.id)
-        const content = await this.self.ipfs.dag.get(CID.parse(tx.id))
+        const content = await this.self.ipfs.dag.get(CID.parse(txContainer.id))
         const { payload } = await this.self.identity.verifyJWS(content.value)
         //console.log('2', tx.id)
         //console.log(payload)
 
+        if (content.tx.op === VSCOperations.call_contract) {
+          // just pass on the tx
+        } else if (content.tx.op === VSCOperations.contract_output) {
+          // combine other executors contract invokation results in multisig and create the contract_output tx
+        } else if (content.tx.op === VSCOperations.update_contract) {
+
+        }
+
         txHashes.push({
-          op: tx.op,
-          id: CID.parse(tx.id),
-          lock_block: tx.lock_block,
+          op: txContainer.tx.op,
+          id: CID.parse(txContainer.tx.id),
+          lock_block: txContainer.tx.lock_block,
         })
 
         transactions.push({
-          op: tx.op,
-          id: CID.parse(tx.id),
-          t: TransactionDbType.input,
+          op: txContainer.tx.op,
+          id: CID.parse(txContainer.tx.id),
+          type: TransactionDbType.input,
         })
 
-        if (tx.op === 'announce_node') {
+        // pla: is moved to coreTransaction, correct? 
+        if (txContainer.tx.op === 'announce_node') {
           const cid = await this.self.ipfs.object.new()
           const txCid = await this.self.ipfs.dag.put(payload.payload)
           let protoBuf = await this.self.ipfs.object.patch.addLink(cid, {
@@ -86,7 +95,7 @@ export class ChainBridge {
         /**
          * @todo validate updates
          */
-        if(tx.op === TransactionOps.updateContract) {
+        if(txContainer.tx.op === TransactionOps.updateContract) {
           const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
           const { name, code, revision } = tileDoc.content as any
           try {
@@ -100,7 +109,7 @@ export class ChainBridge {
               }
             })
           } catch {}
-        }
+        }        
       } catch (ex) {
         console.log(ex)
       }
@@ -135,7 +144,7 @@ export class ChainBridge {
 
     for (let tx of transactions) {
       console.log('here', tx)
-      if (tx.t === TransactionDbType.input) {
+      if (tx.type === TransactionDbType.input) {
         await this.self.transactionPool.transactionPool.findOneAndUpdate(
           {
             id: tx.id.toString(),
@@ -260,13 +269,13 @@ export class ChainBridge {
     }) !== null ? true: false;
   }
 
-  async processVSCBlockTransaction(tx: VSCTransaction) {
+  async processVSCBlockTransaction(tx: TransactionRaw) {
     if (tx.op === VSCOperations.call_contract) {
       // pla: value needs to be taken of global variable
       const isNodeExecuter = true;
 
       if (isNodeExecuter) {
-        // maybe add the contract id to the VSCTransaction to prevent unnecessary fetches
+        // maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
         const contractInputTx: ContractInput = this.self.ipfs.cat(tx.id)
         if (await this.hasExecuterJoinedContract(contractInputTx.contract_id)) {
 
@@ -327,7 +336,7 @@ export class ChainBridge {
 
       }
 
-      // DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
+      // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
       this.events.emit('vsc_block', json)
     } else if (json.action === 'create_contract') {
       // pla: no checks of code/ manifest to ensure performance

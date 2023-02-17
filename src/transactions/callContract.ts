@@ -8,12 +8,15 @@ import { TransactionPoolService } from '../services/transactionPool'
 void (async () => {
     
     const contract_id = process.argv[2]
+    const action = process.argv[3]
+    const payload = process.argv[4]
 
     // sample usage
-    // npx ts-node-dev src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a
-
-
-
+    // npx ts-node-dev src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{...payload}"
+    if(!contract_id || !action || !payload) {
+        console.log('Usage: callContract.ts <contract id> <action> <payload>')
+        process.exit(0)
+    }
 
     // push message to node
     // node should publish this tx to pubsub 
@@ -25,26 +28,10 @@ void (async () => {
     // in the real scenario the client would interact with a node api 
     // and the node would publish the tx to pubsub, i think it makes sense here
     // to just skip that for now and act like the node publishes the tx directly to pubsub
-
-
-
-
-
-
-
-
-
     
-    // if(!contract_id) {
-    //     console.log('Usage: joinContract.ts <contract id>')
-    //     process.exit(0)
-    // }
-    // const setup: {identity, config, ipfsClient} = await init()
+    const setup: {identity, config, ipfsClient} = await init()
 
-    // await TransactionPoolService.callContract({
-    //         contract_id: contract_id
-    //     },
-    //     setup);
+    await TransactionPoolService.callContract(contract_id, action, payload, setup);
     
     process.exit(0)
 })()

@@ -22,6 +22,7 @@ import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
 import { JoinContract } from '../types/transactions'
 import { TransactionTypes } from '../types/transactions'
+import { VSCOperations } from '@/types/index.js'
 
 const INDEX_RULES = {}
 
@@ -39,14 +40,14 @@ export class TransactionPoolService {
   }
 
   async createTransaction(transactionRaw: TransactionRaw) {
+    transactionRaw.type = TransactionDbType.input
+
     const transaction: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
-      op: transactionRaw.op,
-      payload: transactionRaw.payload,
+      tx: transactionRaw,
       lock_block: 'null', //Calculate on the fly
-      included_in: null,
-      type: TransactionDbType.input,
+      included_in: null    
     }
 
     const dag = await this.self.wallet.createDagJWS(transaction)
@@ -57,7 +58,7 @@ export class TransactionPoolService {
     try {
       await this.transactionPool.insertOne({
         id: cid.toString(),
-        op: transaction.op,
+        op: transaction.tx.op,
         account_auth: await this.self.wallet.id,
         local: true,
         lock_block: null,
@@ -142,6 +143,28 @@ export class TransactionPoolService {
       } as CreateContract)
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
     console.log(result)
+  }
+
+  private static async callContract(contract_id: string, action: string, payload: any, setup: {identity, config, ipfsClient}) {
+    let contractInput = {
+      contract_id: contract_id,
+      action: action,
+      payload: payload
+    }
+
+    let contractInputCid = null;
+    try {
+      contractInputCid = await setup.ipfsClient.add(contractInput)
+    } catch {
+      contractInputCid = await setup.ipfsClient.add(contractInput, {onlyHash: true})
+    }
+
+    let callContractTx: TransactionRaw = {
+      op: VSCOperations.call_contract,
+      payload: contractInputCid
+    }
+
+    this.transactionPool.createTransaction(callContractTx)
   }
 
   private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {

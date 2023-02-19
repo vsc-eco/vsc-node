@@ -2,7 +2,7 @@ import { CID } from 'multiformats'
 import { coreContainer } from '../index'
 
 export const Resolvers = {
-  contractState: async (args) => {
+  contractState: async (_, args) => {
     const data = await coreContainer.self.contractEngine.contractDb.findOne({
       id: args.id,
     })
@@ -18,7 +18,7 @@ export const Resolvers = {
       },
     }
   },
-  findTransaction: async (args) => {
+  findTransaction: async (_, args) => {
     const tx = await coreContainer.self.transactionPool.transactionPool.findOne({
       id: args.id,
     })

@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { graphqlHTTP } from 'express-graphql'
+import { createSchema, createYoga } from 'graphql-yoga'
 import { buildSchema } from 'graphql'
 import { IPFSHTTPClient } from 'ipfs-http-client'
 import { CoreService } from '../../services/index'
@@ -36,17 +37,44 @@ export class ApiModule {
   public async listen() {
     const app = await NestFactory.create(ControllerModule)
 
-    const swaggerconfig = new DocumentBuilder().setTitle('SPK encoder node').build()
+    const swaggerconfig = new DocumentBuilder().setTitle('VSC API').build()
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerconfig)
     SwaggerModule.setup('swagger', app, swaggerDocument)
-    app.use(
-      '/api/v1/graphql',
-      graphqlHTTP({
-        schema: buildSchema(schema),
-        graphiql: true,
-        rootValue: Resolvers,
+    // app.use(
+    //   '/api/v1/graphql',
+    //   graphqlHTTP({
+    //     schema: buildSchema(schema),
+    //     graphiql: true,
+    //     rootValue: Resolvers,
+    //   }),
+    // )
+
+    const yoga = createYoga({
+      schema:  createSchema({
+        typeDefs: schema,
+        resolvers: {
+          Query: Resolvers
+        }
       }),
-    )
+      graphqlEndpoint: `/api/v1/graphql`,
+      graphiql: {
+        //NOTE: weird string is for formatting on UI to look OK
+        // defaultQuery: /* GraphQL */ "" +
+        //   "query MyQuery {\n" +
+        //   " latestFeed(limit: 10) {\n" +
+        //   "   items {\n" +
+        //   "      ... on HivePost {\n" +
+        //   "        parent_permlink\n" +
+        //   "        parent_author\n" +
+        //   "        title\n" +
+        //   "        body\n" +
+        //   "      }\n" +
+        //   "    }\n"+
+        //   "  }\n"
+      },
+    })
+ 
+    app.use('/api/v1/graphql', yoga)
 
     await app.listen(this.listenPort)
   }

@@ -1,3 +1,5 @@
+import { ContractOutputRaw } from './contracts'
+
 export * from './contracts'
 export * from './transactions'
 
@@ -6,7 +8,7 @@ export interface BlockRecord {
   __t: 'vsc-block'
   state_updates: Record<string, string>
   //txs
-  txs: Array<TransactionBase>
+  txs: Array<TransactionConfirmed>
 
   previous?: any
   timestamp: Date | string
@@ -20,9 +22,16 @@ export interface ContractInput {
 
 export interface ContractOutput {
   contract_id: string,
-  updated_merkle: string
+  // updated_merkle: string
+  // log_matrix: 
+  outputRaw: ContractOutputRaw
+
   // action: string,
   // payload: any
+}
+
+export interface ContractUpdate {
+  // TBD
 }
 
 export interface TransactionContainer {
@@ -32,12 +41,7 @@ export interface TransactionContainer {
   lock_block: string
   included_in: string | null
   accessible?: boolean
-
   tx: TransactionRaw
-  // op: string
-  // payload: string
-  // target_address?: string
-  // type: TransactionDbType
 }
 
 export const CoreTransactionTypes = ['announce_node', 'create_contract']
@@ -76,12 +80,15 @@ export interface BlockHeader {
   id: string
 }
 
-export interface TransactionBase {
+export interface TransactionConfirmed {
   op: string
-  payload: any
+  id: string // cid of transactionRaw
+  type: TransactionDbType
 }
 
-export interface TransactionRaw extends TransactionBase {
+export interface TransactionRaw {
+  op: string
+  payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
   type: TransactionDbType
 }
 

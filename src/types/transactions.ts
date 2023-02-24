@@ -7,12 +7,12 @@ export interface BaseTransaction {
 }
 
 export interface AnnounceBlock extends BaseTransaction {
-  action: TransactionTypes.enable_witness;
+  action: TransactionTypes.announce_block;
   block_hash: string;
 }
 
 export interface EnableWitness extends BaseTransaction {
-  action: TransactionTypes.announce_block;
+  action: TransactionTypes.enable_witness;
   node_id: string;
 }
 

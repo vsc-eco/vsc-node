@@ -14,7 +14,8 @@ import { VMScript } from 'vm2'
 import * as vm from 'vm';
 import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'
-import { ContractInput, TransactionRaw, VSCOperations } from '@/types/index.js'
+import { ContractInput, TransactionConfirmed, TransactionIncluded, TransactionRaw, VSCOperations } from '@/types/index.js'
+import { TransactionTypes } from '@/types/transactions'
 
 
 console.log(dhive, PrivateKey)
@@ -62,9 +63,9 @@ export class ChainBridge {
         //console.log(payload)
 
         if (content.tx.op === VSCOperations.call_contract) {
-          // just pass on the tx
+          // pla: just pass on the tx
         } else if (content.tx.op === VSCOperations.contract_output) {
-          // combine other executors contract invokation results in multisig and create the contract_output tx
+          // pla: combine other executors contract invokation results in multisig and create the contract_output tx
         } else if (content.tx.op === VSCOperations.update_contract) {
 
         }
@@ -186,6 +187,7 @@ export class ChainBridge {
           required_posting_auths: [process.env.HIVE_ACCOUNT],
           id: 'vsc.announce_block',
           json: JSON.stringify({
+            action: TransactionTypes.announce_block,
             block_hash: blockHash.toString(),
             net_id: this.self.config.get('network.id'),
           }),
@@ -256,30 +258,33 @@ export class ChainBridge {
 
   }
 
-  async processBlock(block_hash: string) {
-    await this.self.ipfs.dag.get(block_hash)
-  }
+  async processVSCBlockTransaction(tx: TransactionConfirmed, blockHash: string) {
+    await this.self.transactionPool.transactionPool.findOneAndUpdate(
+      {
+        id: tx.id.toString(),
+      },
+      {
+        $set: {
+          status: TransactionDbStatus.included,
+          included_in: blockHash.toString(),
+        },
+      },
+    )
 
-  async hasExecuterJoinedContract(contract_id: string): boolean {
-    return await this.self.contractEngine.contractCommitmentDb.findOne({
-      contract_id: contract_id,
-      status: CommitmentStatus.active,
-      node_identity: this.self.identity.id
-
-    }) !== null ? true: false;
-  }
-
-  async processVSCBlockTransaction(tx: TransactionRaw) {
     if (tx.op === VSCOperations.call_contract) {
       // pla: value needs to be taken of global variable
       const isNodeExecuter = true;
 
       if (isNodeExecuter) {
-        // maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
-        const contractInputTx: ContractInput = this.self.ipfs.cat(tx.id)
+        // pla: maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
+
+        const contractInputTx: ContractInput = this.self.ipfs.dag.get(tx.id)
+        const {kid} = await signer.verifyJWS(contractInputTx)
         if (await this.hasExecuterJoinedContract(contractInputTx.contract_id)) {
 
-          this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
+          const results = this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
+          // pla: do the multisig proof and publish it via pubsub
+          // the selected node is then going to publish the associated VSCOperations.contract_output tx
         }
       }
     } else if (tx.op === VSCOperations.contract_output) {
@@ -449,8 +454,10 @@ export class ChainBridge {
     
     void (async () => {
       for await(let block of stream.streamOut) {
-        for(let tx of block.txs) {
-          this.processVSCBlockTransaction(tx);
+        const blockContent = await this.self.ipfs.dag.get(CID.parse(block.block_hash))
+
+        for(let tx of blockContent.txs) {
+          this.processVSCBlockTransaction(tx, block.block_hash);
         }
       }
     })()

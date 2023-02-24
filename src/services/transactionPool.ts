@@ -22,7 +22,9 @@ import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
 import { JoinContract } from '../types/transactions'
 import { TransactionTypes } from '../types/transactions'
-import { VSCOperations } from '@/types/index.js'
+import { ContractInput, TransactionRaw, VSCOperations } from '@/types/index'
+import { BaseTransaction } from '@/types/transactions'
+import { LeaveContract } from '@/types/transactions.js'
 
 const INDEX_RULES = {}
 
@@ -39,10 +41,18 @@ export class TransactionPoolService {
     this.self = self
   }
 
-  async createTransaction(transactionRaw: TransactionRaw) {
-    transactionRaw.type = TransactionDbType.input
+  private static async createCoreTransaction(id: string, json: BaseTransaction, setup: {identity, config, ipfsClient}) {
+    return await HiveClient.broadcast.json({
+      id: id,
+      required_auths: [],
+      required_posting_auths: [process.env.HIVE_ACCOUNT!],
+      json: JSON.stringify(json)
+    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+  }
 
-    const transaction: TransactionContainer = {
+  async createTransaction(transactionRaw: TransactionRaw) {
+
+    const txContainer: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
       tx: transactionRaw,
@@ -50,15 +60,14 @@ export class TransactionPoolService {
       included_in: null    
     }
 
-    const dag = await this.self.wallet.createDagJWS(transaction)
+    const dag = await this.self.wallet.createDagJWS(txContainer)
     //console.log(dag)
     const cid = await this.self.ipfs.dag.put(dag)
-
 
     try {
       await this.transactionPool.insertOne({
         id: cid.toString(),
-        op: transaction.tx.op,
+        op: txContainer.tx.op,
         account_auth: await this.self.wallet.id,
         local: true,
         lock_block: null,
@@ -71,6 +80,8 @@ export class TransactionPoolService {
       })
     } catch {}
 
+    // pla: lets define an interface for the pubsub transaction dto
+    // ... what about 'TransactionUnconfirmed'?
     await this.self.ipfs.pubsub.publish(
       '/vsc/memorypool',
       Buffer.from(
@@ -123,6 +134,7 @@ export class TransactionPoolService {
       code: codeCid.path,
       lock_block: '' // pla: to be filled
     } as ContractManifest);
+
     let codeManifestCid = null;
     try {
       codeManifestCid = await setup.ipfsClient.add(codeManifest)
@@ -130,23 +142,20 @@ export class TransactionPoolService {
       codeManifestCid = await setup.ipfsClient.add(codeManifest, {onlyHash: true})
     }
 
-    const result = await HiveClient.broadcast.json({
-      id: "vsc.create_contract",
-      required_auths: [],
-      required_posting_auths: [process.env.HIVE_ACCOUNT!],
-      json: JSON.stringify({
-          manifest_id: codeManifestCid.path,
-          action: 'create_contract',
-          name: args.name,
-          code: codeCid.path,
-          net_id: setup.config.get('network.id')
-      } as CreateContract)
-    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    const json = {
+      manifest_id: codeManifestCid.path,
+      action: 'create_contract',
+      name: args.name,
+      code: codeCid.path,
+      net_id: setup.config.get('network.id')
+    } as CreateContract
+
+    const result = TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
     console.log(result)
   }
 
-  private static async callContract(contract_id: string, action: string, payload: any, setup: {identity, config, ipfsClient}) {
-    let contractInput = {
+  public async callContract(contract_id: string, action: string, payload: any) {
+    let contractInput: ContractInput = {
       contract_id: contract_id,
       action: action,
       payload: payload
@@ -154,17 +163,18 @@ export class TransactionPoolService {
 
     let contractInputCid = null;
     try {
-      contractInputCid = await setup.ipfsClient.add(contractInput)
+      contractInputCid = await this.self.ipfs.add(contractInput)
     } catch {
-      contractInputCid = await setup.ipfsClient.add(contractInput, {onlyHash: true})
+      contractInputCid = await this.self.ipfs.add(contractInput, {onlyHash: true})
     }
 
     let callContractTx: TransactionRaw = {
       op: VSCOperations.call_contract,
-      payload: contractInputCid
+      payload: contractInputCid,
+      type: TransactionDbType.input
     }
 
-    this.transactionPool.createTransaction(callContractTx)
+    this.createTransaction(callContractTx)
   }
 
   private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
@@ -180,18 +190,15 @@ export class TransactionPoolService {
     })
     const nodeInfo = data.data.localNodeInfo;
     
-    const result = await HiveClient.broadcast.json({
-        id: `vsc.${action}`,
-        required_auths: [],
-        required_posting_auths: [process.env.HIVE_ACCOUNT!],
-        json: JSON.stringify({
-            action: action,
-            contract_id: args.contract_id,
-            node_id: nodeInfo.peer_id,
-            node_identity: setup.identity.id,
-            net_id: setup.config.get('network.id')
-        } as JoinContract)
-    }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    const json: JoinContract | LeaveContract = {
+      action: action,
+      contract_id: args.contract_id,
+      node_id: nodeInfo.peer_id,
+      node_identity: setup.identity.id,
+      net_id: setup.config.get('network.id')
+    }
+
+    const result = TransactionPoolService.createCoreTransaction(`vsc.${action}`, json, setup)
     console.log(result)
   }
 

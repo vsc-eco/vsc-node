@@ -148,7 +148,7 @@ export class fastStream {
     })
     
     const finalStream = HiveClient.blockchain.getBlockStream({
-        from: finalBlock,
+        from: this.parser_height,
         mode: BlockchainMode.Latest
     })
     await new Promise((resolve) => {
@@ -160,24 +160,24 @@ export class fastStream {
             this.parser_height = block_height + 1;
             this.currentBlock = block_height;
             this.events.emit('block', block_height, block)
-            console.log({
-              fault: 6,
-              block_height,
-              parser_height: this.parser_height
-            })
+            // console.log({
+            //   fault: 6,
+            //   block_height,
+            //   parser_height: this.parser_height
+            // })
           } else if(block_height > this.parser_height) {
             this.blockMap[block_height] = block
-            console.log({
-              fault: 61,
-              block_height,
-              parser_height: this.parser_height
-            })
+            // console.log({
+            //   fault: 61,
+            //   block_height,
+            //   parser_height: this.parser_height
+            // })
           } else {
-            console.log({
-              fault: 60,
-              block_height,
-              parser_height: this.parser_height
-            })
+            // console.log({
+            //   fault: 60,
+            //   block_height,
+            //   parser_height: this.parser_height
+            // })
           }
         }).bind(this))
         .on('error', ((error) => {
@@ -302,7 +302,7 @@ export class BenchmarkContainer {
       }
     }
     for(let [key, value] of Object.entries(table)) {
-      table[key] = {value: value. value /  this.benchmarkCount, name: value.name}
+      table[key] = {value: (value as any).value /  this.benchmarkCount, name: (value as any).name}
     }
     console.log(table)
   }

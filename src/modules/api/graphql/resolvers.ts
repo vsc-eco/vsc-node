@@ -10,7 +10,7 @@ export const Resolvers = {
     return {
       id: data.id,
       state: async (args) => {
-        const obj = await coreContainer.self.ipfs.dag.resolve(data.stateMerkle, {
+        const obj = await coreContainer.self.ipfs.dag.resolve(data.state_merkle, {
           path: `${args.key}`,
         })
         const out = await coreContainer.self.ipfs.dag.get(obj.cid)

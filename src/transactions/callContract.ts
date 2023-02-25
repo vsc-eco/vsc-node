@@ -4,13 +4,12 @@ import { PrivateKey } from '@hiveio/dhive'
 import { JoinContract } from '../types/transactions'
 import Axios from 'axios'
 import { TransactionPoolService } from '../services/transactionPool'
-import { CoreService } from '@/services/index'
+import { CoreService } from '../services/index'
 
 void (async () => {
-    
     const contract_id = process.argv[2]
     const action = process.argv[3]
-    const payload = JSON.parse(process.argv[4])
+    const payload = process.argv[4]
 
     // sample usage
     // npx ts-node-dev src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{\"testme\": \"yeyup\"}"
@@ -18,6 +17,8 @@ void (async () => {
         console.log('Usage: callContract.ts <contract id> <action> <payload>')
         process.exit(0)
     }
+
+    const payloadJson = JSON.parse(payload)
 
     // push message to node
     // node should publish this tx to pubsub 
@@ -35,7 +36,9 @@ void (async () => {
 
     const transactionPool = new TransactionPoolService(core)
 
-    const result = await transactionPool.callContract(contract_id, action, payload);
+    await transactionPool.start()
+
+    const result = await transactionPool.callContract(contract_id, action, payloadJson);
     console.log(result)
     
     process.exit(0)

@@ -15,6 +15,7 @@ import { ChainBridge } from "./chainBridge";
 import type { CeramicClient } from "@ceramicnetwork/http-client";
 import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
+import { ContractWorker } from "./contractWorker";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -34,6 +35,7 @@ export class CoreService {
     contractEngine: ContractEngine;
     options: CoreOptions;
     p2pService: P2PService;
+    contractWorker: ContractWorker;
 
     constructor(options?: CoreOptions) {
         this.options = options || {};
@@ -44,7 +46,7 @@ export class CoreService {
     }
 
     async start() {
-        this.ipfs = IPFS.create(this.options.ipfsApi);
+        this.ipfs = IPFS.create();
         const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
         this.config = new Config(homeDir)
         await this.config.open()
@@ -86,7 +88,10 @@ export class CoreService {
     
             this.contractEngine = new ContractEngine(this)
             await this.contractEngine.start()
-    
+            
+            this.contractWorker = new ContractWorker(this)
+            await this.contractWorker.start()
+
             this.p2pService = new P2PService(this)
             await this.p2pService.start()
 

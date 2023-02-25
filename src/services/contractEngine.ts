@@ -2,7 +2,7 @@ import { Collection } from 'mongodb'
 import { NodeVM, VM, VMScript } from 'vm2'
 import { CID } from 'multiformats'
 import { CoreService } from './index'
-import * as jsonpatch from 'fast-json-patch'
+import jsonpatch from 'fast-json-patch'
 import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
 import { verifyMultiJWS, Benchmark } from '../utils'
 import { logger } from '../common/logger.singleton'
@@ -63,8 +63,8 @@ export class ContractEngine {
     })
     // console.log(contract)
     if (contract) {
-      if (contract.stateMerkle) {
-        stateCid = CID.parse(contract.stateMerkle)
+      if (contract.state_merkle) {
+        stateCid = CID.parse(contract.state_merkle)
       } else {
         stateCid = await this.self.ipfs.object.new()
       }
@@ -122,8 +122,8 @@ export class ContractEngine {
       if (stateMerkle) {
         stateCid = stateMerkle
       } else {
-        if (contract.stateMerkle) {
-          stateCid = CID.parse(contract.stateMerkle)
+        if (contract.state_merkle) {
+          stateCid = CID.parse(contract.state_merkle)
           stateCid = await this.self.ipfs.object.new()
         } else {
           stateCid = await this.self.ipfs.object.new()
@@ -154,8 +154,6 @@ export class ContractEngine {
           const merkleCid = await this.self.ipfs.object.patch.addLink(stateCid, {
             Name: key,
             Hash: outCid,
-          }, {
-            pin: false
           })
 
           stateCid = merkleCid.toString()
@@ -210,7 +208,7 @@ export class ContractEngine {
    */
   async contractExecuteRaw(id, operations, options: {
     benchmark: Benchmark
-  }): Promise<{}> {
+  }): Promise<ContractOutput> {
     const benchmark = options.benchmark
     if(operations.length === 0) {
       throw new Error('A minimum of one contract operation should be specified')
@@ -235,6 +233,10 @@ export class ContractEngine {
     let stateMerkle
     let startMerkle
     for (let op of operations) {
+      const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
+        path: "/link/tx/payload"
+      })).value
+      console.log(op, opData)
       //Performance: access should be instant
       if(!contractInfo) {
         throw new Error("Contract Not Indexed Or Does Not Exist")
@@ -249,13 +251,13 @@ export class ContractEngine {
         const vm = new NodeVM({
           sandbox: {
             api: {
-              action: op.action,
-              payload: op.payload,
+              action: opData.action,
+              payload: opData.payload,
             },
             done: () => {
               return resolve(state.finish())
             },
-            console: "redirect",
+            // console: "redirect",
             state: state.client,
           },
         })
@@ -263,11 +265,18 @@ export class ContractEngine {
       })) as { stateMerkle: string }
       stateMerkle = executeOutput.stateMerkle
     }
+
+    console.log('269 stateMerkle', stateMerkle)
     benchmark.stage('4')
     
     if(!(startMerkle instanceof CID)) {
       startMerkle = CID.parse(startMerkle);
     }
+    
+    if(!(stateMerkle instanceof CID)) {
+      stateMerkle = CID.parse(stateMerkle);
+    }
+    console.log('270 stateMerkle', stateMerkle)
     let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
     startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
       return {
@@ -282,7 +291,8 @@ export class ContractEngine {
         Hash: e.Hash.toString(),
       }
     })
-
+    console.log('275 stateMerkle', stateMerkle)
+    
     console.log(startMerkleObj, stateMerkleObj)
     benchmark.stage('4.5')
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
@@ -331,12 +341,13 @@ export class ContractEngine {
     // )
 
     return {
+      contract_id: id,
       inputs: operations.map(e => {
         return {
           id: e.id
         }
       }),
-      state_merkle: CID.parse(stateMerkle.toString()),
+      state_merkle: stateMerkle.toString(),
       log_matrix,
     }
   }

@@ -3,8 +3,8 @@ import { CID } from 'multiformats'
 import NodeSchedule from 'node-schedule'
 import dhive, { PrivateKey } from '@hiveio/dhive'
 import { CoreService } from '.'
-import { BlockRecord, TransactionDbStatus, TransactionDbType, TransactionOps } from '../types'
-import { fastStream, HiveClient } from '../utils'
+import { BlockRecord, ContractOutput, TransactionDbStatus, TransactionDbType } from '../types'
+import { fastStream, HiveClient, verifyMultiJWS } from '../utils'
 import 'dotenv/config'
 import { Collection } from 'mongodb'
 import networks from './networks'
@@ -14,12 +14,25 @@ import { VMScript } from 'vm2'
 import * as vm from 'vm';
 import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'
-import { ContractInput, TransactionConfirmed, TransactionIncluded, TransactionRaw, VSCOperations } from '@/types/index.js'
-import { TransactionTypes } from '@/types/transactions'
+import { ContractInput, TransactionConfirmed, VSCOperations } from '../types'
+import { TransactionTypes } from '../types/transactions'
+import EventEmitter from 'events'
+import { DagJWS, DagJWSResult, DID } from 'dids'
+import { IPFSHTTPClient } from 'ipfs-http-client'
 
 
 console.log(dhive, PrivateKey)
 
+
+
+async function unwrapDagJws(dagJws: any, ipfs: IPFSHTTPClient, signer: DID) {
+  const dag = await verifyMultiJWS(dagJws, signer)
+
+  return {
+    ...dag,
+    content: (await ipfs.dag.get((dag as any).link)).value
+  }
+}
 
 export class ChainBridge {
   self: CoreService
@@ -38,7 +51,7 @@ export class ChainBridge {
   constructor(self: CoreService) {
     this.self = self
 
-    
+    this.events = new EventEmitter()
   }
 
   async createBlock() {
@@ -57,33 +70,39 @@ export class ChainBridge {
       //Verify CID is available
       try {
         //console.log('1', tx.id)
-        const content = await this.self.ipfs.dag.get(CID.parse(txContainer.id))
-        const { payload } = await this.self.identity.verifyJWS(content.value)
+        const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(txContainer.id))).value
+        const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
+        const [did] = kid.split('#')
+        console.log(signedTransaction as any)
+        const content = (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
+
         //console.log('2', tx.id)
         //console.log(payload)
 
-        if (content.tx.op === VSCOperations.call_contract) {
+        if (content.op === VSCOperations.call_contract) {
           // pla: just pass on the tx
-        } else if (content.tx.op === VSCOperations.contract_output) {
+        } else if (content.op === VSCOperations.contract_output) {
           // pla: combine other executors contract invokation results in multisig and create the contract_output tx
-        } else if (content.tx.op === VSCOperations.update_contract) {
+        } else if (content.op === VSCOperations.update_contract) {
 
         }
 
+        console.log(txContainer)
+
         txHashes.push({
-          op: txContainer.tx.op,
-          id: CID.parse(txContainer.tx.id),
-          lock_block: txContainer.tx.lock_block,
+          op: txContainer.op,
+          id: CID.parse(txContainer.id),
+          lock_block: txContainer.lock_block,
         })
 
         transactions.push({
-          op: txContainer.tx.op,
-          id: CID.parse(txContainer.tx.id),
+          op: txContainer.op,
+          id: CID.parse(txContainer.id),
           type: TransactionDbType.input,
         })
 
         // pla: is moved to coreTransaction, correct? 
-        if (txContainer.tx.op === 'announce_node') {
+        if (txContainer.op === 'announce_node') {
           const cid = await this.self.ipfs.object.new()
           const txCid = await this.self.ipfs.dag.put(payload.payload)
           let protoBuf = await this.self.ipfs.object.patch.addLink(cid, {
@@ -96,7 +115,7 @@ export class ChainBridge {
         /**
          * @todo validate updates
          */
-        if(txContainer.tx.op === TransactionOps.updateContract) {
+        if(txContainer.op === TransactionTypes.create_contract) {
           const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
           const { name, code, revision } = tileDoc.content as any
           try {
@@ -173,10 +192,10 @@ export class ChainBridge {
       }
     }
 
-    await this.blockHeaders.insertOne({
-      height: await this.countHeight(blockHash.toString()),
-      id: blockHash.toString(),
-    })
+    // await this.blockHeaders.insertOne({
+    //   height: await this.countHeight(blockHash.toString()),
+    //   id: blockHash.toString(),
+    // })
 
     console.log('rd 11')
 
@@ -195,8 +214,11 @@ export class ChainBridge {
         this.hiveKey,
       )
 
-      const out = await HiveClient.transaction.findTransaction(result.id)
-    } catch {}
+      await HiveClient.transaction.findTransaction(result.id)
+      // console.log(out)
+    } catch (ex) {
+      console.log(ex)
+    }
 
     //console.log(result)
 
@@ -278,26 +300,82 @@ export class ChainBridge {
       if (isNodeExecuter) {
         // pla: maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
 
-        const contractInputTx: ContractInput = this.self.ipfs.dag.get(tx.id)
-        const {kid} = await signer.verifyJWS(contractInputTx)
-        if (await this.hasExecuterJoinedContract(contractInputTx.contract_id)) {
+        const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+        const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
-          const results = this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
-          // pla: do the multisig proof and publish it via pubsub
-          // the selected node is then going to publish the associated VSCOperations.contract_output tx
-        }
+        await this.self.transactionPool.transactionPool.findOneAndUpdate({
+          id: tx.id,
+        }, {
+          $set: {
+            account_auth: auths[0],
+            op: tx.op,
+            lock_block: null,
+            status: TransactionDbStatus.included,
+            first_seen: new Date(),
+  
+            type: TransactionDbType.input,
+            included_in: blockHash,
+
+            executed_in: null,
+            output: null,
+  
+            local: false,
+            accessible: true
+          }
+        }, {
+          upsert: true
+        })
+
+        // if (await this.hasExecuterJoinedContract(content.contract_id)) {
+
+        //   // const results = this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
+        //   // pla: do the multisig proof and publish it via pubsub
+        //   // the selected node is then going to publish the associated VSCOperations.contract_output tx
+        // }
       }
     } else if (tx.op === VSCOperations.contract_output) {
-      const contractOutputTx: ContractOutput = this.self.ipfs.cat(tx.id)
-      await this.contractEngine.contractDb.findOneAndUpdate({
-        contract_id: contractOutputTx.contract_id
+      const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+      const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+
+
+      console.log(content)
+
+      //Do validation of executor pool
+
+      await this.self.transactionPool.transactionPool.findOneAndUpdate({
+        id: tx.id,
       }, {
         $set: {
-          state_merkle: contractOutputTx.updated_merkle
+          account_auth: auths[0],
+          op: tx.op,
+          lock_block: null,
+          status: TransactionDbStatus.confirmed,
+          first_seen: new Date(),
+
+          type: TransactionDbType.core,
+          included_in: blockHash,
+          executed_in: blockHash,
+          output: null,
+
+          local: false,
+          accessible: true
+        }
+      }, {
+        upsert: true
+      })
+      
+
+      
+      await this.self.contractEngine.contractDb.findOneAndUpdate({
+        contract_id: content.contract_id
+      }, {
+        $set: {
+          state_merkle: content.state_m
         }
       })
+
     }
-    else if (tx.op === VSCOperations.contract_update) {
+    else if (tx.op === VSCOperations.update_contract) {
       // pla: TBD update general stuff in regards to the contract... description etc.
     }
   }
@@ -445,16 +523,25 @@ export class ChainBridge {
     console.log('network_id', network_id)
     this.witness.enableWitness()
     
+    let startBlock =
+      (
+        (await this.stateHeaders.findOne({
+          id: 'hive_head',
+        })) || ({} as any)
+      ).block_num || 72283179
+    
     // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
-      startBlock: 72283179,
+      // startBlock: 72283179,
+      startBlock: startBlock,
       trackHead: true
     })
+
     
     void (async () => {
       for await(let block of stream.streamOut) {
-        const blockContent = await this.self.ipfs.dag.get(CID.parse(block.block_hash))
+        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
 
         for(let tx of blockContent.txs) {
           this.processVSCBlockTransaction(tx, block.block_hash);
@@ -478,6 +565,19 @@ export class ChainBridge {
             }
           }
         }
+        await this.stateHeaders.findOneAndUpdate(
+          {
+            id: 'hive_head',
+          },
+          {
+            $set: {
+              block_num: block_height,
+            },
+          },
+          {
+            upsert: true,
+          },
+        )
       }
     })()
     stream.startStream()
@@ -494,7 +594,7 @@ export class ChainBridge {
             if(!producingBlock) {
               console.log('Can produce block!! at', stream.currentBlock)
               producingBlock = true;
-              //await this.createBlock()
+              // await this.createBlock()
             }
           } else {
             producingBlock = false;
@@ -502,6 +602,7 @@ export class ChainBridge {
         }
       }
     }, 300)
+    // await this.createBlock()
     // await this.createBlock()
 
     /*let startBlock =

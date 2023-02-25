@@ -1,4 +1,4 @@
-import { ContractOutputRaw } from './contracts'
+// import { ContractOutputRaw } from './contracts'
 
 export * from './contracts'
 export * from './transactions'
@@ -20,15 +20,6 @@ export interface ContractInput {
   payload: any
 }
 
-export interface ContractOutput {
-  contract_id: string,
-  // updated_merkle: string
-  // log_matrix: 
-  outputRaw: ContractOutputRaw
-
-  // action: string,
-  // payload: any
-}
 
 export interface ContractUpdate {
   // TBD
@@ -39,7 +30,7 @@ export interface TransactionContainer {
   __t: 'vsc-tx'
   __v: '0.1'
   lock_block: string
-  included_in: string | null
+  included_in?: string | null
   accessible?: boolean
   tx: TransactionRaw
 }
@@ -50,18 +41,20 @@ export interface TransactionDbRecord {
   id: string
   account_auth: string
   op: string
-  lock_block: string
+  lock_block: string | null
   status: TransactionDbStatus
-  local: boolean
   first_seen: Date
   type: TransactionDbType
   included_in: string | null
   executed_in: string | null
   output: string | null
+  
+  local: boolean
+  accessible: boolean
 }
 
 export enum TransactionDbStatus {
-  unconfirmed = 'UNCOFIRMED',
+  unconfirmed = 'UNCONFIRMED',
   confirmed = 'CONFIRMED',
   failed = 'FAILED',
   included = 'INCLUDED',

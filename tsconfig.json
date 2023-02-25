@@ -1,33 +1,33 @@
 {
-  "ts-node": {
-    // It is faster to skip typechecking.
-    // Remove if you want ts-node to do typechecking.
-    "transpileOnly": true,
-    "files": true,
-    "esm": true,
-    "target": "es2020" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
-    "lib": [
-      "es5",
-      "es6",
-      "es2020"
-    ],
-    "module": "node16" 
+  // "ts-node": {
+  //   // It is faster to skip typechecking.
+  //   // Remove if you want ts-node to do typechecking.
+  //   "transpileOnly": true,
+  //   "files": true,
+  //   "esm": true,
+  //   "target": "es2020" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
+  //   "lib": [
+  //     "es5",
+  //     "es6",
+  //     "es2020"
+  //   ],
+  //   "module": "node16" 
     
-  },
-  "ts-node-dev": {
-    // It is faster to skip typechecking.
-    // Remove if you want ts-node to do typechecking.
-    "transpileOnly": true,
-    "files": true,
-    "esm": true,
-    "target": "es2020" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
-    "lib": [
-      "es5",
-      "es6",
-      "es2020"
-    ],
-    "module": "node16" 
-  },
+  // },
+  // "ts-node-dev": {
+  //   // It is faster to skip typechecking.
+  //   // Remove if you want ts-node to do typechecking.
+  //   "transpileOnly": true,
+  //   "files": true,
+  //   "esm": true,
+  //   "target": "es2020" /* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */,
+  //   "lib": [
+  //     "es5",
+  //     "es6",
+  //     "es2020"
+  //   ],
+  //   "module": "node16" 
+  // },
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig.json to read more about this file */
 
@@ -57,9 +57,9 @@
     // "useDefineForClassFields": true,                  /* Emit ECMAScript-standard-compliant class fields. */
 
     /* Modules */
-    "module": "NodeNext" /* Specify what module code is generated. */,
+    "module": "ES2020" /* Specify what module code is generated. */,
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
-    //"moduleResolution": "node",                       /* Specify how TypeScript looks up a file from a given module specifier. */
+    "moduleResolution": "node",                       /* Specify how TypeScript looks up a file from a given module specifier. */
     // "baseUrl": "./",                                  /* Specify the base directory to resolve non-relative module names. */
     // "paths": {},                                      /* Specify a set of entries that re-map imports to additional lookup locations. */
     // "rootDirs": [],                                   /* Allow multiple folders to be treated as one when resolving modules. */

@@ -1,4 +1,4 @@
-import { Collection, WithId } from 'mongodb'
+import { Collection, ObjectId, WithId } from 'mongodb'
 import NodeSchedule from 'node-schedule'
 import { encode, decode } from '@ipld/dag-cbor'
 import { CID } from 'multiformats'
@@ -7,7 +7,7 @@ import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher } from 'multiformats/hashes/sha2'
 import { BloomFilter } from 'bloom-filters'
 import { CoreService } from '.'
-import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionOps, TransactionRaw } from '../types'
+import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
 import { CommitID } from '@ceramicnetwork/docid'
 import { VM, NodeVM, VMScript } from 'vm2'
 import { TileDocument } from '@ceramicnetwork/stream-tile'
@@ -22,9 +22,8 @@ import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
 import { JoinContract } from '../types/transactions'
 import { TransactionTypes } from '../types/transactions'
-import { ContractInput, TransactionRaw, VSCOperations } from '@/types/index'
-import { BaseTransaction } from '@/types/transactions'
-import { LeaveContract } from '@/types/transactions.js'
+import { ContractInput, VSCOperations } from '../types'
+import { BaseTransaction, LeaveContract } from '../types/transactions'
 
 const INDEX_RULES = {}
 
@@ -50,22 +49,34 @@ export class TransactionPoolService {
     }, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
   }
 
-  async createTransaction(transactionRaw: TransactionRaw) {
-
+  async createTransaction(transactionRaw: any) {
     const txContainer: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
       tx: transactionRaw,
       lock_block: 'null', //Calculate on the fly
-      included_in: null    
+      // included_in: null    
     }
 
     const dag = await this.self.wallet.createDagJWS(txContainer)
-    //console.log(dag)
-    const cid = await this.self.ipfs.dag.put(dag)
+    console.log(dag)
+    const cid = await this.self.ipfs.dag.put({
+      ...dag.jws,
+      link: CID.parse(dag.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
+    })
+    const linkedBlock = await this.self.ipfs.block.put(dag.linkedBlock, {
+      format: 'dag-cbor'
+    })
+    
+    // console.log(dag.jws, cid, linkedBlock)
+    // console.log(await this.self.ipfs.dag.put({
+    //   linkedBlock
+    // }))
+    // const 
 
     try {
-      await this.transactionPool.insertOne({
+      const tx = await this.transactionPool.insertOne({
+        _id: new ObjectId(),
         id: cid.toString(),
         op: txContainer.tx.op,
         account_auth: await this.self.wallet.id,
@@ -73,12 +84,17 @@ export class TransactionPoolService {
         lock_block: null,
         first_seen: new Date(),
         status: TransactionDbStatus.unconfirmed,
-        type: TransactionDbType.input,
+        type: transactionRaw.op === "contract_output" ? TransactionDbType.output : TransactionDbType.input,
+        accessible: true,
+        
         included_in: null,
         executed_in: null,
-        accessible: true
+        output: null
       })
-    } catch {}
+      console.log(tx)
+    } catch (ex) {
+      console.log(ex)
+    }
 
     // pla: lets define an interface for the pubsub transaction dto
     // ... what about 'TransactionUnconfirmed'?
@@ -93,19 +109,19 @@ export class TransactionPoolService {
       ),
     )
 
-    let obj = {}
-    for (let hash of ['bafyreige4erd7ulmsqqbw32cyva5bimz5zamlk7mvtsv6662d7wu2oi56i']) {
-      obj[hash] = ''
-    }
-    const data = encode(obj)
+    // let obj = {}
+    // for (let hash of ['bafyreige4erd7ulmsqqbw32cyva5bimz5zamlk7mvtsv6662d7wu2oi56i']) {
+    //   obj[hash] = ''
+    // }
+    // const data = encode(obj)
 
-    const transactionPoolHead = (
-      await Block.encode({
-        value: data,
-        codec,
-        hasher,
-      })
-    ).cid
+    // const transactionPoolHead = (
+    //   await Block.encode({
+    //     value: data,
+    //     codec,
+    //     hasher,
+    //   })
+    // ).cid
     //console.log('head', transactionPoolHead.toString())
     return {
         id: cid.toString()
@@ -161,20 +177,24 @@ export class TransactionPoolService {
       payload: payload
     }
 
+    //Signed here
+
+
     let contractInputCid = null;
     try {
-      contractInputCid = await this.self.ipfs.add(contractInput)
+      contractInputCid = await this.self.ipfs.dag.put(contractInput)
     } catch {
-      contractInputCid = await this.self.ipfs.add(contractInput, {onlyHash: true})
+      contractInputCid = await this.self.ipfs.dag.put(contractInput, {onlyHash: true})
     }
 
     let callContractTx: TransactionRaw = {
       op: VSCOperations.call_contract,
-      payload: contractInputCid,
+      payload: contractInput,
       type: TransactionDbType.input
     }
 
-    this.createTransaction(callContractTx)
+    console.log('194', callContractTx)
+    return await this.createTransaction(callContractTx)
   }
 
   private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
@@ -191,7 +211,7 @@ export class TransactionPoolService {
     const nodeInfo = data.data.localNodeInfo;
     
     const json: JoinContract | LeaveContract = {
-      action: action,
+      action: TransactionTypes.join_contract,
       contract_id: args.contract_id,
       node_id: nodeInfo.peer_id,
       node_identity: setup.identity.id,
@@ -235,7 +255,7 @@ export class TransactionPoolService {
     } as any)
 
     const {id} = await this.createTransaction({
-      op: TransactionOps.updateContract,
+      op: VSCOperations.update_contract,
       payload: {
         stream_id: tileDoc.id.toString(),
         commit_id: tileDoc.commitId.toString()
@@ -273,12 +293,13 @@ export class TransactionPoolService {
     })
 
    
-    await this.createTransaction({
-      op: 'announce_node',
-      payload: {
-        peer_id: (await this.self.ipfs.id()).id,
-      },
-    })
+    // await this.createTransaction({
+
+    //   op: 'announce_node',
+    //   payload: {
+    //     peer_id: (await this.self.ipfs.id()).id,
+    //   },
+    // })
 
     const vmState = {
       api: {},

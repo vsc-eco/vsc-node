@@ -234,7 +234,7 @@ export class ContractEngine {
     let startMerkle
     for (let op of operations) {
       const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
-        path: "/link/tx/payload"
+        path: "/link/tx"
       })).value
       console.log(op, opData)
       //Performance: access should be instant

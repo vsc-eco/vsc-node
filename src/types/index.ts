@@ -17,7 +17,8 @@ export interface BlockRecord {
 export interface ContractInput {
   contract_id: string,
   action: string,
-  payload: any
+  payload: any,
+  salt?: string
 }
 
 
@@ -51,6 +52,8 @@ export interface TransactionDbRecord {
   
   local: boolean
   accessible: boolean
+
+  headers: Record<string, any>
 }
 
 export enum TransactionDbStatus {

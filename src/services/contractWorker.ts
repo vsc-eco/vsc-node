@@ -31,8 +31,9 @@ export class ContractWorker {
         }).toArray()
         console.log('tx', transactions)
         if(transactions.length > 0) {
-            const output = await this.self.contractEngine.contractExecuteRaw('kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz', [
-                transactions[0]
+            const transaction = transactions[0];
+            const output = await this.self.contractEngine.contractExecuteRaw(transaction.headers.contract_id, [
+                transaction
             ], {
                 benchmark: new BenchmarkContainer().createInstance()
             })
@@ -44,8 +45,7 @@ export class ContractWorker {
             })
             console.log(data)
             await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                id: transactions[0].id,
-
+                id: transaction.id,
             }, {
                 $set: {
                     status: TransactionDbStatus.confirmed,
@@ -55,7 +55,7 @@ export class ContractWorker {
             })
 
             await this.self.contractEngine.contractDb.findOneAndUpdate({
-                'id': "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz"
+                'id': transaction.headers.contract_id
             }, {
                 $set: {
                     state_merkle: output.state_merkle

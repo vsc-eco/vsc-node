@@ -62,6 +62,9 @@ export class ChainBridge {
       })
       .toArray()
     console.log('here 1', txs)
+    if(txs.length === 0) {
+      return;
+    }
     //console.log(txs)
     let state_updates = {}
     let txHashes = []
@@ -594,7 +597,7 @@ export class ChainBridge {
             if(!producingBlock) {
               console.log('Can produce block!! at', stream.currentBlock)
               producingBlock = true;
-              // await this.createBlock()
+              await this.createBlock()
             }
           } else {
             producingBlock = false;

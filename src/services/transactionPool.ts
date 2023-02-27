@@ -16,6 +16,7 @@ import { CreateContract } from '../types/transactions'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
 import { PrivateKey } from '@hiveio/dhive'
+import Crypto from 'crypto'
 import { HiveClient } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
@@ -89,7 +90,10 @@ export class TransactionPoolService {
         
         included_in: null,
         executed_in: null,
-        output: null
+        output: null,
+        headers: {
+          contract_id: (txContainer.tx as any).contract_id
+        }
       })
       console.log(tx)
     } catch (ex) {
@@ -174,7 +178,8 @@ export class TransactionPoolService {
     let contractInput: ContractInput = {
       contract_id: contract_id,
       action: action,
-      payload: payload
+      payload: payload,
+      salt: Crypto.randomBytes(8).toString('base64url')
     }
 
     //Signed here
@@ -189,8 +194,8 @@ export class TransactionPoolService {
 
     let callContractTx: TransactionRaw = {
       op: VSCOperations.call_contract,
-      payload: contractInput,
-      type: TransactionDbType.input
+      type: TransactionDbType.input,
+      ...contractInput,
     }
 
     console.log('194', callContractTx)

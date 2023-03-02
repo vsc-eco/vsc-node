@@ -14,7 +14,8 @@ import { BloomFilter } from 'bloom-filters'
 import * as jsonpatch from 'fast-json-patch';
 import { Collection, ObjectId, WithId } from "mongodb";
 import XorDistance from 'xor-distance'
-import { xor as uint8ArrayXor } from 'uint8arrays/xor'
+// import { xor as uint8ArrayXor } from 'uint8arrays/xor'
+import * as uint8ArrayXor from 'uint8arrays'
 import { CoreService } from './index.js';
 import pushable, { Pushable } from 'it-pushable';
 
@@ -352,7 +353,7 @@ export class P2PService {
                     const peer_id = PeerId.parse(msg.from)
                     //console.log(peer_id.id, PeerId.parse(this.myPeerId).id)
                     
-                    const distance = uint8ArrayXor(peer_id.id, PeerId.parse(this.myPeerId).id) 
+                    const distance = uint8ArrayXor.xor(peer_id.id, PeerId.parse(this.myPeerId).id) 
                     const distance2 = KBucket.distance(peer_id.id, PeerId.parse(this.myPeerId).id) 
                     //console.log(distance2, Math.log(distance2))
                     await this.peerDb.insertOne({

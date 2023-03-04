@@ -34,7 +34,7 @@ export class WitnessService {
     }
 
     async start() {
-        this.witnessDb = this.self.db('witnesses')
+        this.witnessDb = this.self.db.collection('witnesses')
         
     }
 }

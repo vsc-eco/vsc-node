@@ -6,9 +6,6 @@ interface ContractGenesis {
   creators: string[] //list of DIDs that created the contract
 }
 
-
-
-
 export interface ContractManifest {
   name: string; //None unique name of the contract
   description: string; //None unique description of the contract
@@ -18,12 +15,27 @@ export interface ContractManifest {
 }
 
 export interface Contract {
-  id: string
-  name: string
+  id: string // creation_tx
+  manifest_id: string // the CID of the manifest
+  name: string // pla: obsolete as its already contained in the manifest, correct?
   code: string
-  stateMerkle?: string //V0 of contract state
+  state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date
+}
+
+export interface ContractCommitment {
+  id: string // creation_tx
+  creation_tx: string
+  contract_id: string
+  node_id: string
+  node_identity: string
+  created_at: Date
+  status: CommitmentStatus
+  latest_state_merkle: string
+  latest_update_date: Date
+  last_pinged: Date
+  pinged_state_merkle: string
 }
 
 export interface JsonPatchOp {
@@ -39,23 +51,26 @@ interface CoreState {
   stateMap: string //IPFS URL to map of all state variables
 }
 
-
-
-export interface ContractOutputRaw {
-    inputs: Array<{
-      id: string
-    }>
-    state_merkle: string
-    //log: JsonPatchOp[]
-    //Matrix of subdocuments --> individual logs
-    log_matrix: Record<
-      string,
-      {
-        log: JsonPatchOp[]
-      }
-    >
+export interface ContractOutput {
+  contract_id: string,
+  inputs: Array<{
+    id: string
+  }>
+  state_merkle: string
+  //log: JsonPatchOp[]
+  //Matrix of subdocuments --> individual logs
+  log_matrix: Record<
+    string,
+    {
+      log: JsonPatchOp[]
+    }
+  >
 }
   
+export enum CommitmentStatus {
+  inactive,
+  active
+}
 
 export enum InputHeaderFlags {
   INDEX_SEARCH = "index_search"

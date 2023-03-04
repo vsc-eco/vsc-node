@@ -1,23 +1,40 @@
 import { JsonPatchOp } from "./contracts";
 import CID from 'cids'
 
-export interface AnnounceBlock {
-    block_hash: string;
-    net_id: string;
+export interface BaseTransaction {
+  action: string;
+  net_id: string;
 }
 
-export interface EnableWitness {
-    action: 'enable_witness';
-    node_id: string;
-    net_id: string;
+export interface AnnounceBlock extends BaseTransaction {
+  action: TransactionTypes.announce_block;
+  block_hash: string;
 }
 
-export interface CreateContract {
-  action: 'create_contract';
-  id: string;
-  name: string;
-  code: string; 
-  state_merkle: string;
+export interface EnableWitness extends BaseTransaction {
+  action: TransactionTypes.enable_witness;
+  node_id: string;
+}
+
+export interface CreateContract extends BaseTransaction {
+  manifest_id: string;
+  action: TransactionTypes.create_contract;
+  name: string; // pla: obsolete as its already contained in the manifest, correct?
+  code: string;
+}
+
+export interface JoinContract extends BaseTransaction {
+  action: TransactionTypes.join_contract;
+  contract_id: string;
+  node_identity: string;
+  node_id: string;
+}
+
+export interface LeaveContract extends BaseTransaction {
+  action: TransactionTypes.leave_contract;
+  contract_id: string;
+  node_identity: string;
+  node_id: string;
 }
 
 export interface TransactionContractOutput {
@@ -47,7 +64,6 @@ export interface TransactionContractLogMatrix {
     log: JsonPatchOp[]
 }
 
-
 export enum TransactionTypes {
     announce_block = "announce_block",
     announce_leaf = "announce_leaf",
@@ -56,11 +72,9 @@ export enum TransactionTypes {
     enable_executor = "enable_executor",
     disable_executor = "disable_executor",
     create_contract = "create_contract",
-    call_contract = "call_contract",
-
-    //Experimental contract relevant calls
     join_contract = "join_contract", //Joins a contract as an executor
     leave_contract = "leave_contract", //Leaves a contract as an executor
+    call_contract = "call_contract",
 
     //Maybe? Not sure where it fits
     link_did = "link_did",

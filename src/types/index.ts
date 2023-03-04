@@ -1,3 +1,5 @@
+// import { ContractOutputRaw } from './contracts'
+
 export * from './contracts'
 export * from './transactions'
 
@@ -6,14 +8,22 @@ export interface BlockRecord {
   __t: 'vsc-block'
   state_updates: Record<string, string>
   //txs
-  txs: Array<{
-    t: TransactionDbType
-    op: string
-    id: string
-  }>
+  txs: Array<TransactionConfirmed>
 
   previous?: any
   timestamp: Date | string
+}
+
+export interface ContractInput {
+  contract_id: string,
+  action: string,
+  payload: any,
+  salt?: string
+}
+
+
+export interface ContractUpdate {
+  // TBD
 }
 
 export interface TransactionContainer {
@@ -21,12 +31,9 @@ export interface TransactionContainer {
   __t: 'vsc-tx'
   __v: '0.1'
   lock_block: string
-  included_in: string | null
+  included_in?: string | null
   accessible?: boolean
-
-  op: string
-  payload: string
-  type: TransactionDbType
+  tx: TransactionRaw
 }
 
 export const CoreTransactionTypes = ['announce_node', 'create_contract']
@@ -35,18 +42,22 @@ export interface TransactionDbRecord {
   id: string
   account_auth: string
   op: string
-  lock_block: string
+  lock_block: string | null
   status: TransactionDbStatus
-  local: boolean
   first_seen: Date
   type: TransactionDbType
   included_in: string | null
   executed_in: string | null
   output: string | null
+  
+  local: boolean
+  accessible: boolean
+
+  headers: Record<string, any>
 }
 
 export enum TransactionDbStatus {
-  unconfirmed = 'UNCOFIRMED',
+  unconfirmed = 'UNCONFIRMED',
   confirmed = 'CONFIRMED',
   failed = 'FAILED',
   included = 'INCLUDED',
@@ -65,9 +76,23 @@ export interface BlockHeader {
   id: string
 }
 
+export interface TransactionConfirmed {
+  op: string
+  id: string // cid of transactionRaw
+  type: TransactionDbType
+}
+
 export interface TransactionRaw {
   op: string
-  payload: any
+  payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
+  type: TransactionDbType
+}
+
+export enum VSCOperations {
+  call_contract = "call_contract",
+  contract_output = "contract_output",
+
+  update_contract = "update_contract",
 }
 
 export enum NodeStorageType {

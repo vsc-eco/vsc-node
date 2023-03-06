@@ -1,9 +1,9 @@
 import { CID } from 'multiformats'
-import { coreContainer } from '../index'
+import { appContainer } from '../index'
 
 export const Resolvers = {
   contractState: async (_, args) => {
-    const data = await coreContainer.self.contractEngine.contractDb.findOne({
+    const data = await appContainer.self.contractEngine.contractDb.findOne({
       id: args.id,
     })
 
@@ -12,10 +12,10 @@ export const Resolvers = {
       state_merkle: data.state_merkle,
       state: async (args) => {
         try {
-          const obj = await coreContainer.self.ipfs.dag.resolve(data.state_merkle, {
+          const obj = await appContainer.self.ipfs.dag.resolve(data.state_merkle, {
             path: `${args.key}`,
           })
-          const out = await coreContainer.self.ipfs.dag.get(obj.cid)
+          const out = await appContainer.self.ipfs.dag.get(obj.cid)
           return out.value
         } catch {
           return null;
@@ -24,7 +24,7 @@ export const Resolvers = {
     }
   },
   findTransaction: async (_, args) => {
-    const tx = await coreContainer.self.transactionPool.transactionPool.findOne({
+    const tx = await appContainer.self.transactionPool.transactionPool.findOne({
       id: args.id,
     })
     console.log(tx)
@@ -35,7 +35,7 @@ export const Resolvers = {
     }
   },
   localNodeInfo: async () => {
-    const idInfo = await coreContainer.self.ipfs.id()
+    const idInfo = await appContainer.self.ipfs.id()
     return {
       peer_id: idInfo.id
     }

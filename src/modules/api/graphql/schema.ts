@@ -40,6 +40,7 @@ export const schema = `
     }
     type FindContractResult {
         status: String
+        # More coming
     }
     type TransactionSubmitResult {
         status: String

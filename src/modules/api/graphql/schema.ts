@@ -36,10 +36,11 @@ export const schema = `
     type ContractState {
         id: String
         state(key: String): JSON
+        state_merkle: String
     }
     type FindContractResult {
         status: String
-
+        # More coming
     }
     type TransactionSubmitResult {
         status: String

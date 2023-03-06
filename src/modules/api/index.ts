@@ -12,7 +12,7 @@ import { Resolvers } from './graphql/resolvers'
 import { schema } from './graphql/schema'
 
 export const ipfsContainer: { self: IPFSHTTPClient } = {} as any
-export const coreContainer: { self: CoreService } = {} as any
+export const appContainer: { self: CoreService } = {} as any
 
 export const INDEXER_API_BASE_URL = '/api/v0/node'
 
@@ -31,7 +31,7 @@ export class ApiModule {
     private readonly listenPort: number,
     private readonly self: CoreService
   ) {
-    coreContainer.self = self;
+    appContainer.self = self;
   }
 
   public async listen() {
@@ -75,6 +75,8 @@ export class ApiModule {
     })
  
     app.use('/api/v1/graphql', yoga)
+
+    app.enableCors();
 
     await app.listen(this.listenPort)
   }

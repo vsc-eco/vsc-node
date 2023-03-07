@@ -31,7 +31,7 @@ export const Resolvers = {
 
     return {
       ...tx,
-      first_seen: tx.first_seen.toISOString(),
+      // first_seen: tx.first_seen.toISOString(),
     }
   },
   localNodeInfo: async () => {

@@ -11,7 +11,7 @@ export const schema = `
         creation_ts: String
     }
     enum TransactionStatus {
-        UNCOFIRMED
+        UNCONFIRMED
         CONFIRMED
         FAILED
         INCLUDED

@@ -4,7 +4,7 @@ import NodeSchedule from 'node-schedule'
 import dhive, { PrivateKey } from '@hiveio/dhive'
 import { CoreService } from '.'
 import { BlockRecord, ContractOutput, TransactionDbStatus, TransactionDbType } from '../types'
-import { fastStream, HiveClient, verifyMultiJWS } from '../utils'
+import { fastStream, HiveClient, unwrapDagJws, verifyMultiJWS } from '../utils'
 import 'dotenv/config'
 import { Collection } from 'mongodb'
 import networks from './networks'
@@ -25,14 +25,7 @@ console.log(dhive, PrivateKey)
 
 
 
-async function unwrapDagJws(dagJws: any, ipfs: IPFSHTTPClient, signer: DID) {
-  const dag = await verifyMultiJWS(dagJws, signer)
 
-  return {
-    ...dag,
-    content: (await ipfs.dag.get((dag as any).link)).value
-  }
-}
 
 export class ChainBridge {
   self: CoreService
@@ -568,6 +561,9 @@ export class ChainBridge {
             }
           }
         }
+        if(this.self.config.get('identity.nodePublic') === "did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5") { 
+          console.log('block_head', block_height)
+        }
         await this.stateHeaders.findOneAndUpdate(
           {
             id: 'hive_head',
@@ -590,7 +586,7 @@ export class ChainBridge {
     setInterval(async() => {
       if(this.self.config.get('identity.nodePublic') === "did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5") {
         console.log(this.self.config.get("identity.nodePublic"), stream.blockLag)
-        if(stream.blockLag < 4) {
+        if(stream.blockLag < 5) {
           //Can produce a block
           const offsetBlock = stream.currentBlock - networks[network_id].genesisDay
           if((offsetBlock %  networks[network_id].roundLength) === 0) {

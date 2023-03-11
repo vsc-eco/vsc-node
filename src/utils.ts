@@ -5,6 +5,7 @@ import { BlockchainMode, BlockchainStreamOptions, Client } from '@hiveio/dhive'
 import Pushable from 'it-pushable'
 import { DagJWS, DID } from 'dids'
 import PQueue from 'p-queue'
+import { IPFSHTTPClient } from 'ipfs-http-client'
 console.log('pushable', Pushable)
 
 export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.deathwing.me')
@@ -251,6 +252,14 @@ export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
   }
 }
 
+export async function unwrapDagJws(dagJws: any, ipfs: IPFSHTTPClient, signer: DID) {
+  const dag = await verifyMultiJWS(dagJws, signer)
+
+  return {
+    ...dag,
+    content: (await ipfs.dag.get((dag as any).link)).value
+  }
+}
 
 export class Benchmark {
   startTime: Date

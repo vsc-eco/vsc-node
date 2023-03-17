@@ -1,5 +1,5 @@
 import * as IPFS from "ipfs-http-client";
-import { IPFSHTTPClient } from "ipfs-http-client";
+import { CID, IPFSHTTPClient } from "ipfs-http-client";
 import Path from 'path'
 import os from 'os'
 import Crypto from 'crypto'
@@ -11,8 +11,6 @@ import { TransactionPoolService } from "./transactionPool";
 import { mongo } from "./db";
 import { Db } from "mongodb";
 import { ChainBridge } from "./chainBridge";
-//@ts-ignore
-import type { CeramicClient } from "@ceramicnetwork/http-client";
 import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
 import { ContractWorker } from "./contractWorker";
@@ -21,6 +19,9 @@ interface CoreOptions {
     pathSuffix?: string
     dbSuffix?: string
     ipfsApi?: string
+    debugHelper?: {
+        nodePublicAdresses?: Array<string>
+    }
 }
 
 export class CoreService {
@@ -31,7 +32,6 @@ export class CoreService {
     transactionPool: TransactionPoolService;
     db: Db;
     chainBridge: ChainBridge;
-    ceramic: CeramicClient;
     contractEngine: ContractEngine;
     options: CoreOptions;
     p2pService: P2PService;
@@ -45,14 +45,7 @@ export class CoreService {
         }
     }
 
-    async start() {
-        this.ipfs = IPFS.create();
-        const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
-        this.config = new Config(homeDir)
-        await this.config.open()
-        this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
-        await mongo.connect()
-
+    private async setupKeys() {
         for(let key of ['node', 'wallet']) {
             let privateKey = null
             if (this.config.get(`identity.${key}Private`)) {
@@ -73,13 +66,19 @@ export class CoreService {
                 this.wallet = did;
             }
         }
+    }
+
+    async start() {
+        this.ipfs = IPFS.create({url: "/ip4/127.0.0.1/tcp/5001"});
+        const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
+        this.config = new Config(homeDir)
+        await this.config.open()
+        this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
+        await mongo.connect()
+        await this.setupKeys();
 
         try 
         {
-            const {CeramicClient} = await import('@ceramicnetwork/http-client')
-            this.ceramic = new CeramicClient('https://ceramic.web3telekom.xyz')
-            await this.ceramic.setDID(this.wallet)
-    
             this.transactionPool = new TransactionPoolService(this)
             await this.transactionPool.start()
             
@@ -94,7 +93,6 @@ export class CoreService {
 
             this.p2pService = new P2PService(this)
             await this.p2pService.start()
-
         }
         catch (err) {
             console.trace(err)

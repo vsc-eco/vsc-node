@@ -1,4 +1,3 @@
-import { TileDocument } from "@ceramicnetwork/stream-tile";
 import { CoreService } from "./index";
 
 

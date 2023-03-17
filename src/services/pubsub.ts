@@ -481,7 +481,7 @@ export class P2PService {
 
         const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
 
-        console.log("Obj PsyOp", nodeInfoCid)
+        // console.log("Obj PsyOp", nodeInfoCid)
 
         await this.self.ipfs.name.publish(nodeInfoCid)
         

@@ -1,4 +1,3 @@
-import { TileDocument } from '@ceramicnetwork/stream-tile'
 import { CID } from 'multiformats'
 import NodeSchedule from 'node-schedule'
 import dhive, { PrivateKey } from '@hiveio/dhive'
@@ -19,13 +18,6 @@ import { TransactionTypes } from '../types/transactions'
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-
-
-console.log(dhive, PrivateKey)
-
-
-
-
 
 export class ChainBridge {
   self: CoreService
@@ -96,36 +88,6 @@ export class ChainBridge {
           id: CID.parse(txContainer.id),
           type: TransactionDbType.input,
         })
-
-        // pla: is moved to coreTransaction, correct? 
-        if (txContainer.op === 'announce_node') {
-          const cid = await this.self.ipfs.object.new()
-          const txCid = await this.self.ipfs.dag.put(payload.payload)
-          let protoBuf = await this.self.ipfs.object.patch.addLink(cid, {
-            Name: payload.payload.peer_id,
-            Hash: txCid,
-          })
-          //console.log('protoBuf', protoBuf)
-          state_updates['node-info'] = protoBuf
-        }
-        /**
-         * @todo validate updates
-         */
-        if(txContainer.op === TransactionTypes.create_contract) {
-          const tileDoc = await TileDocument.load(this.self.ceramic, payload.payload.stream_id)
-          const { name, code, revision } = tileDoc.content as any
-          try {
-            await this.self.contractEngine.contractDb.findOneAndUpdate({
-              id: payload.payload.stream_id,
-            }, {
-              $set: {
-                code,
-                name,
-                revision: revision || 0
-              }
-            })
-          } catch {}
-        }        
       } catch (ex) {
         console.log(ex)
       }
@@ -158,43 +120,6 @@ export class ChainBridge {
     const blockHash = await this.self.ipfs.dag.put(block)
     console.log('block hash', blockHash)
 
-    for (let tx of transactions) {
-      console.log('here', tx)
-      if (tx.type === TransactionDbType.input) {
-        await this.self.transactionPool.transactionPool.findOneAndUpdate(
-          {
-            id: tx.id.toString(),
-          },
-          {
-            $set: {
-              status: TransactionDbStatus.included,
-              included_in: blockHash.toString(),
-            },
-          },
-        )
-      } else {
-        await this.self.transactionPool.transactionPool.findOneAndUpdate(
-          {
-            id: tx.id.toString(),
-          },
-          {
-            $set: {
-              status: TransactionDbStatus.confirmed,
-              included_in: blockHash.toString(),
-              executed_in: blockHash.toString(),
-            },
-          },
-        )
-      }
-    }
-
-    // await this.blockHeaders.insertOne({
-    //   height: await this.countHeight(blockHash.toString()),
-    //   id: blockHash.toString(),
-    // })
-
-    console.log('rd 11')
-
     try {
       const result = await HiveClient.broadcast.json(
         {
@@ -209,9 +134,6 @@ export class ChainBridge {
         },
         this.hiveKey,
       )
-
-      await HiveClient.transaction.findTransaction(result.id)
-      // console.log(out)
     } catch (ex) {
       console.log(ex)
     }
@@ -251,8 +173,6 @@ export class ChainBridge {
     }
   }
 
-  async verifyBlock() {}
-
   async countHeight(id: string) {
     let block = (await this.self.ipfs.dag.get(CID.parse(id))).value
     let height = 0
@@ -269,11 +189,6 @@ export class ChainBridge {
 
     console.log('block height', height)
     return height
-  }
-
-  async *transactionStream() {
-
-
   }
 
   async processVSCBlockTransaction(tx: TransactionConfirmed, blockHash: string) {
@@ -296,11 +211,18 @@ export class ChainBridge {
       if (isNodeExecuter) {
         // pla: maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
 
-        const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
-        const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+        // the section below doesnt work when no contract can be retrieved from the local ipfs node. 
+        // what to do when not beeing able to receive contract object? same for VSCOperations.contract_output
+        let auths = ['NOT FOUND']
+        try {
+          const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+          const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+        } catch (e) {
+          console.log("not able to receive contract from local ipfs node " + tx.id)
+        }
 
         await this.self.transactionPool.transactionPool.findOneAndUpdate({
-          id: tx.id,
+          id: tx.id.toString(),
         }, {
           $set: {
             account_auth: auths[0],
@@ -321,13 +243,6 @@ export class ChainBridge {
         }, {
           upsert: true
         })
-
-        // if (await this.hasExecuterJoinedContract(content.contract_id)) {
-
-        //   // const results = this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
-        //   // pla: do the multisig proof and publish it via pubsub
-        //   // the selected node is then going to publish the associated VSCOperations.contract_output tx
-        // }
       }
     } else if (tx.op === VSCOperations.contract_output) {
       const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
@@ -360,8 +275,6 @@ export class ChainBridge {
         upsert: true
       })
       
-
-      
       await this.self.contractEngine.contractDb.findOneAndUpdate({
         contract_id: content.contract_id
       }, {
@@ -381,6 +294,7 @@ export class ChainBridge {
     block_height: string
   }) {
     if(json.net_id !== this.self.config.get('network.id')) {
+      // console.log
       return;
     }
     if(json.action === "enable_witness") {
@@ -418,7 +332,6 @@ export class ChainBridge {
       // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
       this.events.emit('vsc_block', json)
     } else if (json.action === 'create_contract') {
-      // pla: no checks of code/ manifest to ensure performance
       try {
         await this.self.contractEngine.contractDb.insertOne({
           id: tx.transaction_id,
@@ -480,6 +393,7 @@ export class ChainBridge {
       }
   } else {
       //Unrecognized transaction
+      console.log("")
     }
   }
   
@@ -488,8 +402,6 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-
-    //await this.countHeight('bafyreibopg2xjdj37dcljsdcq5bxrcyxtqdfeufpoiecfy25hir3aorux4')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 
@@ -524,20 +436,21 @@ export class ChainBridge {
         (await this.stateHeaders.findOne({
           id: 'hive_head',
         })) || ({} as any)
-      ).block_num || 72283179
+      ).block_num || 73199442  // pla: useful to set a manual startBlock here for debug purposes
     
-    // pla: useful to set a manual startBlock here for debug purposes
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
-      // startBlock: 72283179,
       startBlock: startBlock,
       trackHead: true
     })
 
-    
     void (async () => {
-      for await(let block of stream.streamOut) {
+      for await(let block of this.streamOut) {
         const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+        await this.blockHeaders.insertOne({
+          height: await this.countHeight(block.block_hash),
+          id: block.block_hash,
+        })
 
         for(let tx of blockContent.txs) {
           this.processVSCBlockTransaction(tx, block.block_hash);
@@ -561,7 +474,8 @@ export class ChainBridge {
             }
           }
         }
-        if(this.self.config.get('identity.nodePublic') === "did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5") { 
+
+        if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) { 
           console.log('block_head', block_height)
         }
         await this.stateHeaders.findOneAndUpdate(
@@ -584,9 +498,9 @@ export class ChainBridge {
 
     let producingBlock = false;
     setInterval(async() => {
-      if(this.self.config.get('identity.nodePublic') === "did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5") {
+      if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
         console.log(this.self.config.get("identity.nodePublic"), stream.blockLag)
-        if(stream.blockLag < 5) {
+        if (stream.blockLag < 5) {
           //Can produce a block
           const offsetBlock = stream.currentBlock - networks[network_id].genesisDay
           if((offsetBlock %  networks[network_id].roundLength) === 0) {
@@ -601,47 +515,5 @@ export class ChainBridge {
         }
       }
     }, 300)
-    // await this.createBlock()
-    // await this.createBlock()
-
-    /*let startBlock =
-      (
-        (await this.stateHeaders.findOne({
-          id: 'hive_head',
-        })) || ({} as any)
-      ).block_num || 65787456
-    const stream = await fastStream({
-      startBlock,
-    })
-
-    stream.startStream()
-
-    void (async () => {
-      for await (let [block_num, block] of (await stream).stream) {
-        await this.stateHeaders.findOneAndUpdate(
-          {
-            id: 'hive_head',
-          },
-          {
-            $set: {
-              block_num,
-            },
-          },
-          {
-            upsert: true,
-          },
-        )
-        for (let trx of block.transactions) {
-          for (let op of trx.operations) {
-            const [op_id, payload] = op
-            if (op_id === 'custom_json') {
-              if (payload.id === 'vsc.announce_block') {
-                console.log('received a block', payload)
-              }
-            }
-          }
-        }
-      }
-    })()*/
   }
 }

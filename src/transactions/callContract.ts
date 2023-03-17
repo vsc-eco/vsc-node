@@ -5,6 +5,7 @@ import { JoinContract } from '../types/transactions'
 import Axios from 'axios'
 import { TransactionPoolService } from '../services/transactionPool'
 import { CoreService } from '../services/index'
+import getLogger from '../logger'
 
 void (async () => {
     const contract_id = process.argv[2]
@@ -20,18 +21,7 @@ void (async () => {
 
     const payloadJson = JSON.parse(payload)
 
-    // push message to node
-    // node should publish this tx to pubsub 
-    // *all the nodes* should create the multisig 
-    // the *selected* node should combine the multisigs and
-    // create a block and push the announce block
-    // this callContract is different from the other transactions as it just 
-    // publishes the tx to a node instead of a hive TX
-    // in the real scenario the client would interact with a node api 
-    // and the node would publish the tx to pubsub, i think it makes sense here
-    // to just skip that for now and act like the node publishes the tx directly to pubsub
-
-    const core = new CoreService()
+    const core = new CoreService({}, getLogger('NonNodeCall'))
     await core.start()
 
     const transactionPool = new TransactionPoolService(core)
@@ -39,7 +29,7 @@ void (async () => {
     await transactionPool.start()
 
     const result = await transactionPool.callContract(contract_id, action, payloadJson);
-    console.log(result)
+    core.logger.debug('result of contract invokation' , result)
     
     process.exit(0)
 })()

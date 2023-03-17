@@ -14,11 +14,12 @@ void (async () => {
 
     // pla: note - currently requires a node to be running as it accesses an api endpoint to receive the node id
     
+    const setup: {identity, config, ipfsClient, logger} = await init()
+
     if(!contract_id) {
-        console.log('Usage: leaveContract.ts <contract id>')
+        setup.logger.info('Usage: leaveContract.ts <contract id>')
         process.exit(0)
     }
-    const setup: {identity, config, ipfsClient} = await init()
 
     await TransactionPoolService.leaveContract({
             contract_id: contract_id

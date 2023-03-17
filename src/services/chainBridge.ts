@@ -46,26 +46,26 @@ export class ChainBridge {
         accessible: true,
       })
       .toArray()
-    console.log('here 1', txs)
+    this.self.logger.debug('creating block with following unconfirmed tx', txs)
+
     if(txs.length === 0) {
+      this.self.logger.debug('not creating block, no tx found')
       return;
     }
-    //console.log(txs)
+
     let state_updates = {}
     let txHashes = []
     let transactions = []
     for (let txContainer of txs) {
       //Verify CID is available
       try {
-        //console.log('1', tx.id)
         const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(txContainer.id))).value
         const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
         const [did] = kid.split('#')
         console.log(signedTransaction as any)
         const content = (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
 
-        //console.log('2', tx.id)
-        //console.log(payload)
+        this.self.logger.debug('including tx in block', txContainer, payload)
 
         if (content.op === VSCOperations.call_contract) {
           // pla: just pass on the tx
@@ -74,8 +74,6 @@ export class ChainBridge {
         } else if (content.op === VSCOperations.update_contract) {
 
         }
-
-        console.log(txContainer)
 
         txHashes.push({
           op: txContainer.op,
@@ -89,7 +87,7 @@ export class ChainBridge {
           type: TransactionDbType.input,
         })
       } catch (ex) {
-        console.log(ex)
+        this.self.logger.error('error while attempting to create block', ex)
       }
     }
 
@@ -104,7 +102,6 @@ export class ChainBridge {
 
     const previous = previousBlock ? CID.parse(previousBlock.id) : null
 
-    console.log('here 2')
     let block: BlockRecord = {
       __t: 'vsc-block',
       /**
@@ -116,9 +113,8 @@ export class ChainBridge {
       previous: previous,
       timestamp: new Date().toISOString(),
     }
-    //console.log(block)
     const blockHash = await this.self.ipfs.dag.put(block)
-    console.log('block hash', blockHash)
+    this.self.logger.debug('published block on ipfs', block, blockHash)
 
     try {
       const result = await HiveClient.broadcast.json(
@@ -134,13 +130,10 @@ export class ChainBridge {
         },
         this.hiveKey,
       )
+      this.self.logger.debug('published block on hive', blockHash)
     } catch (ex) {
-      console.log(ex)
+      this.self.logger.error('error while publishing block to hive', ex)
     }
-
-    //console.log(result)
-
-    //console.log(out)
   }
 
   /**
@@ -153,12 +146,10 @@ export class ChainBridge {
       })
       .toArray()
     for (let tx of txs) {
-      //console.log(tx)
       try {
         const out = await this.self.ipfs.dag.get(CID.parse(tx.id), {
           timeout: 10 * 1000,
         })
-        //console.log(out)
         await this.self.transactionPool.transactionPool.findOneAndUpdate(
           {
             _id: tx._id,
@@ -179,7 +170,6 @@ export class ChainBridge {
 
     for (;;) {
       if (block.previous) {
-        console.log('block height', height)
         block = (await this.self.ipfs.dag.get(block.previous)).value
         height = height + 1
       } else {
@@ -187,7 +177,7 @@ export class ChainBridge {
       }
     }
 
-    console.log('block height', height)
+    this.self.logger.debug('counted block height', height)
     return height
   }
 
@@ -205,20 +195,16 @@ export class ChainBridge {
     )
 
     if (tx.op === VSCOperations.call_contract) {
-      // pla: value needs to be taken of global variable
-      const isNodeExecuter = true;
+      if (this.self.config.get('witness.enabled')) {
 
-      if (isNodeExecuter) {
-        // pla: maybe add the contract id to the TransactionRaw to prevent unnecessary fetches
-
-        // the section below doesnt work when no contract can be retrieved from the local ipfs node. 
+        // pla: the section below doesnt work when no contract can be retrieved from the local ipfs node. 
         // what to do when not beeing able to receive contract object? same for VSCOperations.contract_output
         let auths = ['NOT FOUND']
         try {
           const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
           const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
         } catch (e) {
-          console.log("not able to receive contract from local ipfs node " + tx.id)
+          this.self.logger.error("not able to receive contract from local ipfs node ", tx.id)
         }
 
         await this.self.transactionPool.transactionPool.findOneAndUpdate({
@@ -248,8 +234,7 @@ export class ChainBridge {
       const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
       const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
-
-      console.log(content)
+      this.self.logger.debug("contract output received", content)
 
       //Do validation of executor pool
 
@@ -294,7 +279,7 @@ export class ChainBridge {
     block_height: string
   }) {
     if(json.net_id !== this.self.config.get('network.id')) {
-      // console.log
+      this.self.logger.warn('received transaction from a different network id! - will not process')
       return;
     }
     if(json.action === "enable_witness") {
@@ -343,7 +328,7 @@ export class ChainBridge {
           created_at: tx.expiration
         } as Contract)
       } catch (err){
-        console.error('not able to inject contract into the local database\n id: ' + tx.transaction_id)
+        this.self.logger.error('not able to inject contract into the local database', tx.transaction_id)
       }
     } else if (json.action === 'join_contract') {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
@@ -367,7 +352,7 @@ export class ChainBridge {
             pinged_state_merkle: null
           } as ContractCommitment)
         } catch (err) {
-          console.error('not able to inject contract commitment into the local database\nid: ' + tx.transaction_id)
+          this.self.logger.error('not able to inject contract commitment into the local database', tx.transaction_id)
         }
       } else {
         await this.self.contractEngine.contractCommitmentDb.findOneAndUpdate(commitment, {
@@ -389,11 +374,11 @@ export class ChainBridge {
           }
         })
       } else {
-        console.info('not able to leave contract commitment\nid: ' + tx.transaction_id)
+        this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
   } else {
       //Unrecognized transaction
-      console.log("")
+      this.self.logger.warn('not recognized tx type', json.action)
     }
   }
   
@@ -412,14 +397,7 @@ export class ChainBridge {
     this.streamOut = Pushable()
 
     this.events.on('vsc_block', (block) => {
-      // console.log('emitting', block_height)
-      // console.log(block_height)
       this.streamOut.push(block)
-    })
-  
-    NodeSchedule.scheduleJob('* * * * *', async () => {
-      //console.log('Creating scheduled block')
-      //await this.createBlock()
     })
 
     NodeSchedule.scheduleJob('* * * * *', async () => {
@@ -428,7 +406,7 @@ export class ChainBridge {
 
     const network_id = this.self.config.get('network.id')
 
-    console.log('network_id', network_id)
+    this.self.logger.debug('current network_id', network_id)
     this.witness.enableWitness()
     
     let startBlock =
@@ -437,6 +415,8 @@ export class ChainBridge {
           id: 'hive_head',
         })) || ({} as any)
       ).block_num || 73199442  // pla: useful to set a manual startBlock here for debug purposes
+    
+    this.self.logger.debug('starting block stream at height', startBlock)
     
     const stream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
@@ -476,7 +456,7 @@ export class ChainBridge {
         }
 
         if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) { 
-          console.log('block_head', block_height)
+          this.self.logger.debug(`current block_head height ${block_height}`)
         }
         await this.stateHeaders.findOneAndUpdate(
           {
@@ -499,13 +479,13 @@ export class ChainBridge {
     let producingBlock = false;
     setInterval(async() => {
       if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
-        console.log(this.self.config.get("identity.nodePublic"), stream.blockLag)
+        this.self.logger.info(`current block lag ${stream.blockLag}`)
         if (stream.blockLag < 5) {
           //Can produce a block
           const offsetBlock = stream.currentBlock - networks[network_id].genesisDay
           if((offsetBlock %  networks[network_id].roundLength) === 0) {
             if(!producingBlock) {
-              console.log('Can produce block!! at', stream.currentBlock)
+              this.self.logger.info('Can produce block!! at', stream.currentBlock)
               producingBlock = true;
               await this.createBlock()
             }

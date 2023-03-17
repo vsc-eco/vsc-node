@@ -10,7 +10,7 @@ import { CoreService } from '.'
 import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
 import { VM, NodeVM, VMScript } from 'vm2'
 import fs from 'fs/promises'
-import { CreateContract } from '../types/transactions'
+import { CreateContract, EnableWitness } from '../types/transactions'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
 import { PrivateKey } from '@hiveio/dhive'
@@ -45,6 +45,7 @@ export class TransactionPoolService {
   }
 
   async createTransaction(transactionRaw: any) {
+    this.self.logger.info('Creating transaction')
     const txContainer: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
@@ -53,7 +54,7 @@ export class TransactionPoolService {
     }
 
     const dag = await this.self.wallet.createDagJWS(txContainer)
-    console.log(dag)
+
     const cid = await this.self.ipfs.dag.put({
       ...dag.jws,
       link: CID.parse(dag.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
@@ -62,7 +63,7 @@ export class TransactionPoolService {
       format: 'dag-cbor'
     })
     
-    // console.log(dag.jws, cid, linkedBlock)
+    this.self.logger.debug('Create transaction dag info: ', dag.jws, cid, linkedBlock)
 
     try {
       const tx = await this.transactionPool.insertOne({
@@ -115,7 +116,35 @@ export class TransactionPoolService {
     }
   }
 
-  static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient}) {
+  static async enableWitness(setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info('Enabling witness')
+
+    const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
+        query: `
+        {
+            localNodeInfo {
+              peer_id
+              did
+            }
+          }
+        `
+    })
+
+    const nodeInfo = data.data.localNodeInfo;
+    setup.logger.debug('found local node peer id', nodeInfo)
+
+    const json: EnableWitness = {
+      net_id: setup.config.get('network.id'),
+      node_id: nodeInfo.peer_id
+    } as EnableWitness
+
+    const result = this.createCoreTransaction("vsc.enable_witness", json, setup)
+    setup.logger.debug('result', result)
+  }
+
+  static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info('Creating contract')
+    setup.logger.debug('Invoking contract details', args)
     try {
       new vm.Script(args.code);
     } catch (err) {
@@ -154,10 +183,13 @@ export class TransactionPoolService {
     } as CreateContract
 
     const result = TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
-    console.log(result)
+    setup.logger.debug('result', result)
   }
 
   public async callContract(contract_id: string, action: string, payload: any) {
+    this.self.logger.info('Invoking contract')
+    this.self.logger.debug('Invoking contract details', contract_id, action, payload)
+
     let contractInput: ContractInput = {
       contract_id: contract_id,
       action: action,
@@ -180,11 +212,11 @@ export class TransactionPoolService {
       ...contractInput,
     }
 
-    console.log('194', callContractTx)
+    this.self.logger.debug('call contract transaction dto', callContractTx)
     return await this.createTransaction(callContractTx)
   }
 
-  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
+  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient, logger}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
     const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
       query: `
       {
@@ -196,6 +228,7 @@ export class TransactionPoolService {
       `
     })
     const nodeInfo = data.data.localNodeInfo;
+    setup.logger.debug('found local node peer id', nodeInfo)
     
     const json: JoinContract | LeaveContract = {
       action: TransactionTypes.join_contract,
@@ -206,14 +239,14 @@ export class TransactionPoolService {
     }
 
     const result = TransactionPoolService.createCoreTransaction(`vsc.${action}`, json, setup)
-    console.log(result)
+    setup.logger.debug(`result of ${action} operation`, result)
   }
 
-  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
     this.contractCommitmentOperation(args, setup, TransactionTypes.create_contract);
   }
 
-  static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
+  static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
     this.contractCommitmentOperation(args, setup, TransactionTypes.leave_contract);
   }
 

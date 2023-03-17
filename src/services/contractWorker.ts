@@ -25,7 +25,7 @@ export class ContractWorker {
     // pla: (obviously) has issues when it cant find the contract on the local ipfs node (contractExecuteRaw crashes)
     public async batchExecuteContracts() {
 
-        console.log('EXECUTING SMART CONTRACTS')
+        this.self.logger.info('EXECUTING SMART CONTRACTS')
 
         // pla: create more sophisticated sort to introduce a fair and deterministic way to select tx to process?
         // maybe fetch the included_in prop, convert to a block height, sort by block height and afterwards continue to 
@@ -38,7 +38,7 @@ export class ContractWorker {
         })
         //.sort(sort)
         .limit(this.self.config.get('witness.batchExecutionSize')).toArray()
-        console.log('tx', transactions)
+        this.self.logger.debug('tx about to be batch executed', transactions)
 
         for (const transaction of transactions) {
             const output = await this.self.contractEngine.contractExecuteRaw(transaction.headers.contract_id, [
@@ -46,13 +46,14 @@ export class ContractWorker {
             ], {
                 benchmark: new BenchmarkContainer().createInstance()
             })
-            console.log(JSON.stringify(output, null, 2))
+            // console.log(JSON.stringify(output, null, 2))
+            this.self.logger.debug('output of tx processing', transaction, output)
             const data = await this.self.transactionPool.createTransaction({
                 ...output,
                 op: 'contract_output',
                 state_merkle: output.state_merkle.toString(),
             })
-            console.log(data)
+            this.self.logger.debug('injected contract output tx into local db', data)
             await this.self.transactionPool.transactionPool.findOneAndUpdate({
                 id: transaction.id,
             }, {

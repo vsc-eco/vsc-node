@@ -14,6 +14,8 @@ import { ChainBridge } from "./chainBridge";
 import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
 import { ContractWorker } from "./contractWorker";
+import winston from "winston";
+import getLogger from "../logger";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -36,12 +38,20 @@ export class CoreService {
     options: CoreOptions;
     p2pService: P2PService;
     contractWorker: ContractWorker;
+    logger: winston.Logger;
 
-    constructor(options?: CoreOptions) {
+    constructor(options?: CoreOptions, logger?: winston.Logger) {
         this.options = options || {};
+        this.logger = logger || getLogger('core')
 
         if(!this.options.ipfsApi) {
             this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"
+        }
+        if(!this.options.debugHelper) {
+            this.options.debugHelper = {}
+            if (!this.options.debugHelper.nodePublicAdresses) {
+                this.options.debugHelper.nodePublicAdresses = []
+            }
         }
     }
 

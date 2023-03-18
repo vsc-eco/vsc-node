@@ -37,7 +37,7 @@ export class ContractWorker {
             status: TransactionDbStatus.included
         })
         //.sort(sort)
-        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()
+        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()  // batchExercutionSize should be agreed upon by the executor pool to confirm alignment
         this.self.logger.debug('tx about to be batch executed', transactions)
 
         for (const transaction of transactions) {

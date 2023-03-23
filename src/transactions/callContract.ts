@@ -13,7 +13,7 @@ void (async () => {
     const payload = process.argv[4]
 
     // sample usage
-    // npx ts-node-dev src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{\"testme\": \"yeyup\"}"
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{\"testme\": \"yeyup\"}"
     if(!contract_id || !action || !payload) {
         console.log('Usage: callContract.ts <contract id> <action> <payload>')
         process.exit(0)
@@ -28,7 +28,7 @@ void (async () => {
 
     await transactionPool.start()
 
-    const result = await transactionPool.callContract(contract_id, action, payloadJson);
+    const result = await transactionPool.callContract(contract_id, payloadJson);
     core.logger.debug('result of contract invokation' , result)
     
     process.exit(0)

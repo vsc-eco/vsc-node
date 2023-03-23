@@ -3,10 +3,10 @@ import { NodeVM, VM, VMScript } from 'vm2'
 import { CID } from 'multiformats'
 import { CoreService } from './index'
 import jsonpatch from 'fast-json-patch'
-import { Contract, ContractOutput, JsonPatchOp } from '../types/index'
 import { verifyMultiJWS, Benchmark } from '../utils'
 import { logger } from '../common/logger.singleton'
-import { ContractCommitment } from '../types/contracts'
+import { Contract, ContractCommitment } from '../types/contracts'
+import { ContractOutput } from '../types/vscTransactions'
 
 let codeTemplate = `
 function wrapper () {
@@ -349,7 +349,7 @@ export class ContractEngine {
       }),
       state_merkle: stateMerkle.toString(),
       log_matrix,
-    }
+    } as ContractOutput
   }
 
   async createSmartContract() {

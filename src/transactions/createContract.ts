@@ -1,7 +1,6 @@
 import {init} from './core'
 import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
-import { CreateContract } from '../types/transactions'
 import * as fs from 'fs';
 import * as vm from 'vm';
 import { TransactionPoolService } from '../services/transactionPool';
@@ -13,8 +12,7 @@ void (async () => {
     const execPath = process.argv[4]
 
     // sample usage
-    // npx ts-node-dev src/transactions/createContract.ts testname "test description" src/services/contracts/basic-contract.js
-    
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/createContract.ts testname "test description" src/services/contracts/basic-contract.js
     const setup: {identity, config, ipfsClient, logger} = await init()
 
     if(!execPath) {

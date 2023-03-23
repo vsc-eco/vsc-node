@@ -1,9 +1,10 @@
 import NodeSchedule from 'node-schedule'
 import { CoreService } from "./index"
 import { CommitmentStatus } from "../types/contracts";
-import { TransactionDbStatus, TransactionTypes } from '../types';
+import { TransactionDbStatus, TransactionRaw, TransactionDbType } from '../types';
 import { BenchmarkContainer } from '../utils';
 import { CID } from 'ipfs-http-client';
+import { ContractOutput, VSCTransactionTypes } from '../types/vscTransactions';
 
 export class ContractWorker {
     self: CoreService
@@ -27,17 +28,16 @@ export class ContractWorker {
 
         this.self.logger.info('EXECUTING SMART CONTRACTS')
 
-        // pla: create more sophisticated sort to introduce a fair and deterministic way to select tx to process?
-        // maybe fetch the included_in prop, convert to a block height, sort by block height and afterwards continue to 
-        // to sort after the fetch by the property X (TBD)
-        const sort = { op: -1 };
+        // TBD replace with deterministic way that works by taking the hash of a hive block thats beeing created shortly before the anchor block into consideration,
+        // for that to work smoothly the simultaneous execution (start) of this method is required throughout all validators
+        const sort: any = { "id": -1 };
 
         const transactions = await this.self.transactionPool.transactionPool.find({
             op: 'call_contract',
             status: TransactionDbStatus.included
         })
-        //.sort(sort)
-        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()  // batchExercutionSize should be agreed upon by the executor pool to confirm alignment
+        .sort(sort)
+        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()
         this.self.logger.debug('tx about to be batch executed', transactions)
 
         for (const transaction of transactions) {
@@ -48,32 +48,20 @@ export class ContractWorker {
             })
             // console.log(JSON.stringify(output, null, 2))
             this.self.logger.debug('output of tx processing', transaction, output)
-            const data = await this.self.transactionPool.createTransaction({
-                ...output,
-                op: 'contract_output',
-                state_merkle: output.state_merkle.toString(),
-            })
-            this.self.logger.debug('injected contract output tx into local db', data)
-            await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                id: transaction.id,
-            }, {
-                $set: {
-                    status: TransactionDbStatus.confirmed,
-                    executed_in: "TBD",
-                    output: data.id
-                }
-            })
 
-            // pla: shouldnt we not do this here and instead create a VSCOperations.contract_output transaction and let
-            // the block parser do the updating of the DB, same for the above txpool update i guess 
-            // (though for the mempool updates it might make sense so the mempool updates can be propagated b4 the block creation/ parsing)
-            await this.self.contractEngine.contractDb.findOneAndUpdate({
-                'id': transaction.headers.contract_id
-            }, {
-                $set: {
-                    state_merkle: output.state_merkle
-                }
-            })
+            output.parent_tx_id = transaction.id
+
+            const txRaw: TransactionRaw = {
+                ...output,
+                op: VSCTransactionTypes.contract_output,
+                payload: null,
+                type: TransactionDbType.output
+            }
+
+            // pla: included original 'callContract' tx id in the contract output tx to let the nodes know that they can update their local tx pool state
+            const result = await this.self.transactionPool.createTransaction(txRaw)
+
+            this.self.logger.debug('injected contract output tx into local db', result)
         }
     }
 

@@ -10,7 +10,6 @@ import { CoreService } from '.'
 import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
 import { VM, NodeVM, VMScript } from 'vm2'
 import fs from 'fs/promises'
-import { CreateContract, EnableWitness } from '../types/transactions'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
 import { PrivateKey } from '@hiveio/dhive'
@@ -19,10 +18,8 @@ import { HiveClient } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { JoinContract } from '../types/transactions'
-import { TransactionTypes } from '../types/transactions'
-import { ContractInput, VSCOperations } from '../types'
-import { BaseTransaction, LeaveContract } from '../types/transactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
+import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 
 const INDEX_RULES = {}
 
@@ -35,7 +32,7 @@ export class TransactionPoolService {
     this.self = self
   }
 
-  private static async createCoreTransaction(id: string, json: BaseTransaction, setup: {identity, config, ipfsClient}) {
+  private static async createCoreTransaction(id: string, json: CoreBaseTransaction, setup: {identity, config, ipfsClient}) {
     return await HiveClient.broadcast.json({
       id: id,
       required_auths: [],
@@ -186,28 +183,20 @@ export class TransactionPoolService {
     setup.logger.debug('result', result)
   }
 
-  public async callContract(contract_id: string, action: string, payload: any) {
+  public async callContract(contract_id: string, payload: any) {
     this.self.logger.info('Invoking contract')
-    this.self.logger.debug('Invoking contract details', contract_id, action, payload)
+    this.self.logger.debug('Invoking contract details', contract_id, payload)
 
     let contractInput: ContractInput = {
       contract_id: contract_id,
-      action: action,
       payload: payload,
       salt: Crypto.randomBytes(8).toString('base64url')
-    }
+    } as ContractInput
 
     //Signed here
 
-    let contractInputCid = null;
-    try {
-      contractInputCid = await this.self.ipfs.dag.put(contractInput)
-    } catch {
-      contractInputCid = await this.self.ipfs.dag.put(contractInput, {onlyHash: true})
-    }
-
     let callContractTx: TransactionRaw = {
-      op: VSCOperations.call_contract,
+      op: VSCTransactionTypes.call_contract,
       type: TransactionDbType.input,
       ...contractInput,
     }
@@ -216,7 +205,7 @@ export class TransactionPoolService {
     return await this.createTransaction(callContractTx)
   }
 
-  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient, logger}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
+  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient, logger}, action: CoreTransactionTypes.create_contract | CoreTransactionTypes.leave_contract) {
     const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
       query: `
       {
@@ -231,7 +220,7 @@ export class TransactionPoolService {
     setup.logger.debug('found local node peer id', nodeInfo)
     
     const json: JoinContract | LeaveContract = {
-      action: TransactionTypes.join_contract,
+      action: CoreTransactionTypes.join_contract,
       contract_id: args.contract_id,
       node_id: nodeInfo.peer_id,
       node_identity: setup.identity.id,
@@ -243,11 +232,11 @@ export class TransactionPoolService {
   }
 
   static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
-    this.contractCommitmentOperation(args, setup, TransactionTypes.create_contract);
+    this.contractCommitmentOperation(args, setup, CoreTransactionTypes.create_contract);
   }
 
   static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
-    this.contractCommitmentOperation(args, setup, TransactionTypes.leave_contract);
+    this.contractCommitmentOperation(args, setup, CoreTransactionTypes.leave_contract);
   }
 
   async start() {

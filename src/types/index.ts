@@ -1,7 +1,6 @@
 // import { ContractOutputRaw } from './contracts'
 
 export * from './contracts'
-export * from './transactions'
 
 //Engrained into the blockchain for reference
 export interface BlockRecord {
@@ -14,17 +13,6 @@ export interface BlockRecord {
   timestamp: Date | string
 }
 
-export interface ContractInput {
-  contract_id: string,
-  action: string,
-  payload: any,
-  salt?: string
-}
-
-
-export interface ContractUpdate {
-  // TBD
-}
 
 export interface TransactionContainer {
   id?: string //Created during signing
@@ -35,8 +23,6 @@ export interface TransactionContainer {
   accessible?: boolean
   tx: TransactionRaw
 }
-
-export const CoreTransactionTypes = ['announce_node', 'create_contract']
 
 export interface TransactionDbRecord {
   id: string
@@ -86,13 +72,6 @@ export interface TransactionRaw {
   op: string
   payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
   type: TransactionDbType
-}
-
-export enum VSCOperations {
-  call_contract = "call_contract",
-  contract_output = "contract_output",
-
-  update_contract = "update_contract",
 }
 
 export enum NodeStorageType {

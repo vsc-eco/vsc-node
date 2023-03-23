@@ -2,7 +2,6 @@ import { CID } from 'multiformats'
 import NodeSchedule from 'node-schedule'
 import dhive, { PrivateKey } from '@hiveio/dhive'
 import { CoreService } from '.'
-import { BlockRecord, ContractOutput, TransactionDbStatus, TransactionDbType } from '../types'
 import { fastStream, HiveClient, unwrapDagJws, verifyMultiJWS } from '../utils'
 import 'dotenv/config'
 import { Collection } from 'mongodb'
@@ -13,11 +12,12 @@ import { VMScript } from 'vm2'
 import * as vm from 'vm';
 import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'
-import { ContractInput, TransactionConfirmed, VSCOperations } from '../types'
-import { TransactionTypes } from '../types/transactions'
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
+import { BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
+import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
+import { CoreTransactionTypes } from '../types/coreTransactions'
 
 export class ChainBridge {
   self: CoreService
@@ -67,11 +67,11 @@ export class ChainBridge {
 
         this.self.logger.debug('including tx in block', txContainer, payload)
 
-        if (content.op === VSCOperations.call_contract) {
+        if (content.op === VSCTransactionTypes.call_contract) {
           // pla: just pass on the tx
-        } else if (content.op === VSCOperations.contract_output) {
+        } else if (content.op === VSCTransactionTypes.contract_output) {
           // pla: combine other executors contract invokation results in multisig and create the contract_output tx
-        } else if (content.op === VSCOperations.update_contract) {
+        } else if (content.op === VSCTransactionTypes.update_contract) {
 
         }
 
@@ -123,7 +123,7 @@ export class ChainBridge {
           required_posting_auths: [process.env.HIVE_ACCOUNT],
           id: 'vsc.announce_block',
           json: JSON.stringify({
-            action: TransactionTypes.announce_block,
+            action: CoreTransactionTypes.announce_block,
             block_hash: blockHash.toString(),
             net_id: this.self.config.get('network.id'),
           }),
@@ -194,11 +194,11 @@ export class ChainBridge {
       },
     )
 
-    if (tx.op === VSCOperations.call_contract) {
+    if (tx.op === VSCTransactionTypes.call_contract) {
       if (this.self.config.get('witness.enabled')) {
 
         // pla: the section below doesnt work when no contract can be retrieved from the local ipfs node. 
-        // what to do when not beeing able to receive contract object? same for VSCOperations.contract_output
+        // what to do when not beeing able to receive contract object? same for VSCTransactionTypes.contract_output
         let auths = ['NOT FOUND']
         try {
           const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
@@ -230,8 +230,8 @@ export class ChainBridge {
           upsert: true
         })
       }
-    } else if (tx.op === VSCOperations.contract_output) {
-      const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+    } else if (tx.op === VSCTransactionTypes.contract_output) {
+      const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
       const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
       this.self.logger.debug("contract output received", content)
@@ -268,8 +268,18 @@ export class ChainBridge {
         }
       })
 
+      // update parent tx (call contract)
+      
+      await this.self.transactionPool.transactionPool.findOneAndUpdate({
+        id: transactionRaw.parent_tx_id,
+      }, {
+          $set: {
+              status: TransactionDbStatus.confirmed,
+              executed_in: blockHash
+          }
+      });
     }
-    else if (tx.op === VSCOperations.update_contract) {
+    else if (tx.op === VSCTransactionTypes.update_contract) {
       // pla: TBD update general stuff in regards to the contract... description etc.
     }
   }
@@ -414,7 +424,7 @@ export class ChainBridge {
         (await this.stateHeaders.findOne({
           id: 'hive_head',
         })) || ({} as any)
-      ).block_num || 73199442  // pla: useful to set a manual startBlock here for debug purposes
+      ).block_num || 73348150  // pla: useful to set a manual startBlock here for debug purposes
     
     this.self.logger.debug('starting block stream at height', startBlock)
     

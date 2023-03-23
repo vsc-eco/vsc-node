@@ -42,7 +42,11 @@ export class CoreService {
 
     constructor(options?: CoreOptions, logger?: winston.Logger) {
         this.options = options || {};
-        this.logger = logger || getLogger('core')
+        this.logger = logger || getLogger({
+            prefix: 'core',
+            printMetadata: this.config.get('logger.printMetadata'),
+            level: this.config.get('logger.level'),
+          })
 
         if(!this.options.ipfsApi) {
             this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"

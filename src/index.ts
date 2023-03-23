@@ -4,7 +4,11 @@ import { ApiModule } from "./modules/api/index"
 import { CoreService } from "./services"
 
 async function startup(): Promise<void> {
-  const logger1 = getLogger('core1')
+  const logger1 = getLogger({
+    prefix: 'core1',
+    printMetadata: this.self.config.get('logger.printMetadata'),
+    level: this.self.config.get('logger.level'),
+  })
   const core = new CoreService({
     "debugHelper": {
         "nodePublicAdresses": ["did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5", "did:key:z6Mkofo9CvXkfTEr1twKpjWYvZqZzaEu4zT8gMATP6renNJg"]
@@ -15,7 +19,11 @@ async function startup(): Promise<void> {
   const api = new ApiModule(1337, core)
   await api.listen()
   
-  // const logger2 = getLogger('core2')
+  // const logger2 = getLogger({
+  //   prefix: 'core2',
+  //   printMetadata: this.self.config.get('logger.printMetadata'),
+  //   level: this.self.config.get('logger.level'),
+  // })
   // const coreSeconday = new CoreService({
   //   dbSuffix: '1',
   //   pathSuffix: '1',

@@ -16,10 +16,15 @@ const homeDir = Path.join(os.homedir(), '.vsc-node')
 let identity = null;
 
 export async function init() {
-    const logger = getLogger('NonCoreCall')
-
+    
     const config = new Config(homeDir)
     await config.open()
+
+    const logger = getLogger({
+        prefix: 'NonCoreCall',
+        printMetadata: config.get('logger.printMetadata'),
+        level: config.get('logger.level'),
+    })
     
     const ipfsClient = IPFS.create(config.get('ipfs.apiAddr'));
 

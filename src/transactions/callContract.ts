@@ -21,7 +21,11 @@ void (async () => {
 
     const payloadJson = JSON.parse(payload)
 
-    const core = new CoreService({}, getLogger('NonNodeCall'))
+    const core = new CoreService({}, getLogger({
+        prefix: 'NonCoreCall',
+        printMetadata: true,
+        level: 'debug',
+      }))
     await core.start()
 
     const transactionPool = new TransactionPoolService(core)

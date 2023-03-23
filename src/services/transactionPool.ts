@@ -141,7 +141,7 @@ export class TransactionPoolService {
 
   static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient, logger}) {
     setup.logger.info('Creating contract')
-    setup.logger.debug('Invoking contract details', args)
+    setup.logger.debug('Creating contract. Details:', args)
     try {
       new vm.Script(args.code);
     } catch (err) {
@@ -179,7 +179,7 @@ export class TransactionPoolService {
       net_id: setup.config.get('network.id')
     } as CreateContract
 
-    const result = TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
+    const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
     setup.logger.debug('result', result)
   }
 

@@ -83,3 +83,9 @@ export enum NodeStorageType {
   //Stores state from only pinned smart contracts
   light = "light"
 }
+
+export interface LoggerConfig {
+  prefix: string,
+  level: string,
+  printMetadata: boolean
+}

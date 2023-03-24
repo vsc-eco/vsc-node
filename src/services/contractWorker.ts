@@ -46,7 +46,7 @@ export class ContractWorker {
             ], {
                 benchmark: new BenchmarkContainer().createInstance()
             })
-            // console.log(JSON.stringify(output, null, 2))
+
             this.self.logger.debug('output of tx processing', transaction, output)
 
             output.parent_tx_id = transaction.id
@@ -60,6 +60,14 @@ export class ContractWorker {
 
             // pla: included original 'callContract' tx id in the contract output tx to let the nodes know that they can update their local tx pool state
             const result = await this.self.transactionPool.createTransaction(txRaw)
+
+            await this.self.transactionPool.transactionPool.findOneAndUpdate({
+                    id: transaction.id.toString(),
+                }, {
+                $set: {
+                    status: TransactionDbStatus.processed,
+                }
+            })
 
             this.self.logger.debug('injected contract output tx into local db', result)
         }

@@ -47,6 +47,7 @@ export enum TransactionDbStatus {
   confirmed = 'CONFIRMED',
   failed = 'FAILED',
   included = 'INCLUDED',
+  processed = 'PROCESSED' // pla: temporary state until official confirmation from block parsing
 }
 
 export enum TransactionDbType {

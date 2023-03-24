@@ -24,7 +24,7 @@ const rmInfoProps = (info) => {
 
 const getConsoleFormat = (cfg: LoggerConfig) => {
     const getFormatString = (info) => {
-        let logString = `[${info.level.substring(0, 1).toUpperCase()}| ${info.timestamp} ${cfg.prefix}}`.padEnd(30, ' ') + `] ${info.message}` 
+        let logString = `[${info.level.substring(0, 1).toUpperCase()}| ${info.timestamp} ${cfg.prefix}`.padEnd(25, ' ') + `] ${info.message}` 
         const metadata = rmInfoProps(info)
 
         if (Object.keys(metadata).length !== 0 && cfg.printMetadata)

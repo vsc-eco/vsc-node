@@ -41,14 +41,10 @@ export class CoreService {
     p2pService: P2PService;
     contractWorker: ContractWorker;
     logger: winston.Logger;
+    loggerSettings: LoggerConfig
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
-        this.logger = getLogger(loggerSettings || {
-            prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
-            printMetadata: this.config.get('logger.printMetadata'),
-            level: this.config.get('logger.level'),
-          })
 
         if(!this.options.ipfsApi) {
             this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"
@@ -89,6 +85,11 @@ export class CoreService {
         const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
         this.config = new Config(homeDir)
         await this.config.open()
+        this.logger = getLogger(this.loggerSettings || {
+            prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
+            printMetadata: this.config.get('logger.printMetadata'),
+            level: this.config.get('logger.level'),
+        })
         this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
         await mongo.connect()
         await this.setupKeys();

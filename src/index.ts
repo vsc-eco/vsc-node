@@ -16,15 +16,15 @@ async function startup(): Promise<void> {
   const api = new ApiModule(1337, core)
   await api.listen()
   
-  const coreSeconday = new CoreService({
-    dbSuffix: '1',
-    pathSuffix: '1',
-    ipfsApi: "/ip4/127.0.0.1/tcp/5002",
-    debugHelper: {
-      serviceName: "secondary"
-    }
-  })
-  await coreSeconday.start()
+  // const coreSeconday = new CoreService({
+  //   dbSuffix: '1',
+  //   pathSuffix: '1',
+  //   ipfsApi: "/ip4/127.0.0.1/tcp/5002",
+  //   debugHelper: {
+  //     serviceName: "secondary"
+  //   }
+  // })
+  // await coreSeconday.start()
 }
 
 void startup()

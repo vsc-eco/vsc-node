@@ -16,13 +16,15 @@ import { P2PService } from "./pubsub";
 import { ContractWorker } from "./contractWorker";
 import winston from "winston";
 import getLogger from "../logger";
+import { LoggerConfig } from "../types";
 
 interface CoreOptions {
     pathSuffix?: string
     dbSuffix?: string
     ipfsApi?: string
     debugHelper?: {
-        nodePublicAdresses?: Array<string>
+        nodePublicAdresses?: Array<string>,
+        serviceName?: string
     }
 }
 
@@ -40,10 +42,10 @@ export class CoreService {
     contractWorker: ContractWorker;
     logger: winston.Logger;
 
-    constructor(options?: CoreOptions, logger?: winston.Logger) {
+    constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
-        this.logger = logger || getLogger({
-            prefix: 'core',
+        this.logger = getLogger(loggerSettings || {
+            prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
           })

@@ -15,7 +15,7 @@ import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
 import { ContractWorker } from "./contractWorker";
 import winston from "winston";
-import getLogger from "../logger";
+import { getLogger } from "../logger";
 import { LoggerConfig } from "../types";
 
 interface CoreOptions {
@@ -41,7 +41,7 @@ export class CoreService {
     p2pService: P2PService;
     contractWorker: ContractWorker;
     logger: winston.Logger;
-    loggerSettings: LoggerConfig
+    loggerSettings: LoggerConfig;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};

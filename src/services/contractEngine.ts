@@ -4,7 +4,6 @@ import { CID } from 'multiformats'
 import { CoreService } from './index'
 import jsonpatch from 'fast-json-patch'
 import { verifyMultiJWS, Benchmark } from '../utils'
-import { logger } from '../common/logger.singleton'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
 
@@ -61,7 +60,6 @@ export class ContractEngine {
     let contract = await this.contractDb.findOne({
       id,
     })
-    // console.log(contract)
     if (contract) {
       if (contract.state_merkle) {
         stateCid = CID.parse(contract.state_merkle)
@@ -72,7 +70,6 @@ export class ContractEngine {
 
     return {
       pull: async (key: string) => {
-        // console.log(stateCid)
         try {
           const obj = await this.self.ipfs.dag.resolve(stateCid, {
             path: `${key}`,
@@ -90,7 +87,7 @@ export class ContractEngine {
           Hash: outCid,
         })
 
-        logger.verbose(`[Smart Contract Execution] Updated  Merkle Root to ${merkleCid}`)
+        this.self.logger.verbose(`[Smart Contract Execution] Updated  Merkle Root to ${merkleCid}`)
         //TODO make this happen after contract call has been completely executed
         await this.contractDb.findOneAndUpdate(contract, {
           $set: {
@@ -178,7 +175,6 @@ export class ContractEngine {
     if(!contractInfo) {
       throw new Error("Contract Not Indexed Or Does Not Exist")
     }
-    //console.log(contractInfo, await this.self.ipfs.cat(contractInfo.code))
     let codeRaw = ''
     for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
       codeRaw = codeRaw + chunk.toString()
@@ -194,7 +190,7 @@ export class ContractEngine {
           payload: 'hello',
         },
         done: (msg) => {
-          // console.log(msg)
+          //this.self.logger.info('executed contract', msg)
         },
         state: await this.contractStateExecutor(id),
       },
@@ -236,7 +232,7 @@ export class ContractEngine {
       const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
         path: "/link/tx"
       })).value
-      console.log(op, opData)
+      this.self.logger.debug(`executing op: ${op}`, opData)
       //Performance: access should be instant
       if(!contractInfo) {
         throw new Error("Contract Not Indexed Or Does Not Exist")
@@ -266,7 +262,7 @@ export class ContractEngine {
       stateMerkle = executeOutput.stateMerkle
     }
 
-    console.log('269 stateMerkle', stateMerkle)
+    this.self.logger.debug('new state merkle of executed contract', stateMerkle)
     benchmark.stage('4')
     
     if(!(startMerkle instanceof CID)) {
@@ -276,7 +272,7 @@ export class ContractEngine {
     if(!(stateMerkle instanceof CID)) {
       stateMerkle = CID.parse(stateMerkle);
     }
-    console.log('270 stateMerkle', stateMerkle)
+
     let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
     startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
       return {
@@ -291,9 +287,8 @@ export class ContractEngine {
         Hash: e.Hash.toString(),
       }
     })
-    console.log('275 stateMerkle', stateMerkle)
-    
-    console.log(startMerkleObj, stateMerkleObj)
+
+    this.self.logger.debug('state merkle object of executed contract', startMerkleObj)
     benchmark.stage('4.5')
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
 

@@ -9,20 +9,31 @@ import { Controller, Get, Param } from '@nestjs/common'
 import { ObjectId } from 'bson'
 import { CID } from 'ipfs-http-client'
 import { appContainer } from './index'
+import winston from 'winston'
+import { getLogger } from '../../logger'
 
 @Controller(`/api/v1/gateway`)
 export class ApiController {
-  constructor() {}
+  logger: winston.Logger
+
+  constructor() {
+    this.logger = getLogger({
+      prefix: 'api controller',
+      printMetadata: true,
+      level: 'debug',
+    })
+  }
 
   @Post('submit_transaction')
   async submitTransaction(@Body() body) {
-    console.log(body)
+    this.logger.info('submitting transaction received from api')
+    this.logger.debug('submitting transaction', body)
     const signedTx = body.signedTx
     const cid = await appContainer.self.ipfs.dag.put({
       ...signedTx.jws,
       link: CID.parse(signedTx.jws['link']['/'].toString()), //Glich with dag.put not allowing CIDs to link
     })
-    console.log(cid)
+    this.logger.debug('submitted tx cid', cid)
     await appContainer.self.ipfs.block.put(
       Buffer.from(Object.values(signedTx.linkedBlock as any) as any),
       {
@@ -38,7 +49,7 @@ export class ApiController {
       appContainer.self.identity,
     )
 
-    console.log(decodedContent)
+    this.logger.debug('decoded jws of submitted tx', decodedContent)
 
     await appContainer.self.transactionPool.transactionPool.insertOne({
       _id: new ObjectId(),

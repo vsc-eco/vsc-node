@@ -9,7 +9,7 @@ import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
 import KeyResolver from 'key-did-resolver'
 import { Config } from "../services/nodeConfig";
-import getLogger from '../logger';
+import { getLogger } from '../logger';
 
 const homeDir = Path.join(os.homedir(), '.vsc-node')
 
@@ -21,7 +21,7 @@ export async function init() {
     await config.open()
 
     const logger = getLogger({
-        prefix: 'NonCoreCall',
+        prefix: 'manual tx core',
         printMetadata: config.get('logger.printMetadata'),
         level: config.get('logger.level'),
     })

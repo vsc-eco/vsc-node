@@ -24,7 +24,7 @@ const rmInfoProps = (info) => {
 
 const getConsoleFormat = (cfg: LoggerConfig) => {
     const getFormatString = (info) => {
-        let logString = `[${info.level.substring(0, 1).toUpperCase()}| ${info.timestamp} ${cfg.prefix}`.padEnd(25, ' ') + `] ${info.message}` 
+        let logString = `[${info.level.substring(0, 1).toUpperCase()}| ${info.timestamp} ${cfg.prefix}`.padEnd(30, ' ') + `] ${info.message}` 
         const metadata = rmInfoProps(info)
 
         if (Object.keys(metadata).length !== 0 && cfg.printMetadata)
@@ -83,11 +83,15 @@ const getTransports = (cfg: LoggerConfig) => [
     })
 ]
 
-const getLogger = (cfg: LoggerConfig) => {
+export const getLogger = (cfg: LoggerConfig) => {
     return winston.createLogger({
         levels,
         transports: getTransports(cfg),
     })
 }
 
-export default getLogger
+export const globalLogger = getLogger({
+    prefix: 'global logger',
+    printMetadata: true,
+    level: 'debug',
+})

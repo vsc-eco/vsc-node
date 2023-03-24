@@ -1,5 +1,3 @@
-import getLogger from "./logger";
-import Logger from "./logger";
 import { ApiModule } from "./modules/api/index"
 import { CoreService } from "./services"
 

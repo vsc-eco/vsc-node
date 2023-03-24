@@ -82,9 +82,9 @@ export class TransactionPoolService {
           contract_id: (txContainer.tx as any).contract_id
         }
       })
-      console.log(tx)
+      this.self.logger.debug('injected tx into local db', tx)
     } catch (ex) {
-      console.log(ex)
+      this.self.logger.error('not able to inject new tx into local db', ex)
     }
 
     // pla: lets define an interface for the pubsub transaction dto
@@ -107,7 +107,6 @@ export class TransactionPoolService {
     //     hasher,
     //   })
     // ).cid
-    //console.log('head', transactionPoolHead.toString())
     return {
         id: cid.toString()
     }
@@ -145,7 +144,7 @@ export class TransactionPoolService {
     try {
       new vm.Script(args.code);
     } catch (err) {
-      console.error(`provided script is invalid, not able to create contract\n`, err);  
+      setup.logger.error(`provided script is invalid, not able to create contract\n`, err);  
       process.exit(0)
     }
     
@@ -256,17 +255,14 @@ export class TransactionPoolService {
 
     this.self.ipfs.pubsub.subscribe('/vsc/memorypool', async (data) => {
       const json = JSON.parse(String.fromCharCode.apply(null, data.data))
-      //console.log(json)
       // const verify = await this.self.wallet.verifyJWS(json.payload)
       // const { kid } = verify
       // const [did] = kid.split('#')
-      // //console.log(did, verify)
     })
 
     // pla: DBG
     try {
       const newCid = (await this.self.ipfs.add(await fs.readFile('./src/services/contracts/basic-contract.js'))).cid.toString()
-      console.log('new contract cid', newCid)
       // await this.updateContract({
       //   id: "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz",
       //   name: 'test contract',
@@ -274,7 +270,7 @@ export class TransactionPoolService {
       // })
 
     } catch(ex) {
-      console.log(ex)
+      this.self.logger.error('failed to inject basic contract into local ipfs node', ex)
     }
   }
 }

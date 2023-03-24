@@ -62,7 +62,7 @@ export class ChainBridge {
         const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(txContainer.id))).value
         const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
         const [did] = kid.split('#')
-        console.log(signedTransaction as any)
+        this.self.logger.debug('signed tx', signedTransaction as any)
         const content = (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
 
         this.self.logger.debug('including tx in block', txContainer, payload)
@@ -417,7 +417,6 @@ export class ChainBridge {
     const network_id = this.self.config.get('network.id')
 
     this.self.logger.debug('current network_id', network_id)
-    this.witness.enableWitness()
     
     let startBlock =
       (

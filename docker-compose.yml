@@ -1,0 +1,47 @@
+version: "3.3"
+
+services:
+  vsc-node: # name of the service
+    build: .
+    image: vsc-node # the image to use
+    container_name: vsc-node # what to label the container for docker ps
+    restart: always # restart if failed, until we stop it ourselves
+    #external_links:
+      #- mongo
+    depends_on:
+      - ipfs
+    networks:
+      - vsc-node
+    environment:
+      IPFS_HOST: ipfs:5001
+      MONGO_HOST: mongo:27017
+    volumes:
+      - ./data/vsc-node:/root/.vsc-node
+  mongo:
+    container_name: mongo_vsc
+    image: mongo:latest
+    restart: always
+    ports:
+      - 27021:27017
+    networks:
+      - vsc-node
+    volumes:
+      - ./data/mongodb:/data/db
+  ipfs:
+    container_name: ipfs-vsc
+    image: ipfs/kubo:v0.18.1
+    command:
+      - daemon
+      - --enable-pubsub-experiment
+    networks:
+      - vsc-node
+    ports:
+      - "4001:4001"
+    environment: 
+      IPFS_PATH: /etc/ipfs
+    volumes:
+      - ./data/ipfs:/etc/ipfs
+      
+networks:
+  vsc-node:
+    driver: bridge

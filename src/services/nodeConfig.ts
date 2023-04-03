@@ -129,6 +129,11 @@ export class Config {
         nodePublic: null,
         walletPrivate: null,
         walletPublic: null,
+        signing_keys: {
+          owner: null,
+          active: null,
+          posting: null
+        }
       },
       //Contract executor
       witness: {

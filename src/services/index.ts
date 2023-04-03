@@ -17,6 +17,7 @@ import { ContractWorker } from "./contractWorker";
 import winston from "winston";
 import { getLogger } from "../logger";
 import { LoggerConfig } from "../types";
+import { PrivateKey } from "@hiveio/dhive";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -76,6 +77,11 @@ export class CoreService {
             }
             if(key === "wallet") {
                 this.wallet = did;
+            }
+            if(key === 'wallet') {
+                this.config.set('identity.signing_keys.posting', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'posting').toString())
+                this.config.set('identity.signing_keys.active', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'active').toString())
+                this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'owner').toString())
             }
         }
     }

@@ -26,7 +26,7 @@ export async function init() {
         level: config.get('logger.level'),
     })
     
-    const ipfsClient = IPFS.create(config.get('ipfs.apiAddr'));
+    const ipfsClient = IPFS.create(process.env.IPFS_HOST || config.get('ipfs.apiAddr'));
 
     const privateKey = config.get('identity.walletPrivate');
     if(!privateKey) {

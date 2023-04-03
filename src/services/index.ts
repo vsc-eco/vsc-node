@@ -87,7 +87,7 @@ export class CoreService {
     }
 
     async start() {
-        this.ipfs = IPFS.create({url: "/ip4/127.0.0.1/tcp/5001"});
+        this.ipfs = IPFS.create({url: process.env.IPFS_HOST || "/ip4/127.0.0.1/tcp/5001"});
         const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
         this.config = new Config(homeDir)
         await this.config.open()

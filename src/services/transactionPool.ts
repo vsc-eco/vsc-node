@@ -8,11 +8,8 @@ import { sha256 as hasher } from 'multiformats/hashes/sha2'
 import { BloomFilter } from 'bloom-filters'
 import { CoreService } from '.'
 import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
-import { CommitID } from '@ceramicnetwork/docid'
 import { VM, NodeVM, VMScript } from 'vm2'
-import { TileDocument } from '@ceramicnetwork/stream-tile'
 import fs from 'fs/promises'
-import { CreateContract } from '../types/transactions'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
 import { PrivateKey } from '@hiveio/dhive'
@@ -21,16 +18,10 @@ import { HiveClient } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { JoinContract } from '../types/transactions'
-import { TransactionTypes } from '../types/transactions'
-import { ContractInput, VSCOperations } from '../types'
-import { BaseTransaction, LeaveContract } from '../types/transactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
+import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 
 const INDEX_RULES = {}
-
-
-
-
 
 export class TransactionPoolService {
   self: CoreService
@@ -41,7 +32,7 @@ export class TransactionPoolService {
     this.self = self
   }
 
-  private static async createCoreTransaction(id: string, json: BaseTransaction, setup: {identity, config, ipfsClient}) {
+  private static async createCoreTransaction(id: string, json: CoreBaseTransaction, setup: {identity, config, ipfsClient}) {
     return await HiveClient.broadcast.json({
       id: id,
       required_auths: [],
@@ -51,16 +42,16 @@ export class TransactionPoolService {
   }
 
   async createTransaction(transactionRaw: any) {
+    this.self.logger.info('Creating transaction')
     const txContainer: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
       tx: transactionRaw,
-      lock_block: 'null', //Calculate on the fly
-      // included_in: null    
+      lock_block: 'null', //Calculate on the fly 
     }
 
     const dag = await this.self.wallet.createDagJWS(txContainer)
-    console.log(dag)
+
     const cid = await this.self.ipfs.dag.put({
       ...dag.jws,
       link: CID.parse(dag.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
@@ -69,11 +60,7 @@ export class TransactionPoolService {
       format: 'dag-cbor'
     })
     
-    // console.log(dag.jws, cid, linkedBlock)
-    // console.log(await this.self.ipfs.dag.put({
-    //   linkedBlock
-    // }))
-    // const 
+    this.self.logger.debug('Create transaction dag info: ', dag.jws, cid, linkedBlock)
 
     try {
       const tx = await this.transactionPool.insertOne({
@@ -95,9 +82,9 @@ export class TransactionPoolService {
           contract_id: (txContainer.tx as any).contract_id
         }
       })
-      console.log(tx)
+      this.self.logger.debug('injected tx into local db', tx)
     } catch (ex) {
-      console.log(ex)
+      this.self.logger.error('not able to inject new tx into local db', ex)
     }
 
     // pla: lets define an interface for the pubsub transaction dto
@@ -113,12 +100,6 @@ export class TransactionPoolService {
       ),
     )
 
-    // let obj = {}
-    // for (let hash of ['bafyreige4erd7ulmsqqbw32cyva5bimz5zamlk7mvtsv6662d7wu2oi56i']) {
-    //   obj[hash] = ''
-    // }
-    // const data = encode(obj)
-
     // const transactionPoolHead = (
     //   await Block.encode({
     //     value: data,
@@ -126,17 +107,44 @@ export class TransactionPoolService {
     //     hasher,
     //   })
     // ).cid
-    //console.log('head', transactionPoolHead.toString())
     return {
         id: cid.toString()
     }
   }
 
-  static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient}) {
+  static async enableWitness(setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info('Enabling witness')
+
+    const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
+        query: `
+        {
+            localNodeInfo {
+              peer_id
+              did
+            }
+          }
+        `
+    })
+
+    const nodeInfo = data.data.localNodeInfo;
+    setup.logger.debug('found local node peer id', nodeInfo)
+
+    const json: EnableWitness = {
+      net_id: setup.config.get('network.id'),
+      node_id: nodeInfo.peer_id
+    } as EnableWitness
+
+    const result = this.createCoreTransaction("vsc.enable_witness", json, setup)
+    setup.logger.debug('result', result)
+  }
+
+  static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info('Creating contract')
+    setup.logger.debug('Creating contract. Details:', args)
     try {
       new vm.Script(args.code);
     } catch (err) {
-      console.error(`provided script is invalid, not able to create contract\n`, err);  
+      setup.logger.error(`provided script is invalid, not able to create contract\n`, err);  
       process.exit(0)
     }
     
@@ -170,39 +178,33 @@ export class TransactionPoolService {
       net_id: setup.config.get('network.id')
     } as CreateContract
 
-    const result = TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
-    console.log(result)
+    const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
+    setup.logger.debug('result', result)
   }
 
-  public async callContract(contract_id: string, action: string, payload: any) {
+  public async callContract(contract_id: string, payload: any) {
+    this.self.logger.info('Invoking contract')
+    this.self.logger.debug('Invoking contract details', contract_id, payload)
+
     let contractInput: ContractInput = {
       contract_id: contract_id,
-      action: action,
       payload: payload,
       salt: Crypto.randomBytes(8).toString('base64url')
-    }
+    } as ContractInput
 
     //Signed here
 
-
-    let contractInputCid = null;
-    try {
-      contractInputCid = await this.self.ipfs.dag.put(contractInput)
-    } catch {
-      contractInputCid = await this.self.ipfs.dag.put(contractInput, {onlyHash: true})
-    }
-
     let callContractTx: TransactionRaw = {
-      op: VSCOperations.call_contract,
+      op: VSCTransactionTypes.call_contract,
       type: TransactionDbType.input,
       ...contractInput,
     }
 
-    console.log('194', callContractTx)
+    this.self.logger.debug('call contract transaction dto', callContractTx)
     return await this.createTransaction(callContractTx)
   }
 
-  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient}, action: TransactionTypes.create_contract | TransactionTypes.leave_contract) {
+  private static async contractCommitmentOperation(args: { contract_id }, setup: {identity, config, ipfsClient, logger}, action: CoreTransactionTypes.create_contract | CoreTransactionTypes.leave_contract) {
     const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
       query: `
       {
@@ -214,9 +216,10 @@ export class TransactionPoolService {
       `
     })
     const nodeInfo = data.data.localNodeInfo;
+    setup.logger.debug('found local node peer id', nodeInfo)
     
     const json: JoinContract | LeaveContract = {
-      action: TransactionTypes.join_contract,
+      action: CoreTransactionTypes.join_contract,
       contract_id: args.contract_id,
       node_id: nodeInfo.peer_id,
       node_identity: setup.identity.id,
@@ -224,53 +227,15 @@ export class TransactionPoolService {
     }
 
     const result = TransactionPoolService.createCoreTransaction(`vsc.${action}`, json, setup)
-    console.log(result)
+    setup.logger.debug(`result of ${action} operation`, result)
   }
 
-  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
-    this.contractCommitmentOperation(args, setup, TransactionTypes.create_contract);
+  static async joinContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
+    this.contractCommitmentOperation(args, setup, CoreTransactionTypes.create_contract);
   }
 
-  static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient}) {
-    this.contractCommitmentOperation(args, setup, TransactionTypes.leave_contract);
-  }
-
-  async updateContract(args: {
-    id: string
-    codeCid?: string
-    name?: string
-  }) {
-    const tileDoc = await TileDocument.load(
-      this.self.ceramic,
-      args.id,
-    )
-    
-    if(!tileDoc.metadata.controllers.includes(this.self.wallet.id)) {
-      throw new Error('Cannot modify a contract you do not own')
-    }
-    
-    if(((tileDoc.content as any).code === args.codeCid.toString())) {
-      throw new Error('Cannot update to same codeCid')
-    }
-
-    await tileDoc.update({
-      name: args.name,
-      code: args.codeCid.toString(),
-      revision: ((tileDoc.content as any).revision || 0) + 1
-    } as any)
-
-    const {id} = await this.createTransaction({
-      op: VSCOperations.update_contract,
-      payload: {
-        stream_id: tileDoc.id.toString(),
-        commit_id: tileDoc.commitId.toString()
-      }
-    })
-    return {
-      transaction_id: id,
-      stream_id: tileDoc.id.toString(),
-      commit_id: tileDoc.commitId.toString()
-    }
+  static async leaveContract(args: { contract_id }, setup: {identity, config, ipfsClient, logger}) {
+    this.contractCommitmentOperation(args, setup, CoreTransactionTypes.leave_contract);
   }
 
   async start() {
@@ -290,37 +255,14 @@ export class TransactionPoolService {
 
     this.self.ipfs.pubsub.subscribe('/vsc/memorypool', async (data) => {
       const json = JSON.parse(String.fromCharCode.apply(null, data.data))
-      //console.log(json)
       // const verify = await this.self.wallet.verifyJWS(json.payload)
       // const { kid } = verify
       // const [did] = kid.split('#')
-      // //console.log(did, verify)
     })
 
-   
-    // await this.createTransaction({
-
-    //   op: 'announce_node',
-    //   payload: {
-    //     peer_id: (await this.self.ipfs.id()).id,
-    //   },
-    // })
-
-    const vmState = {
-      api: {},
-    }
-
-    // const vm = new NodeVM({
-    //   sandbox: {
-    //     test: async () => {
-    //       return await this.self.ipfs.id()
-    //     },
-    //   },
-    // })
-
+    // pla: DBG
     try {
       const newCid = (await this.self.ipfs.add(await fs.readFile('./src/services/contracts/basic-contract.js'))).cid.toString()
-      console.log('new contract cid', newCid)
       // await this.updateContract({
       //   id: "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz",
       //   name: 'test contract',
@@ -328,23 +270,7 @@ export class TransactionPoolService {
       // })
 
     } catch(ex) {
-      console.log(ex)
+      this.self.logger.error('failed to inject basic contract into local ipfs node', ex)
     }
-
-    /*const out = vm.run(
-      `
-        Math.random = () => {}
-        RegExp.prototype.constructor = function () { };
-        RegExp.prototype.exec = function () {  };
-        RegExp.prototype.test = function () {  };
-      
-      async function main() {
-        console.log(Math.random())
-      }
-      main();
-    `,
-      'vm.js',
-    )
-    console.log(out)*/
   }
 }

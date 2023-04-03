@@ -9,15 +9,23 @@ import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
 import KeyResolver from 'key-did-resolver'
 import { Config } from "../services/nodeConfig";
+import { getLogger } from '../logger';
 
 const homeDir = Path.join(os.homedir(), '.vsc-node')
 
 let identity = null;
 
 export async function init() {
+    
     const config = new Config(homeDir)
     await config.open()
 
+    const logger = getLogger({
+        prefix: 'manual tx core',
+        printMetadata: config.get('logger.printMetadata'),
+        level: config.get('logger.level'),
+    })
+    
     const ipfsClient = IPFS.create(config.get('ipfs.apiAddr'));
 
     const privateKey = config.get('identity.walletPrivate');
@@ -30,11 +38,13 @@ export async function init() {
     if(!process.env.HIVE_ACCOUNT_POSTING || !process.env.HIVE_ACCOUNT_POSTING) {
         throw new Error("No HIVE account found in .env file")
     }
-    console.log("Logged In With", identity.id, `and ${process.env.HIVE_ACCOUNT} connected to ipfs gw: ${config.get('ipfs.apiAddr')}`)
+
+    logger.info(`Logged In With ${identity.id} and ${process.env.HIVE_ACCOUNT} connected to ipfs gw: ${config.get('ipfs.apiAddr')}`)
 
     return {
         identity,
         config,
-        ipfsClient
+        ipfsClient,
+        logger
     }
 }

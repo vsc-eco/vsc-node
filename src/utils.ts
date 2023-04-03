@@ -6,7 +6,8 @@ import Pushable from 'it-pushable'
 import { DagJWS, DID } from 'dids'
 import PQueue from 'p-queue'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-console.log('pushable', Pushable)
+import winston from 'winston'
+import { getLogger } from './logger'
 
 export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.deathwing.me')
 
@@ -31,6 +32,7 @@ export class fastStream {
   queue: PQueue
   headHeight: number
   headTracker: NodeJS.Timer
+  logger: winston.Logger
   
   constructor(queue: PQueue, streamOpts: {
     startBlock: number,
@@ -47,6 +49,12 @@ export class fastStream {
 
     this.blockMap = {}
 
+    this.logger = getLogger({
+      prefix: 'faststream',
+      printMetadata: true,
+      level: 'debug',
+    })
+
     
     this.startStream = this.startStream.bind(this)
     this.resumeStream = this.resumeStream.bind(this)
@@ -54,8 +62,6 @@ export class fastStream {
     this.onDone = this.onDone.bind(this)
 
     this.events.on('block', (block_height, block) => {
-      // console.log('emitting', block_height)
-      // console.log(block_height)
       this.streamOut.push([block_height, block])
     })
   
@@ -105,8 +111,7 @@ export class fastStream {
         return new Promise((resolve) => {
           stream
             .on('data', (async function (block) {
-              const block_height = parseInt(block.block_id.slice(0, 8), 16)
-              // console.log(this, this.parser_height,  block_height)
+              const block_height = parseInt(block.block_id.slice(0, 8), 16)    
               if (this.parser_height === block_height) {
                 this.parser_height = block_height + 1;
                 this.events.emit('block', block_height, block)
@@ -116,7 +121,7 @@ export class fastStream {
             }).bind(this))
             .on('error', ((error) => {
               clearInterval(this.eventQueue)
-              console.log('error is', error)
+              this.logger.error('error is', error)
               this.streamOut.end(error)
             }).bind(this))
             .on('end', (function (e) {
@@ -144,7 +149,7 @@ export class fastStream {
       }
     }
     await this.queue.onIdle();
-    console.log("ITS IDLE", {
+    this.logger.debug("ITS IDLE", {
       finalBlock
     })
     
@@ -156,29 +161,12 @@ export class fastStream {
       finalStream
         .on('data', (async function (block) {
           const block_height = parseInt(block.block_id.slice(0, 8), 16)
-          // console.log('getting', block_height)
           if (this.parser_height === block_height) {
             this.parser_height = block_height + 1;
             this.currentBlock = block_height;
             this.events.emit('block', block_height, block)
-            // console.log({
-            //   fault: 6,
-            //   block_height,
-            //   parser_height: this.parser_height
-            // })
           } else if(block_height > this.parser_height) {
             this.blockMap[block_height] = block
-            // console.log({
-            //   fault: 61,
-            //   block_height,
-            //   parser_height: this.parser_height
-            // })
-          } else {
-            // console.log({
-            //   fault: 60,
-            //   block_height,
-            //   parser_height: this.parser_height
-            // })
           }
         }).bind(this))
         .on('error', ((error) => {
@@ -286,11 +274,19 @@ export class Benchmark {
 export class BenchmarkContainer {
   benchmarks: Record<string, Benchmark>
   benchmarkCount: number
+  logger: winston.Logger
+
   constructor() {
     this.benchmarks = {
       
     }
     this.benchmarkCount = 0;
+
+    this.logger = getLogger({
+      prefix: 'benchmark container',
+      printMetadata: true,
+      level: 'debug',
+    })
   }
   table() {
     const table = {}
@@ -313,7 +309,7 @@ export class BenchmarkContainer {
     for(let [key, value] of Object.entries(table)) {
       table[key] = {value: (value as any).value /  this.benchmarkCount, name: (value as any).name}
     }
-    console.log(table)
+    this.logger.info('benchmark infos', table)
   }
   createInstance() {
     const bench = new Benchmark();

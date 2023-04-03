@@ -4,9 +4,6 @@
   "description": "",
   "main": "dist/index.js",
   "dependencies": {
-    "@ceramicnetwork/docid": "^0.5.2",
-    "@ceramicnetwork/http-client": "^1.4.0",
-    "@ceramicnetwork/stream-tile": "^1.5.7",
     "@hiveio/dhive": "^1.2.2",
     "@nestjs/common": "^8.4.7",
     "@nestjs/core": "^8.4.7",
@@ -36,7 +33,7 @@
     "peer-id": "^0.16.0",
     "uuid": "^8.3.2",
     "vm2": "^3.9.9",
-    "winston": "^3.8.1",
+    "winston": "^3.8.2",
     "xor-distance": "^2.0.0"
   },
   "devDependencies": {

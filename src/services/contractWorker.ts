@@ -1,9 +1,10 @@
 import NodeSchedule from 'node-schedule'
 import { CoreService } from "./index"
 import { CommitmentStatus } from "../types/contracts";
-import { TransactionDbStatus, TransactionTypes } from '../types';
+import { TransactionDbStatus, TransactionRaw, TransactionDbType } from '../types';
 import { BenchmarkContainer } from '../utils';
 import { CID } from 'ipfs-http-client';
+import { ContractOutput, VSCTransactionTypes } from '../types/vscTransactions';
 
 export class ContractWorker {
     self: CoreService
@@ -18,59 +19,58 @@ export class ContractWorker {
           status: CommitmentStatus.active,
           node_identity: this.self.identity.id
     
-        }) !== null ? true: false;
+        }) !== null;
       }
 
     // pla: some regular occuring event needs to trigger this... on new vsc block received or smth?
+    // pla: (obviously) has issues when it cant find the contract on the local ipfs node (contractExecuteRaw crashes)
     public async batchExecuteContracts() {
 
-        console.log('EXECUTING SMART CONTRACTS')
+        this.self.logger.info('EXECUTING SMART CONTRACTS')
+
+        // TBD replace with deterministic way that works by taking the hash of a hive block thats beeing created shortly before the anchor block into consideration,
+        // for that to work smoothly the simultaneous execution (start) of this method is required throughout all validators
+        const sort: any = { "id": -1 };
+
         const transactions = await this.self.transactionPool.transactionPool.find({
             op: 'call_contract',
             status: TransactionDbStatus.included
-        }).toArray()
-        console.log('tx', transactions)
-        if(transactions.length > 0) {
-            const transaction = transactions[0];
+        })
+        .sort(sort)
+        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()
+        this.self.logger.debug('tx about to be batch executed', transactions)
+
+        for (const transaction of transactions) {
             const output = await this.self.contractEngine.contractExecuteRaw(transaction.headers.contract_id, [
                 transaction
             ], {
                 benchmark: new BenchmarkContainer().createInstance()
             })
-            console.log(JSON.stringify(output, null, 2))
-            const data = await this.self.transactionPool.createTransaction({
+
+            this.self.logger.debug('output of tx processing', transaction, output)
+
+            output.parent_tx_id = transaction.id
+
+            const txRaw: TransactionRaw = {
                 ...output,
-                op: 'contract_output',
-                state_merkle: output.state_merkle.toString(),
-            })
-            console.log(data)
+                op: VSCTransactionTypes.contract_output,
+                payload: null,
+                type: TransactionDbType.output
+            }
+
+            // pla: included original 'callContract' tx id in the contract output tx to let the nodes know that they can update their local tx pool state
+            const result = await this.self.transactionPool.createTransaction(txRaw)
+
             await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                id: transaction.id,
-            }, {
+                    id: transaction.id.toString(),
+                }, {
                 $set: {
-                    status: TransactionDbStatus.confirmed,
-                    executed_in: "TBD",
-                    output: data.id
+                    status: TransactionDbStatus.processed,
                 }
             })
 
-            await this.self.contractEngine.contractDb.findOneAndUpdate({
-                'id': transaction.headers.contract_id
-            }, {
-                $set: {
-                    state_merkle: output.state_merkle
-                }
-            })
+            this.self.logger.debug('injected contract output tx into local db', result)
         }
-        // pla: have a deterministic way of fetching the transactions out of the transactionpool DB
-        const txToProcess = []
-
-        // pla: procedurally execute contracts so we dont get state conflicts
-        // for (const tx in txToProcess) {
-        //     results = this.self.contractEngine.contractExecuteRaw(contractInputTx.contract_id, [contractInputTx])
-        // }
-
-        // ....
     }
 
     async start() {

@@ -1,5 +1,4 @@
 import NodeSchedule from 'node-schedule'
-import { logger } from "../common/logger.singleton";
 import { CID, IPFSHTTPClient } from "ipfs-http-client";
 import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
@@ -18,6 +17,8 @@ import XorDistance from 'xor-distance'
 import * as uint8ArrayXor from 'uint8arrays'
 import { CoreService } from './index.js';
 import pushable, { Pushable } from 'it-pushable';
+import winston from 'winston';
+import { getLogger, globalLogger } from '../logger.js';
 
 
 enum PUBSUB_CHANNELS  {
@@ -79,7 +80,13 @@ export class PeerChannel {
     }>;
     selfId: string;
     establishedTime: Date;
+    logger: winston.Logger;
     constructor(ipfs: IPFSHTTPClient, topic: string, target: string) {
+        this.logger = getLogger({
+            prefix: 'peer channel',
+            printMetadata: true,
+            level: 'debug',
+        })
         this.ipfs = ipfs;
         this.topic = topic;
         this.target = target;
@@ -110,7 +117,7 @@ export class PeerChannel {
                 this.connectionAlive = true;
                 this.events.emit('connection_established')
             }
-            console.log(json_payload)
+            this.logger.debug('received message', json_payload)
             if(json_payload.flags && json_payload.flags.includes('init')) {
                 if(this._handles[json_payload.type]) {
                     let drain = pushable()
@@ -122,9 +129,9 @@ export class PeerChannel {
                                 sink.push(message.payload)
                             }
                         })
-                        console.log(events)
+                        this.logger.debug('peer events', events)
                         for await (let item of drain) {
-                            console.log('Channel Response', item)
+                            this.logger.debug('Channel Response', item)
                             await this.send({
                                 type: json_payload.type,
                                 req_id: json_payload.req_id,
@@ -150,7 +157,7 @@ export class PeerChannel {
             }
             
         } else {
-            logger.warn(`P2P: Expected ${this.target} but got ${msg.from}`)
+            this.logger.warn(`P2P: Expected ${this.target} but got ${msg.from}`)
         }
     }
 
@@ -226,7 +233,7 @@ export class PeerChannel {
         }, DEFAULT_OPTIONS.pollInterval)
 
         this.events.on('peer joined', (peer) => {
-            console.log('peer joined', peer)
+            this.logger.debug('peer joined', peer)
         })
     }
 
@@ -291,7 +298,7 @@ export class PeerChannel {
             hasher,
         })
 
-        logger.info(`Initializing peer connection with ${target}`)
+        globalLogger.info(`Initializing peer connection with ${target}`)
         const peerChannel = new PeerChannel(ipfs, `/p2p-direct/${block.cid}/vsc`, target)
         await peerChannel.init()
 
@@ -330,7 +337,7 @@ export class P2PService {
                 return;
             }
             if(json_payload.type === MESSAGE_TYPES.announceNode) {
-                console.log(json_payload)
+                this.self.logger.debug('multicast payload', json_payload)
                 
                 
                 const nodeInfo = await this.peerDb.findOne({
@@ -373,10 +380,10 @@ export class P2PService {
             }
 
             if(json_payload.type === MESSAGE_TYPES.directConnect) {
-                console.log(json_payload)
+                this.self.logger.debug('direct connected message payload', json_payload)
             }
         } catch(ex) {
-            console.log(ex)
+            this.self.logger.debug('error while handling multicast', ex)
         }
     }
 
@@ -391,7 +398,7 @@ export class P2PService {
             }
 
             if(json_payload.type === MESSAGE_TYPES.directConnect) {
-                logger.verbose('Received unicast direct connect')
+                this.self.logger.verbose('Received unicast direct connect')
                 if(!this.directPeers.includes(peer)) {
                     const channel = await PeerChannel.connect(this.self.ipfs, peer)
                     this.defaultRegister(channel)         
@@ -400,7 +407,7 @@ export class P2PService {
     
                     const {result} = await channel.call('test')
     
-                    console.log('Call Test Result', await result())
+                    this.self.logger.debug('Call Test Result', await result())
     
                     
                     await this.peerDb.findOneAndUpdate({
@@ -411,24 +418,24 @@ export class P2PService {
                         }
                     })
                     this.directPeers.push(peer)
-                    logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+                    this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
                 }
             }
         } catch(ex) {
-            console.log(ex)
+            this.self.logger.debug('error while handling unicast', ex)
         }
     }
 
     private defaultRegister(channel: PeerChannel) {
         channel.register('test', ({from, message, drain, sink}) => {
-            console.log({from, message, drain, sink})
+            this.self.logger.debug('test registration', {from, message, drain, sink})
             drain.push({
                 "msg": "HELLO GOODMORNING TEST"
             })
             drain.end()
         })
         channel.register('node_info', ({from, message, drain, sink}) => {
-            console.log({from, message, drain, sink})
+            this.self.logger.debug('node info registration', {from, message, drain, sink})
             drain.push({
                 agent: "VSC/1.0",
                 motd: "Not set"
@@ -455,7 +462,7 @@ export class P2PService {
     }
 
     async announceNode() {
-        logger.info('Announcing node')
+        this.self.logger.info('Announcing node')
         const identity = await this.self.ipfs.id();
         const ts = new Date();
         
@@ -481,7 +488,7 @@ export class P2PService {
 
         const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
 
-        console.log("Obj PsyOp", nodeInfoCid)
+        // console.log("Obj PsyOp", nodeInfoCid)
 
         await this.self.ipfs.name.publish(nodeInfoCid)
         
@@ -489,7 +496,7 @@ export class P2PService {
     }
     
     async createDirectChannels() {
-        logger.info('Forming direct channels')
+        this.self.logger.info('Forming direct channels')
         const peersLs = await this.self.ipfs.pubsub.peers(PUBSUB_CHANNELS.multicast)
         const channelsLs = await this.self.ipfs.pubsub.ls()
 
@@ -514,7 +521,7 @@ export class P2PService {
                     }
                 })
                 this.directPeers.push(peer)
-                logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+                this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
             }
         }
         
@@ -555,7 +562,7 @@ export class P2PService {
     }
 
     async start() {
-        logger.info('Starting Pubsub Interface')
+        this.self.logger.info('Starting Pubsub Interface')
         this.peerDb = this.self.db.collection('peers')
         this.myPeerId = (await this.self.ipfs.id()).id
         this.self.ipfs.pubsub.subscribe(PUBSUB_CHANNELS.multicast, this.handleMulticast)

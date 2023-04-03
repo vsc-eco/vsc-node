@@ -5,41 +5,37 @@ import { JoinContract } from '../types/transactions'
 import Axios from 'axios'
 import { TransactionPoolService } from '../services/transactionPool'
 import { CoreService } from '../services/index'
+import { getLogger } from '../logger'
 
 void (async () => {
     const contract_id = process.argv[2]
     const action = process.argv[3]
     const payload = process.argv[4]
 
+    const core = new CoreService({}, {
+        prefix: 'manual tx core',
+        printMetadata: true,
+        level: 'debug',
+      })
+
     // sample usage
-    // npx ts-node-dev src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{\"testme\": \"yeyup\"}"
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/callContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a set "{\"testme\": \"yeyup\"}"
     if(!contract_id || !action || !payload) {
-        console.log('Usage: callContract.ts <contract id> <action> <payload>')
+        core.logger.error('Usage: callContract.ts <contract id> <action> <payload>')
         process.exit(0)
     }
 
     const payloadJson = JSON.parse(payload)
 
-    // push message to node
-    // node should publish this tx to pubsub 
-    // *all the nodes* should create the multisig 
-    // the *selected* node should combine the multisigs and
-    // create a block and push the announce block
-    // this callContract is different from the other transactions as it just 
-    // publishes the tx to a node instead of a hive TX
-    // in the real scenario the client would interact with a node api 
-    // and the node would publish the tx to pubsub, i think it makes sense here
-    // to just skip that for now and act like the node publishes the tx directly to pubsub
-
-    const core = new CoreService()
+    
     await core.start()
 
     const transactionPool = new TransactionPoolService(core)
 
     await transactionPool.start()
 
-    const result = await transactionPool.callContract(contract_id, action, payloadJson);
-    console.log(result)
+    const result = await transactionPool.callContract(contract_id, payloadJson);
+    core.logger.debug('result of contract invokation' , result)
     
     process.exit(0)
 })()

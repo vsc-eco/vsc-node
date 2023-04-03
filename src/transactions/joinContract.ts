@@ -10,15 +10,15 @@ void (async () => {
     const contract_id = process.argv[2]
 
     // sample usage
-    // npx ts-node-dev src/transactions/joinContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/joinContract.ts 351d68f85ab150c71e577ae4ab406eacb6fb4b2a
 
     // pla: note - currently requires a node to be running as it accesses an api endpoint to receive the node id
+    const setup: {identity, config, ipfsClient, logger} = await init()
     
     if(!contract_id) {
-        console.log('Usage: joinContract.ts <contract id>')
+        setup.logger.info('Usage: joinContract.ts <contract id>')
         process.exit(0)
     }
-    const setup: {identity, config, ipfsClient} = await init()
 
     await TransactionPoolService.joinContract({
             contract_id: contract_id

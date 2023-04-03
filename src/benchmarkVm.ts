@@ -6,7 +6,7 @@ const TRIAL_NUMBER = 10_000
 void (async () => {
   const core = new CoreService()
   await core.start()
-  console.log('Starting Benchmark')
+  core.logger.info('Starting Benchmark')
 
   const func = async () => {
       const benchmarkContainer = new BenchmarkContainer()

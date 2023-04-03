@@ -27,7 +27,6 @@ export const Resolvers = {
     const tx = await appContainer.self.transactionPool.transactionPool.findOne({
       id: args.id,
     })
-    console.log(tx)
 
     return {
       ...tx,

@@ -51,22 +51,6 @@ interface CoreState {
   stateMap: string //IPFS URL to map of all state variables
 }
 
-export interface ContractOutput {
-  contract_id: string,
-  inputs: Array<{
-    id: string
-  }>
-  state_merkle: string
-  //log: JsonPatchOp[]
-  //Matrix of subdocuments --> individual logs
-  log_matrix: Record<
-    string,
-    {
-      log: JsonPatchOp[]
-    }
-  >
-}
-  
 export enum CommitmentStatus {
   inactive,
   active

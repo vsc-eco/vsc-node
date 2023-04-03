@@ -132,7 +132,11 @@ export class Config {
       },
       //Contract executor
       witness: {
-        enabled: false
+        enabled: true,
+        batchExecutionSize: 100 // pla: max amount of tx to process in a single batch execution
+        // is kinda a constant so it doesnt really belong here - maybe have a "version"/ "runtime params" data model
+        // that houses constants for the current version of vsc which is propagated throughout the nodes,
+        // so in theory you could dynamically adjust constant parameters for eg performance or something reasons (peaks/ lows in usage)
       },
       node: {
         storageType: "archive" //For now until chain state is properly replicated across many nodes.
@@ -140,6 +144,10 @@ export class Config {
       ipfs: {
         apiAddr: '/ip4/127.0.0.1/tcp/5001',
       },
+      logger: {
+        printMetadata: true,
+        level: "debug"
+      }
     }
 
     this.config = config || defaultConfig

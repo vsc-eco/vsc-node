@@ -1,7 +1,6 @@
 import {init} from './core'
 import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
-import { JoinContract } from '../types/transactions'
 import Axios from 'axios'
 import { TransactionPoolService } from '../services/transactionPool'
 import { CoreService } from '../services/index'

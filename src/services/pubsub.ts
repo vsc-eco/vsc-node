@@ -2,7 +2,7 @@ import NodeSchedule from 'node-schedule'
 import { CID, IPFSHTTPClient } from "ipfs-http-client";
 import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
-import { sha256 as hasher } from 'multiformats/hashes/sha2'
+import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'
 import { encode, decode } from '@ipld/dag-cbor'
 import EventEmitter from 'events'
 import PeerId from 'peer-id'
@@ -18,6 +18,12 @@ import { CoreService } from './index.js';
 import pushable, { Pushable } from 'it-pushable';
 import winston from 'winston';
 import { getLogger, globalLogger } from '../logger.js';
+import { cryptoUtils, PrivateKey } from '@hiveio/dhive';
+import { Ed25519Provider } from 'key-did-provider-ed25519';
+import { DID } from 'dids';
+import KeyResolver from 'key-did-resolver'
+import { createJwsMultsign, verifyMultiJWS } from '../utils';
+
 
 
 enum PUBSUB_CHANNELS  {
@@ -27,7 +33,8 @@ enum PUBSUB_CHANNELS  {
 
 enum MESSAGE_TYPES {
     announceNode = 'announce_node',
-    directConnect = 'direct_connect'
+    directConnect = 'direct_connect',
+    mockSign = "mock_sign",
 }
 
 enum VALID_EVENTS {
@@ -80,7 +87,11 @@ export class PeerChannel {
     selfId: string;
     establishedTime: Date;
     logger: winston.Logger;
-    constructor(ipfs: IPFSHTTPClient, topic: string, target: string) {
+    private _multicast: boolean;
+    constructor(ipfs: IPFSHTTPClient, topic: string, options: {
+        target?: string
+        multicast?: boolean
+    }) {
         this.logger = getLogger({
             prefix: 'peer channel',
             printMetadata: true,
@@ -88,7 +99,8 @@ export class PeerChannel {
         })
         this.ipfs = ipfs;
         this.topic = topic;
-        this.target = target;
+        this.target = options.target;
+        this._multicast = options.multicast
 
         this.onMessageReceive = this.onMessageReceive.bind(this)
 
@@ -106,12 +118,12 @@ export class PeerChannel {
         const raw_payload = Buffer.from(msg.data).toString()
         const json_payload = JSON.parse(raw_payload)
        
-        if(msg.from === this.selfId) {
+        if(msg.from.toString() === this.selfId) {
             //Ignore self
             return;
         }
 
-        if(msg.from === this.target) {
+        if(msg.from === this.target || this._multicast === true) {
             if(!this.connectionAlive) {
                 this.connectionAlive = true;
                 this.events.emit('connection_established')
@@ -302,7 +314,25 @@ export class PeerChannel {
             })
     
             globalLogger.info(`Initializing peer connection with ${target}`)
-            const peerChannel = new PeerChannel(ipfs, `/p2p-direct/${block.cid}/vsc`, target)
+            const peerChannel = new PeerChannel(ipfs, `/p2p-direct/${block.cid}/vsc`, {
+                target
+            })
+            await peerChannel.init()
+
+            return peerChannel
+        } catch(ex) {
+            console.log(ex)
+        }
+    }
+
+    static async connectMulticast(ipfs: IPFSHTTPClient, channel_id: string) {
+        try {
+           
+    
+            globalLogger.info(`Initializing interface to channel: ${channel_id}`)
+            const peerChannel = new PeerChannel(ipfs, channel_id, {
+                multicast: true
+            })
             await peerChannel.init()
 
             return peerChannel
@@ -320,6 +350,7 @@ export class P2PService {
     peerDb: Collection<WithId<PeerInfo>>
     myPeerId: string;
     events: EventEmitter;
+    multicastChannel: PeerChannel;
 
     constructor(self) {
         this.self = self;
@@ -338,24 +369,36 @@ export class P2PService {
     private async handleMulticast(msg) {
         const msgTest = new Date();
         try {
-            console.log('received announce', msg.from.toString())
+            // console.log('received announce', msg.from.toString())
             const raw_payload = Buffer.from(msg.data).toString()
-
-            console.log(raw_payload)
+ 
+            // console.log(raw_payload)
             const json_payload = JSON.parse(raw_payload)
+            // if(json_payload.type === MESSAGE_TYPES.mockSign) {
+            //     const signature = PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).sign(cryptoUtils.sha256("test message"))
+
+            //     this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify({
+            //         signature: signature.toString()
+            //     })))
+            // }
             if(msg.from.toString() === this.myPeerId) {
                 return;
             }
             if(json_payload.type === MESSAGE_TYPES.announceNode) {
                 this.self.logger.debug('multicast payload', json_payload)
+
+                const did_proof = await verifyMultiJWS(json_payload.payload.did_proof, this.self.identity)
                 
+                let isTrusted = did_proof.auths.find(e => {
+                    return e === process.env.MULTISIG_ANTI_HACK
+                });
                 
                 const nodeInfo = await this.peerDb.findOne({
                     peer_id: msg.from.toString()
                 })
 
                 const stt = new Date(json_payload.ts)
-                console.log(stt, new Date(), msgTest)
+                // console.log(stt, new Date(), msgTest)
                 const message_drift = new Date().getTime() - stt.getTime()
                 const latency = await this.getPeerLatency(msg.from)
                 if(nodeInfo) {
@@ -365,7 +408,8 @@ export class P2PService {
                         $set: {
                             last_msg: new Date(),
                             message_drift,
-                            latency
+                            latency,
+                            anti_hack_trusted: isTrusted
                         }
                     })
                 } else {
@@ -373,7 +417,7 @@ export class P2PService {
                     //console.log(peer_id.id, PeerId.parse(this.myPeerId).id)
                     
                     // const distance = uint8ArrayXor.xor(peer_id.id, PeerId.parse(this.myPeerId).id) 
-                    console.log(peer_id, PeerId.parse(peer_id.toString()).id, PeerId.parse(this.myPeerId).id)
+                    // console.log(peer_id, PeerId.parse(peer_id.toString()).id, PeerId.parse(this.myPeerId).id)
                     const distance2 = KBucket.distance(PeerId.parse(peer_id.toString()).id, PeerId.parse(this.myPeerId).id) 
                     //console.log(distance2, Math.log(distance2))
                     await this.peerDb.insertOne({
@@ -456,6 +500,15 @@ export class P2PService {
             })
             drain.end()
         })
+        channel.register('mock_sign', ({from, message, drain, sink}) => {
+            console.log('mock signing happening')
+            
+            const signature = PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).sign(cryptoUtils.sha256("test message"))
+            drain.push({
+                signature: signature.toString()
+            })
+            drain.end()
+        })
     }
 
     async getPeerLatency(peerId: string) {
@@ -499,17 +552,45 @@ export class P2PService {
             this.self.logger.info('Announcing node')
             const identity = await this.self.ipfs.id();
             const ts = new Date();
+
+            console.log(process.env.MULTISIG_ANTI_HACK_KEY)
             
+            const signers = [this.self.identity]
+            
+            if(process.env.MULTISIG_ANTI_HACK_KEY) {
+                const adminKey = new DID({ provider: new Ed25519Provider(Buffer.from(process.env.MULTISIG_ANTI_HACK_KEY, 'base64')), resolver: KeyResolver.getResolver() })
+                await adminKey.authenticate()
+                signers.push(adminKey)
+            }
+
             const msg = {
                 type: MESSAGE_TYPES.announceNode,
                 id: (identity).id.toString(),
                 ts,
                 node_did: this.self.identity.id,
                 payload: {
-                    did_proof: await this.self.identity.createJWS({
+                    did_proof: await createJwsMultsign({
                         peer_id: identity.id.toString(),
-                        ts: ts.toISOString()
-                    })
+                        ts: ts.toISOString(),
+                        signing_keys: {
+                            posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
+                            active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
+                            owner: PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString()
+                        }
+                    }, signers)
+                    // did_proof: await this.self.identity.createJWS({
+                    //     peer_id: identity.id.toString(),
+                    //     ts: ts.toISOString(),
+                    //     signing_keys: {
+                    //         posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
+                    //         active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
+                    //         owner: PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString()
+                    //     }
+                    // }),
+                    // admin_proof: await adminKey.createJWS({
+                    //     peer_id: identity.id.toString(),
+                    //     ts: new Date()
+                    // })
                 }
             }
     
@@ -550,7 +631,7 @@ export class P2PService {
     
                     
     
-                    const {result} = await channel.call('node_info')
+                    // const {result} = await channel.call('node_info')
     
                     // console.log('Call Test Result', await result())
     
@@ -614,6 +695,14 @@ export class P2PService {
         this.self.ipfs.pubsub.subscribe(PUBSUB_CHANNELS.multicast, this.handleMulticast)
         this.self.ipfs.pubsub.subscribe(`/p2p-uni/${this.myPeerId}`, this.handleUnicast)
 
+        this.multicastChannel = await PeerChannel.connectMulticast(this.self.ipfs, PUBSUB_CHANNELS.multicast)
+        this.defaultRegister(this.multicastChannel)
+
+        // const msg = {
+        //     type: MESSAGE_TYPES.mockSign,
+            
+        // }
+        // this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
         await this.peerDb.updateMany({}, {
             $set: {
                 connected: false

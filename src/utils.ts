@@ -224,6 +224,24 @@ export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
 
   for(let sig of dagJws.signatures) {
     const obj = {
+      signatures: [sig],
+      payload: dagJws.payload,
+    }
+    const {kid} = await signer.verifyJWS(obj)
+    
+    auths.push(kid.split('#')[0])
+  }
+
+  return {
+    payload: dagJws.payload,
+    auths
+  }
+}
+export async function verifyMultiDagJWS(dagJws: DagJWS, signer: DID) {
+  let auths = []; 
+
+  for(let sig of dagJws.signatures) {
+    const obj = {
       link: dagJws.link,
       signatures: [sig],
       payload: dagJws.payload,
@@ -240,12 +258,48 @@ export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
   }
 }
 
+
+
 export async function unwrapDagJws(dagJws: any, ipfs: IPFSHTTPClient, signer: DID) {
-  const dag = await verifyMultiJWS(dagJws, signer)
+  const dag = await verifyMultiDagJWS(dagJws, signer)
 
   return {
     ...dag,
     content: (await ipfs.dag.get((dag as any).link)).value
+  }
+}
+
+export async function createJwsMultsign(data: any, signers: DID[]) {
+  let signatures = []
+  let signedDag
+  for (let signer of signers) {
+    signedDag = await signer.createJWS(data)
+    let d = await signer.createDagJWS(data)
+    console.log('signedDag', signedDag, d.jws)
+    signatures.push(...signedDag.signatures)
+  }
+  // let signatures = []
+  // let signedDag
+  // for(let signer of signers) {
+  //   signedDag = await signer.createDagJWS(output)
+  //   // console.log('signedDag', signedDag)
+  //   signatures.push(...signedDag.jws.signatures)
+  // }
+
+  // let completeDag = {
+  //   jws: {
+  //     payload: signedDag.jws.payload,
+  //     signatures,
+  //     link: signedDag.jws.link
+  //   },
+  //   linkedBlock: await this.self.ipfs.block.put(signedDag.linkedBlock, {
+  //     format: 'dag-cbor'
+  //   })
+  // }
+  return {
+    payload: signedDag.payload,
+    signatures,
+    // link: signedDag.jws.link,
   }
 }
 

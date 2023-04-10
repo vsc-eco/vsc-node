@@ -3,7 +3,7 @@ import { NodeVM, VM, VMScript } from 'vm2'
 import { CID } from 'multiformats'
 import { CoreService } from './index'
 import jsonpatch from 'fast-json-patch'
-import { verifyMultiJWS, Benchmark } from '../utils'
+import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
 

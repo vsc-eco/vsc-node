@@ -18,6 +18,7 @@ import winston from "winston";
 import { getLogger } from "../logger";
 import { LoggerConfig } from "../types";
 import { PrivateKey } from "@hiveio/dhive";
+import { MultisigCore } from "./witness/multisig";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -43,6 +44,7 @@ export class CoreService {
     contractWorker: ContractWorker;
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
+    multisig: MultisigCore;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
@@ -118,6 +120,9 @@ export class CoreService {
 
             this.p2pService = new P2PService(this)
             await this.p2pService.start()
+
+            this.multisig = new MultisigCore(this)
+            await this.multisig.start()
         }
         catch (err) {
             console.trace(err)

@@ -30,6 +30,7 @@ services:
   ipfs:
     container_name: ipfs-vsc
     image: ipfs/kubo:v0.18.1
+    restart: always
     command:
       - daemon
       - --enable-pubsub-experiment

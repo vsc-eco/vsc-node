@@ -19,7 +19,7 @@ services:
       - ./data/vsc-node:/root/.vsc-node
   mongo:
     container_name: mongo_vsc
-    image: mongo:latest
+    image: mongo:4.4.18
     restart: always
     ports:
       - 27021:27017

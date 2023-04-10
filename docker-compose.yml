@@ -12,8 +12,10 @@ services:
       - ipfs
     networks:
       - vsc-node
+    env_file:
+      - .env
     environment:
-      IPFS_HOST: ipfs:5001
+      IPFS_HOST: http://ipfs:5001
       MONGO_HOST: mongo:27017
     volumes:
       - ./data/vsc-node:/root/.vsc-node

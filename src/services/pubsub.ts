@@ -9,7 +9,7 @@ import PeerId from 'peer-id'
 import KBucket from 'k-bucket'
 import Crypto from 'crypto'
 import { BloomFilter } from 'bloom-filters'
-import * as jsonpatch from 'fast-json-patch';
+import jsonpatch from 'fast-json-patch';
 import { Collection, ObjectId, WithId } from "mongodb";
 import XorDistance from 'xor-distance'
 // import { xor as uint8ArrayXor } from 'uint8arrays/xor'
@@ -166,6 +166,7 @@ export class PeerChannel {
             return e.toString()
         });
         //console.log(peerLs)
+        // console.log(jsonpatch)
         const differences = jsonpatch.compare(this._peers.map(p => p.toString()), peerLs.map(p => p.toString()))
 
         for(let itm of differences) {
@@ -268,7 +269,7 @@ export class PeerChannel {
         await this.send({
             type: id,
             req_id,
-            payload: options.payload,
+            payload: options?.payload,
             flags: ['init']
         })
         
@@ -290,20 +291,25 @@ export class PeerChannel {
     }
 
     static async connect(ipfs: IPFSHTTPClient, target: string) {
-        const block = await Block.encode({
-            value: encode({
-                [(await ipfs.id()).id.toString()] : 'null',
-                [target]: 'null'
-            }),
-            codec,
-            hasher,
-        })
+        try {
+            const block = await Block.encode({
+                value: encode({
+                    [(await ipfs.id()).id.toString()] : 'null',
+                    [target]: 'null'
+                }),
+                codec,
+                hasher,
+            })
+    
+            globalLogger.info(`Initializing peer connection with ${target}`)
+            const peerChannel = new PeerChannel(ipfs, `/p2p-direct/${block.cid}/vsc`, target)
+            await peerChannel.init()
 
-        globalLogger.info(`Initializing peer connection with ${target}`)
-        const peerChannel = new PeerChannel(ipfs, `/p2p-direct/${block.cid}/vsc`, target)
-        await peerChannel.init()
+            return peerChannel
+        } catch(ex) {
+            console.log(ex)
+        }
 
-        return peerChannel
     }
 }
 
@@ -330,11 +336,14 @@ export class P2PService {
     
 
     private async handleMulticast(msg) {
+        const msgTest = new Date();
         try {
+            console.log('received announce', msg.from.toString())
             const raw_payload = Buffer.from(msg.data).toString()
 
+            console.log(raw_payload)
             const json_payload = JSON.parse(raw_payload)
-            if(msg.from === this.myPeerId) {
+            if(msg.from.toString() === this.myPeerId) {
                 return;
             }
             if(json_payload.type === MESSAGE_TYPES.announceNode) {
@@ -342,31 +351,34 @@ export class P2PService {
                 
                 
                 const nodeInfo = await this.peerDb.findOne({
-                    peer_id: msg.from
+                    peer_id: msg.from.toString()
                 })
 
                 const stt = new Date(json_payload.ts)
-                const latency = new Date().getTime() - stt.getTime()
-                this.getPeerLatency(msg.from)
+                console.log(stt, new Date(), msgTest)
+                const message_drift = new Date().getTime() - stt.getTime()
+                const latency = await this.getPeerLatency(msg.from)
                 if(nodeInfo) {
                     await this.peerDb.findOneAndUpdate({
-                        peer_id: msg.from,
+                        peer_id: msg.from.toString(),
                     }, {
                         $set: {
                             last_msg: new Date(),
+                            message_drift,
                             latency
                         }
                     })
                 } else {
-                    const peer_id = PeerId.parse(msg.from)
+                    const peer_id = msg.from
                     //console.log(peer_id.id, PeerId.parse(this.myPeerId).id)
                     
-                    const distance = uint8ArrayXor.xor(peer_id.id, PeerId.parse(this.myPeerId).id) 
-                    const distance2 = KBucket.distance(peer_id.id, PeerId.parse(this.myPeerId).id) 
+                    // const distance = uint8ArrayXor.xor(peer_id.id, PeerId.parse(this.myPeerId).id) 
+                    console.log(peer_id, PeerId.parse(peer_id.toString()).id, PeerId.parse(this.myPeerId).id)
+                    const distance2 = KBucket.distance(PeerId.parse(peer_id.toString()).id, PeerId.parse(this.myPeerId).id) 
                     //console.log(distance2, Math.log(distance2))
                     await this.peerDb.insertOne({
                         _id: new ObjectId(),
-                        peer_id: msg.from,
+                        peer_id: msg.from.toString(),
                         distance: Math.log(distance2),
                         latency: latency,
                         first_msg: new Date(),
@@ -384,6 +396,7 @@ export class P2PService {
                 this.self.logger.debug('direct connected message payload', json_payload)
             }
         } catch(ex) {
+            console.log(ex)
             this.self.logger.debug('error while handling multicast', ex)
         }
     }
@@ -399,7 +412,7 @@ export class P2PService {
             }
 
             if(json_payload.type === MESSAGE_TYPES.directConnect) {
-                this.self.logger.verbose('Received unicast direct connect')
+                this.self.logger.info('Received unicast direct connect')
                 if(!this.directPeers.includes(peer)) {
                     const channel = await PeerChannel.connect(this.self.ipfs, peer)
                     this.defaultRegister(channel)         
@@ -419,7 +432,7 @@ export class P2PService {
                         }
                     })
                     this.directPeers.push(peer)
-                    this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+                    this.self.logger.info(`Direct Peers ${JSON.stringify(this.directPeers)}`)
                 }
             }
         } catch(ex) {
@@ -447,54 +460,78 @@ export class P2PService {
 
     async getPeerLatency(peerId: string) {
         
-        for await(let pingResult of this.self.ipfs.ping(PeerId.parse(peerId) as any)) {
-            //console.log(pingResult)
+        let pingUnits = 0;
+        let pingUnitsCount = 0 
+        for await(let pingResult of this.self.ipfs.ping(PeerId.parse(peerId.toString()) as any)) {
+            // console.log(pingResult)
+            if(pingResult.text.includes('Average latency:')) {
+                //Parse out latency
+                const ping = pingResult.text.replace('Average latency: ', '')
+                console.log(ping)
+                console.log(Number(Number(ping.split('ms')[0]).toFixed(2)))
+            } else if(!pingResult.text.includes('PING')) {
+                pingUnitsCount = pingUnitsCount + 1;
+                pingUnits = pingUnits + pingResult.time
+            }
         }
-        const peersResult = await this.self.ipfs.swarm.peers({
-            latency: true
-        })
-        const result = peersResult.find(e => e.peer.toString() === peerId)
-        //console.log(peersResult, result)
+        const pingMS = (pingUnits / pingUnitsCount) / 1_000_000
+        return pingMS;
+        // const peersResult = await this.self.ipfs.swarm.peers({
+        //     latency: true
+        // })
+        // const result = peersResult.find(e => e.peer.toString() === peerId)
+        // //console.log(peersResult, result)
 
-        if(result.latency.includes("µs")) {
-            return 0;
-        } else {
-            return Number(Number(result.latency.split('ms')[0]).toFixed(2))
-        }
+        // // console.log(peersResult, result)
+        // if(!result) {
+        //     return;
+        // }
+        // if(result.latency.includes("µs")) {
+        //     return 0;
+        // } else {
+        //     return Number(Number(result.latency.split('ms')[0]).toFixed(2))
+        // }
     }
 
     async announceNode() {
-        this.self.logger.info('Announcing node')
-        const identity = await this.self.ipfs.id();
-        const ts = new Date();
-        
-        const msg = {
-            type: MESSAGE_TYPES.announceNode,
-            id: (identity).id,
-            ts,
-            node_did: this.self.identity.id,
-            payload: {
+        try {
+
+            this.self.logger.info('Announcing node')
+            const identity = await this.self.ipfs.id();
+            const ts = new Date();
+            
+            const msg = {
+                type: MESSAGE_TYPES.announceNode,
+                id: (identity).id.toString(),
+                ts,
+                node_did: this.self.identity.id,
+                payload: {
+                    did_proof: await this.self.identity.createJWS({
+                        peer_id: identity.id.toString(),
+                        ts: ts.toISOString()
+                    })
+                }
+            }
+    
+            const nodeInfo = {
                 did_proof: await this.self.identity.createJWS({
-                    peer_id: identity.id,
+                    peer_id: identity.id.toString(),
                     ts: ts.toISOString()
                 })
             }
+    
+            const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
+    
+            // console.log("Obj PsyOp", nodeInfoCid)
+    
+            await this.self.ipfs.name.publish(nodeInfoCid)
+            
+            await this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
+
+            console.log('Announced node done')
+        } catch (ex) {
+            console.log(ex)
         }
-
-        const nodeInfo = {
-            did_proof: await this.self.identity.createJWS({
-                peer_id: identity.id,
-                ts: ts.toISOString()
-            })
-        }
-
-        const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
-
-        // console.log("Obj PsyOp", nodeInfoCid)
-
-        await this.self.ipfs.name.publish(nodeInfoCid)
-        
-        await this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
     }
     
     async createDirectChannels() {
@@ -527,7 +564,7 @@ export class P2PService {
                         }
                     })
                     this.directPeers.push(peer.toString())
-                    this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+                    this.self.logger.info(`Direct Peers ${JSON.stringify(this.directPeers)}`)
                 }
             }
             
@@ -583,9 +620,9 @@ export class P2PService {
             }
         })
         this.announceNode()
-        NodeSchedule.scheduleJob('*/15 * * * * ', this.announceNode)
+        // NodeSchedule.scheduleJob('*/15 * * * * ', this.announceNode)
         NodeSchedule.scheduleJob('* * * * * ', this.announceNode)
-        await this.createDirectChannels()
-        NodeSchedule.scheduleJob('* * * * * ', this.createDirectChannels)
+        // await this.createDirectChannels()
+        // NodeSchedule.scheduleJob('* * * * * ', this.createDirectChannels)
     }
 }

@@ -1,6 +1,16 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
 
+
+export const DebugResolvers = { 
+  peers: async (_, args) => {
+
+  },
+  openChannels: async (_, args) => {
+    
+  }
+}
+
 export const Resolvers = {
   contractState: async (_, args) => {
     const data = await appContainer.self.contractEngine.contractDb.findOne({

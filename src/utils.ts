@@ -9,7 +9,7 @@ import { IPFSHTTPClient } from 'ipfs-http-client'
 import winston from 'winston'
 import { getLogger } from './logger'
 
-export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.deathwing.me')
+export const HiveClient = new Client(process.env.HIVE_HOST || 'https://hive-api.3speak.tv')
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 

@@ -1,10 +1,7 @@
 
 import { Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { graphqlHTTP } from 'express-graphql'
 import { createSchema, createYoga } from 'graphql-yoga'
-import { buildSchema } from 'graphql'
 import { IPFSHTTPClient } from 'ipfs-http-client'
 import { CoreService } from '../../services/index'
 import { ApiController } from './api.controller'
@@ -37,9 +34,10 @@ export class ApiModule {
   public async listen() {
     const app = await NestFactory.create(ControllerModule)
 
-    const swaggerconfig = new DocumentBuilder().setTitle('VSC API').build()
-    const swaggerDocument = SwaggerModule.createDocument(app, swaggerconfig)
-    SwaggerModule.setup('swagger', app, swaggerDocument)
+    // Bring back API docs when needed. Mostly use already documented graphql
+    // const swaggerconfig = new DocumentBuilder().setTitle('VSC API').build()
+    // const swaggerDocument = SwaggerModule.createDocument(app, swaggerconfig)
+    // SwaggerModule.setup('swagger', app, swaggerDocument)
     // app.use(
     //   '/api/v1/graphql',
     //   graphqlHTTP({

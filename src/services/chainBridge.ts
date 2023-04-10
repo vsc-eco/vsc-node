@@ -59,7 +59,7 @@ export class ChainBridge {
     for (let txContainer of txs) {
       //Verify CID is available
       try {
-        const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(txContainer.id))).value
+        const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.asCID(txContainer.id))).value
         const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
         const [did] = kid.split('#')
         this.self.logger.debug('signed tx', signedTransaction as any)
@@ -147,7 +147,7 @@ export class ChainBridge {
       .toArray()
     for (let tx of txs) {
       try {
-        const out = await this.self.ipfs.dag.get(CID.parse(tx.id), {
+        const out = await this.self.ipfs.dag.get(CID.asCID(tx.id), {
           timeout: 10 * 1000,
         })
         await this.self.transactionPool.transactionPool.findOneAndUpdate(
@@ -165,7 +165,7 @@ export class ChainBridge {
   }
 
   async countHeight(id: string) {
-    let block = (await this.self.ipfs.dag.get(CID.parse(id))).value
+    let block = (await this.self.ipfs.dag.get(CID.asCID(id))).value
     let height = 0
 
     for (;;) {
@@ -231,7 +231,7 @@ export class ChainBridge {
         })
       }
     } else if (tx.op === VSCTransactionTypes.contract_output) {
-      const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+      const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(CID.asCID(tx.id) as any)).value
       const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
       this.self.logger.debug("contract output received", content)
@@ -435,7 +435,7 @@ export class ChainBridge {
 
     void (async () => {
       for await(let block of this.streamOut) {
-        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+        const blockContent = (await this.self.ipfs.dag.get(CID.asCID(block.block_hash))).value
         await this.blockHeaders.insertOne({
           height: await this.countHeight(block.block_hash),
           id: block.block_hash,

@@ -1,5 +1,5 @@
-import * as IPFS from "ipfs-http-client";
 import { CID, IPFSHTTPClient } from "ipfs-http-client";
+import * as IPFSHTTP from "ipfs-http-client";
 import Path from 'path'
 import os from 'os'
 import Crypto from 'crypto'
@@ -87,7 +87,8 @@ export class CoreService {
     }
 
     async start() {
-        this.ipfs = IPFS.create({url: process.env.IPFS_HOST || "/ip4/127.0.0.1/tcp/5001"});
+        console.log('Starting')
+        this.ipfs = IPFSHTTP.create({url: process.env.IPFS_HOST || "/ip4/127.0.0.1/tcp/5001"});
         const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
         this.config = new Config(homeDir)
         await this.config.open()
@@ -100,6 +101,7 @@ export class CoreService {
         await mongo.connect()
         await this.setupKeys();
 
+        console.log('Starting part way')
         try 
         {
             this.transactionPool = new TransactionPoolService(this)

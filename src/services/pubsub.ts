@@ -4,7 +4,6 @@ import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher } from 'multiformats/hashes/sha2'
 import { encode, decode } from '@ipld/dag-cbor'
-import { Message } from 'ipfs-http-client/types/src/pubsub/subscribe'
 import EventEmitter from 'events'
 import PeerId from 'peer-id'
 import KBucket from 'k-bucket'
@@ -103,7 +102,7 @@ export class PeerChannel {
     
     
 
-    private async onMessageReceive(msg: Message) {
+    private async onMessageReceive(msg: any) {
         const raw_payload = Buffer.from(msg.data).toString()
         const json_payload = JSON.parse(raw_payload)
        
@@ -163,7 +162,9 @@ export class PeerChannel {
 
     private async peerCheck() {
         
-        const peerLs = await this.ipfs.pubsub.peers(this.topic)
+        const peerLs = (await this.ipfs.pubsub.peers(this.topic)).map(e => {
+            return e.toString()
+        });
         //console.log(peerLs)
         const differences = jsonpatch.compare(this._peers.map(p => p.toString()), peerLs.map(p => p.toString()))
 
@@ -183,7 +184,7 @@ export class PeerChannel {
         } else {
             //Nothing
         }
-        this._peers = peerLs;
+        this._peers = peerLs
         /*differences.added.forEach((peer) => this.events.emit('peer joined', peer))
         differences.removed.forEach((peer) => this.events.emit('peer left', peer))
     
@@ -224,7 +225,7 @@ export class PeerChannel {
     }
 
     async init() {
-        this.selfId = (await this.ipfs.id()).id;
+        this.selfId = (await this.ipfs.id()).id.toString();
         await this.ipfs.pubsub.subscribe(this.topic, this.onMessageReceive)
         await this.goodMorning()
 
@@ -291,7 +292,7 @@ export class PeerChannel {
     static async connect(ipfs: IPFSHTTPClient, target: string) {
         const block = await Block.encode({
             value: encode({
-                [(await ipfs.id()).id] : 'null',
+                [(await ipfs.id()).id.toString()] : 'null',
                 [target]: 'null'
             }),
             codec,
@@ -445,13 +446,14 @@ export class P2PService {
     }
 
     async getPeerLatency(peerId: string) {
-        for await(let pingResult of this.self.ipfs.ping(peerId)) {
+        
+        for await(let pingResult of this.self.ipfs.ping(PeerId.parse(peerId) as any)) {
             //console.log(pingResult)
         }
         const peersResult = await this.self.ipfs.swarm.peers({
             latency: true
         })
-        const result = peersResult.find(e => e.peer === peerId)
+        const result = peersResult.find(e => e.peer.toString() === peerId)
         //console.log(peersResult, result)
 
         if(result.latency.includes("µs")) {
@@ -496,38 +498,45 @@ export class P2PService {
     }
     
     async createDirectChannels() {
-        this.self.logger.info('Forming direct channels')
-        const peersLs = await this.self.ipfs.pubsub.peers(PUBSUB_CHANNELS.multicast)
-        const channelsLs = await this.self.ipfs.pubsub.ls()
+        try {
 
-        for(let peer of peersLs) {
-            if(!this.directPeers.includes(peer)) {
-                const channel = await PeerChannel.connect(this.self.ipfs, peer)
-                this.defaultRegister(channel)
+            this.self.logger.info('Forming direct channels')
+            const peersLs = await this.self.ipfs.pubsub.peers(PUBSUB_CHANNELS.multicast)
+            const channelsLs = await this.self.ipfs.pubsub.ls()
 
-                
-
-                const {result} = await channel.call('node_info')
-
-                // console.log('Call Test Result', await result())
-
-                
-                //console.log(channel)
-                await this.peerDb.findOneAndUpdate({
-                    peer_id: peer
-                }, {
-                    $set: {
-                        connected: true
-                    }
-                })
-                this.directPeers.push(peer)
-                this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+            console.log(channelsLs, peersLs)
+    
+            for(let peer of peersLs) {
+                if(!this.directPeers.includes(peer.toString())) {
+                    const channel = await PeerChannel.connect(this.self.ipfs, peer.toString())
+                    this.defaultRegister(channel)
+    
+                    
+    
+                    const {result} = await channel.call('node_info')
+    
+                    // console.log('Call Test Result', await result())
+    
+                    
+                    //console.log(channel)
+                    await this.peerDb.findOneAndUpdate({
+                        peer_id: peer.toString()
+                    }, {
+                        $set: {
+                            connected: true
+                        }
+                    })
+                    this.directPeers.push(peer.toString())
+                    this.self.logger.verbose(`Direct Peers ${JSON.stringify(this.directPeers)}`)
+                }
             }
-        }
-        
-        if(peersLs[0]) {
-            const peer = PeerId.parse(peersLs[0])
-            //console.log(peer.pubKey)
+            
+            if(peersLs[0]) {
+                // const peer = PeerId.parse(peersLs[0])
+                //console.log(peer.pubKey)
+            }
+        } catch (ex) {
+            console.log(ex)
         }
     }
     
@@ -564,10 +573,9 @@ export class P2PService {
     async start() {
         this.self.logger.info('Starting Pubsub Interface')
         this.peerDb = this.self.db.collection('peers')
-        this.myPeerId = (await this.self.ipfs.id()).id
+        this.myPeerId = (await this.self.ipfs.id()).id.toString()
         this.self.ipfs.pubsub.subscribe(PUBSUB_CHANNELS.multicast, this.handleMulticast)
         this.self.ipfs.pubsub.subscribe(`/p2p-uni/${this.myPeerId}`, this.handleUnicast)
-
 
         await this.peerDb.updateMany({}, {
             $set: {

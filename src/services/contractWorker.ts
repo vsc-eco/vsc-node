@@ -37,7 +37,7 @@ export class ContractWorker {
             status: TransactionDbStatus.included
         })
         .sort(sort)
-        .limit(this.self.config.get('witness.batchExecutionSize')).toArray()
+        .limit(this.self.config.get('witness.batchExecutionSize') || 100).toArray()
         this.self.logger.debug('tx about to be batch executed', transactions)
 
         for (const transaction of transactions) {

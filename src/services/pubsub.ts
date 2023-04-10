@@ -519,6 +519,7 @@ export class P2PService {
                     ts: ts.toISOString()
                 })
             }
+            await this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
     
             const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
     
@@ -526,7 +527,6 @@ export class P2PService {
     
             await this.self.ipfs.name.publish(nodeInfoCid)
             
-            await this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
 
             console.log('Announced node done')
         } catch (ex) {

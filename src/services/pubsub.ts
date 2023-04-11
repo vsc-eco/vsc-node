@@ -156,7 +156,7 @@ export class PeerChannel {
                             flags: ['end']
                         })
                     })()
-                    this._handles[json_payload.type].handler({from: msg.from, message: json_payload.payload, drain, sink})
+                    this._handles[json_payload.type].handler({from: msg.from.toString(), message: json_payload.payload, drain, sink})
                 }
             } else {
                 await this.events.emit('message', {

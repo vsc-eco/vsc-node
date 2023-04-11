@@ -4,3 +4,4 @@ coverage
 logs
 dist
 .env
+src/scripts

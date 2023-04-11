@@ -25,6 +25,7 @@
     "k-bucket": "^5.1.0",
     "key-did-provider-ed25519": "^1.1.0",
     "key-did-resolver": "^1.4.0",
+    "moment": "^2.29.4",
     "mongodb": "^4.7.0",
     "mongoose": "^7.0.3",
     "multiformats": "^11.0.2",

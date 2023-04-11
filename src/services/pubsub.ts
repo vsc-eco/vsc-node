@@ -83,6 +83,7 @@ export class PeerChannel {
     private _handles: Record<string, {
         id: string
         handler: MessageHandleFn
+        loopbackOk: boolean
     }>;
     selfId: string;
     establishedTime: Date;
@@ -118,7 +119,7 @@ export class PeerChannel {
         const raw_payload = Buffer.from(msg.data).toString()
         const json_payload = JSON.parse(raw_payload)
        
-        if(msg.from.toString() === this.selfId) {
+        if(msg.from.toString() === this.selfId && this._handles[json_payload.type]?.loopbackOk === false) {
             //Ignore self
             return;
         }
@@ -155,7 +156,7 @@ export class PeerChannel {
                             flags: ['end']
                         })
                     })()
-                    this._handles[json_payload.type].handler({from: msg.from, message: json_payload.message, drain, sink})
+                    this._handles[json_payload.type].handler({from: msg.from, message: json_payload.payload, drain, sink})
                 }
             } else {
                 await this.events.emit('message', {
@@ -251,17 +252,19 @@ export class PeerChannel {
         })
     }
 
-    async register(id: string, handler: MessageHandleFn) {
+    async register(id: string, handler: MessageHandleFn, options?) {
         this._handles[id] = {
             id,
-            handler
+            handler,
+            loopbackOk: options?.loopbackOk || false
         }
     }
 
     async call(id: string, options?: {
         payload: any,
-        stream: Pushable<any>,
-        mode?: "stream" | "basic"
+        // stream: Pushable<any>,c
+        mode?: "stream" | "basic",
+        streamTimeout?: number
     }): Promise<{
         drain: Pushable<any>
         req_id: string
@@ -269,12 +272,17 @@ export class PeerChannel {
     }> {
         const drain = pushable()
         const req_id = Crypto.randomBytes(8).toString('base64url');
+        if(options.streamTimeout) {
+            setTimeout(() => {
+                drain.end()
+            }, options.streamTimeout)
+        }
         this.events.on('message', (msg) => {
             if(req_id === msg.req_id) {
                 if(msg.flags && msg.flags.includes('end')) {
                     drain.end()
                 } else {
-                    drain.push(msg.payload)
+                    drain.push(msg)
                 }
             }
         })
@@ -389,7 +397,7 @@ export class P2PService {
 
                 const did_proof = await verifyMultiJWS(json_payload.payload.did_proof, this.self.identity)
                 
-                let isTrusted = did_proof.auths.find(e => {
+                let isTrusted = !!did_proof.auths.find(e => {
                     return e === process.env.MULTISIG_ANTI_HACK
                 });
                 
@@ -401,6 +409,8 @@ export class P2PService {
                 // console.log(stt, new Date(), msgTest)
                 const message_drift = new Date().getTime() - stt.getTime()
                 const latency = await this.getPeerLatency(msg.from)
+                console.log('lkeys', did_proof)
+                const did_proof_decoded = JSON.parse(Buffer.from(did_proof.payload, 'base64').toString())
                 if(nodeInfo) {
                     await this.peerDb.findOneAndUpdate({
                         peer_id: msg.from.toString(),
@@ -409,7 +419,8 @@ export class P2PService {
                             last_msg: new Date(),
                             message_drift,
                             latency,
-                            anti_hack_trusted: isTrusted
+                            anti_hack_trusted: isTrusted,
+                            signing_keys: did_proof_decoded.signing_keys
                         }
                     })
                 } else {
@@ -553,7 +564,7 @@ export class P2PService {
             const identity = await this.self.ipfs.id();
             const ts = new Date();
 
-            console.log(process.env.MULTISIG_ANTI_HACK_KEY)
+            // console.log(process.env.MULTISIG_ANTI_HACK_KEY)
             
             const signers = [this.self.identity]
             

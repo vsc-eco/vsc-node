@@ -275,7 +275,7 @@ export async function createJwsMultsign(data: any, signers: DID[]) {
   for (let signer of signers) {
     signedDag = await signer.createJWS(data)
     let d = await signer.createDagJWS(data)
-    console.log('signedDag', signedDag, d.jws)
+    // console.log('signedDag', signedDag, d.jws)
     signatures.push(...signedDag.signatures)
   }
   // let signatures = []

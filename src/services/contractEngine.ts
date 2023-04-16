@@ -282,7 +282,7 @@ export class ContractEngine {
     })
     let stateMerkleObj = await this.self.ipfs.dag.get(stateMerkle)
     stateMerkleObj.value.Links = stateMerkleObj.value.Links.map((e) => {
-      return {
+      return { 
         ...e,
         Hash: e.Hash.toString(),
       }

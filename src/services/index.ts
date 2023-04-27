@@ -19,6 +19,7 @@ import { getLogger } from "../logger";
 import { LoggerConfig } from "../types";
 import { PrivateKey } from "@hiveio/dhive";
 import { MultisigCore } from "./witness/multisig";
+import { NodeInfoService } from "./nodeInfo";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -45,6 +46,7 @@ export class CoreService {
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
     multisig: MultisigCore;
+    nodeInfo: NodeInfoService;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
@@ -123,6 +125,9 @@ export class CoreService {
 
             this.multisig = new MultisigCore(this)
             await this.multisig.start()
+
+            this.nodeInfo = new NodeInfoService(this)
+            await this.nodeInfo.start()
         }
         catch (err) {
             console.trace(err)

@@ -453,6 +453,31 @@ export class ChainBridge {
         this.block_height = block_height;
         for(let tx of block.transactions) {
           for(let [op_id, payload] of tx.operations) {
+            if(op_id === "account_update") {
+              try {
+                const json_metadata = JSON.parse(payload.json_metadata)
+                if(json_metadata.vsc_node) {
+                  const {payload: proof, kid} = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
+                  const [did] = kid.split('#')
+                  console.log(proof)
+                  await this.witnessDb.findOneAndUpdate({
+                    did,
+                    account: payload.account,
+                    peer_id: proof.ipfs_peer_id
+                  }, {
+                    $set: {
+                      signing_keys: proof.witness.signing_keys,
+                      last_signed: new Date(proof.ts),
+                      net_id: proof.net_id
+                    }
+                  }, {
+                    upsert: true
+                  })
+                }
+              } catch {
+                
+              }
+            }
             if(op_id === "custom_json") {
               if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
                 const json = JSON.parse(payload.json)

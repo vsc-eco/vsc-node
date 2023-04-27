@@ -613,11 +613,11 @@ export class P2PService {
             }
             await this.self.ipfs.pubsub.publish(PUBSUB_CHANNELS.multicast, Buffer.from(JSON.stringify(msg)))
     
-            const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
+            // const nodeInfoCid = await this.self.ipfs.dag.put(nodeInfo)
     
             // console.log("Obj PsyOp", nodeInfoCid)
     
-            await this.self.ipfs.name.publish(nodeInfoCid)
+            // await this.self.ipfs.name.publish(nodeInfoCid)
             
 
             console.log('Announced node done')

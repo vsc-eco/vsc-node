@@ -28,7 +28,7 @@ docker-compose build
 
 
 if [ "$indexVersion" -ne "$indexVersionDeployed" ];
-then 
+then
   echo "Need to reset database"
   rm -r data/*
   echo $indexVersion > data/index-flag

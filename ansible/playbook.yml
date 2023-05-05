@@ -1,0 +1,167 @@
+---
+- name: install vsc node
+  hosts: vsc_nodes
+  become: true
+  vars:
+    NODEJS_VERSION: "18"
+    IPFS_URL: "https://dist.ipfs.tech/kubo/v0.19.1/kubo_v0.19.1_linux-amd64.tar.gz"
+  vars_prompt:
+    - name: ssh_key_path
+      prompt: "Enter path for ssh key of your github account. If no path is entered no ssh key is copied over.\nPath should be relative to this playbook!"
+      default: ""
+      private: false
+    - name: hive_account
+      prompt: "Enter hive account name. If no account is provided the parameterization .env file will not be created."
+      default: ""
+      private: false
+    - name: hive_account_posting
+      prompt: "Enter hive account posting key. If no key is provided the parameterization .env file will not be created.\n(Input is hidden)"
+      default: ""
+      private: true
+  tasks:
+    - name: Update and upgrade apt packages
+      become: true
+      apt:
+        upgrade: yes
+        update_cache: yes
+        cache_valid_time: 86400 #One day
+  
+    - name: Install the gpg key for nodejs LTS
+      apt_key:
+        url: "https://deb.nodesource.com/gpgkey/nodesource.gpg.key"
+        state: present
+    
+    - name: Install the nodejs LTS repos
+      apt_repository:
+        repo: "deb https://deb.nodesource.com/node_{{ NODEJS_VERSION }}.x {{ ansible_distribution_release }} main"
+        state: present
+        update_cache: yes
+
+    - name: Install the nodejs and other prerequisites
+      apt:
+        name: 
+          - nodejs
+          - git
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools
+          - postfix
+        state: latest
+    
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
+
+    - name: Update apt and install docker
+      apt:
+        name: 
+          - docker-ce
+          - docker-compose
+        state: latest
+        update_cache: true
+
+    - name: Install Docker Module for Python
+      pip:
+        name: docker
+
+    - name: Add user to "docker" group
+      user:
+        name: "{{ ansible_user }}"
+        groups: "docker"
+        append: yes
+
+    - name: Copy over ssh file
+      copy:
+        src: "{{ ssh_key_path }}"
+        dest: "/home/{{ ansible_user }}/.ssh/github_private.key"
+        mode: 0400
+        owner: "{{ ansible_user }}"
+      when: ssh_key_path != ""
+
+    - name: Append configuration to ~/.ssh/config
+      lineinfile:
+        path: "/home/{{ ansible_user }}/.ssh/config"
+        create: true
+        line: |
+          Host github.com
+              HostName github.com
+              User git
+              PreferredAuthentications publickey
+              IdentityFile "/home/{{ ansible_user }}/.ssh/github_private.key"
+
+    - name: Add the safe directory setting to ~/.gitconfig
+      git_config:
+        name: safe.directory
+        scope: system
+        value: "/app/node"
+
+    - name: Check if host key already exists in known_hosts
+      shell: grep "{{ inventory_hostname }}" /home/{{ ansible_user }}/.ssh/known_hosts
+      register: grep_output
+      ignore_errors: yes
+
+    - name: Fetch public key for target host
+      shell: ssh-keyscan github.com
+      register: ssh_keyscan_output
+      when: grep_output.rc != 0
+
+    - name: Add host to known_hosts
+      lineinfile:
+        line: "{{ ssh_keyscan_output.stdout }}"
+        dest: "/home/{{ ansible_user }}/.ssh/known_hosts"
+        create: true
+      when: ssh_keyscan_output.stdout != '' and grep_output.rc != 0
+
+    - name: Git checkout vsc-node
+      git:
+        repo: 'git@github.com:vaultec81/vsc-node.git'
+        dest: /app/node
+        version: feature/add-ansible #main
+        force: false
+        accept_newhostkey: true
+        key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"
+
+    - name: Create parameterization .env file (hive account)
+      lineinfile:
+        path: "/app/node/.env"
+        state: present
+        search_string: "ACCOUNT="
+        create: true
+        line: HIVE_ACCOUNT="{{ hive_account }}"
+      when: hive_account != ""
+
+    - name: Create parameterization .env file (hive posting account)
+      lineinfile:
+        path: "/app/node/.env"
+        state: present
+        search_string: "POSTING="
+        create: true
+        line: HIVE_ACCOUNT_POSTING="{{ hive_account_posting }}"
+      when: hive_account_posting != ""
+    
+    - name: Changing perm of vsc-node .git dir
+      file: "dest=/app/node/.git owner={{ ansible_user }} mode=u=rwX,g=rX,o=rX mode=a+x recurse=yes"
+
+    - name: register vsc's 'update.sh' as a cron job
+      cron:
+        name: vsc-node
+        minute: "0"
+        user: "{{ ansible_user }}"
+        job: "/app/node/update.sh"
+
+    - name: Start up the vsc node
+      docker_compose:
+        build: true
+        project_src: /app/node
+        files:
+          - docker-compose.yml

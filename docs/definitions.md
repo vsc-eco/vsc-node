@@ -1,4 +1,4 @@
-### Architecture
+### Definitions
 
 
 Smart Contract: Deterministic JavaScript code defining arbitrary functionality in a decentralized/reproducible manner

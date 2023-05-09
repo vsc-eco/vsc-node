@@ -1,1 +1,0 @@
-enables the nodes to communicate and come to a conclusion about the current state of the VSC chain

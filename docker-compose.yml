@@ -18,7 +18,9 @@ services:
       IPFS_HOST: http://ipfs:5001
       MONGO_HOST: mongo:27017
     volumes:
+      - node-modules-store:/home/github/app/node_modules
       - ./data/vsc-node:/root/.vsc-node
+
   mongo:
     container_name: mongo_vsc
     image: mongo:4.4.18
@@ -28,7 +30,8 @@ services:
     networks:
       - vsc-node
     volumes:
-      - ./data/mongodb:/data/db
+      - mongodb:/data/db
+
   ipfs:
     container_name: ipfs-vsc
     image: ipfs/kubo:v0.18.1
@@ -43,7 +46,12 @@ services:
     environment: 
       IPFS_PATH: /etc/ipfs
     volumes:
-      - ./data/ipfs:/etc/ipfs
+      - ipfs:/etc/ipfs
+
+volumes:
+  node-modules-store: {}
+  mongodb: {}
+  ipfs: {}
       
 networks:
   vsc-node:

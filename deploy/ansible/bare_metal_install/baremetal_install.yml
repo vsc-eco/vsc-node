@@ -1,0 +1,44 @@
+---
+- hosts: {{ hosts }}
+    tasks:
+        - name: Disable ipfs service if running
+            systemd:
+            name: ipfs.service
+            enabled: false
+            ignore_errors: true
+
+        - name: Download ipfs binary
+            get_url:
+            url: "{{ IPFS_URL }}"
+            dest: /tmp/ipfs_binary.tar.gz
+
+        - name: Extract ipfs binary
+            unarchive:
+            src: /tmp/ipfs_binary.tar.gz
+            dest: /tmp/
+            remote_src: yes
+
+        - name: Execute the kubo installation
+            shell: /tmp/kubo/install.sh >> /tmp/kubo_install_log.txt
+
+        - name: Verify kubo installation
+            shell: ipfs --version
+            register: output
+
+        - debug:
+            var: output
+
+        - name: Initialize ipfs
+            shell: ipfs init --profile=lowpower
+            ignore_errors: true
+
+            - name: Copy over the systemd registration file
+            copy:
+            src: kubo_systemd_registration.toml
+            dest: /etc/systemd/system/ipfs.service
+
+        - name: Enable and start ipfs service
+            systemd:
+            name: ipfs.service
+            enabled: true
+            state: started

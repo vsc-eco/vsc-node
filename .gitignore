@@ -5,3 +5,5 @@ logs
 dist
 .env
 src/scripts
+inventory.yml
+data

@@ -1,1 +1,0 @@
-processes a single transaction thats part of a block, here the different types of transactions are treated in their respective way (e.g.: a contract creating tx invokes the logic to create a contract)

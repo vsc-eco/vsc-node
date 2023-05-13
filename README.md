@@ -1,3 +1,3 @@
-# JS Typescript Template
+# VSC Node
 
-A scaffold for new typescript projects.  Includes generic dev, lint, test, and build scripts.
+< fill in >

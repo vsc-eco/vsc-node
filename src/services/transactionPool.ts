@@ -182,13 +182,14 @@ export class TransactionPoolService {
     setup.logger.debug('result', result)
   }
 
-  public async callContract(contract_id: string, payload: any) {
+  public async callContract(contract_id: string, args: {action, payload: any}) {
     this.self.logger.info('Invoking contract')
-    this.self.logger.debug('Invoking contract details', contract_id, payload)
+    this.self.logger.debug('Invoking contract details', contract_id, args.payload)
 
     let contractInput: ContractInput = {
+      action: args.action,
       contract_id: contract_id,
-      payload: payload,
+      payload: args.payload,
       salt: Crypto.randomBytes(8).toString('base64url')
     } as ContractInput
 

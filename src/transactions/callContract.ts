@@ -33,7 +33,10 @@ void (async () => {
 
     await transactionPool.start()
 
-    const result = await transactionPool.callContract(contract_id, payloadJson);
+    const result = await transactionPool.callContract(contract_id, {
+        action,
+        payload: payloadJson
+    });
     core.logger.debug('result of contract invokation' , result)
     
     process.exit(0)

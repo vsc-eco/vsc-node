@@ -30,7 +30,7 @@ services:
     networks:
       - vsc-node
     volumes:
-      - mongodb:/data/db
+      - ./data/vsc-db:/data/db
 
   ipfs:
     container_name: ipfs-vsc

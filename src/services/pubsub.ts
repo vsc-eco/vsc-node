@@ -409,7 +409,7 @@ export class P2PService {
                 // console.log(stt, new Date(), msgTest)
                 const message_drift = new Date().getTime() - stt.getTime()
                 const latency = await this.getPeerLatency(msg.from)
-                console.log('lkeys', did_proof)
+                
                 const did_proof_decoded = JSON.parse(Buffer.from(did_proof.payload, 'base64').toString())
                 if(nodeInfo) {
                     await this.peerDb.findOneAndUpdate({
@@ -531,8 +531,6 @@ export class P2PService {
             if(pingResult.text.includes('Average latency:')) {
                 //Parse out latency
                 const ping = pingResult.text.replace('Average latency: ', '')
-                console.log(ping)
-                console.log(Number(Number(ping.split('ms')[0]).toFixed(2)))
             } else if(!pingResult.text.includes('PING')) {
                 pingUnitsCount = pingUnitsCount + 1;
                 pingUnits = pingUnits + pingResult.time

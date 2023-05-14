@@ -26,7 +26,7 @@ export class ChainBridge {
   stateHeaders: Collection
   contracts: Collection
   witness: WitnessService
-  witnessDb: any
+  witnessDb: Collection
   events: EventEmitter
   streamOut: Pushable.Pushable<any>
 
@@ -49,7 +49,7 @@ export class ChainBridge {
     this.self.logger.debug('creating block with following unconfirmed tx', txs)
 
     if(txs.length === 0) {
-      this.self.logger.debug('not creating block, no tx found')
+      this.self.logger.info('not creating block, no tx found')
       return;
     }
 
@@ -288,11 +288,13 @@ export class ChainBridge {
   async processCoreTransaction(tx: any, json: any, txInfo: {
     account: string,
     block_height: string
+    timestamp: Date
   }) {
     if(json.net_id !== this.self.config.get('network.id')) {
       this.self.logger.warn('received transaction from a different network id! - will not process')
       return;
     }
+    console.log(json)
     if(json.action === "enable_witness") {
       await this.witnessDb.findOneAndUpdate({
         name: txInfo.account
@@ -315,6 +317,48 @@ export class ChainBridge {
       }, {
         upsert: true
       })
+    } else if(json.action === "allow_witness") { 
+      const verifyData = await this.self.identity.verifyJWS(json.proof)
+      console.log('allow witness', verifyData)
+      console.log(tx, verifyData.payload)
+      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime() 
+      console.log('tx diff', diff)
+      if(Math.abs(diff) < 30 * 1000) {
+        try {
+          await this.witnessDb.findOneAndUpdate({
+            did: verifyData.payload.node_id
+          }, {
+            $set: {
+              trusted: true
+            }
+          })
+        } catch {
+
+        }
+      } else {
+        this.self.logger.warn(`received transaction with high lag. Possible replay attack - ${tx.transaction_id}`)
+      }
+    } else if(json.action === "disallow_witness") {
+      const verifyData = await this.self.identity.verifyJWS(json.proof)
+      console.log('allow witness', verifyData)
+      console.log(tx, verifyData.payload)
+      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime() 
+      console.log('tx diff', diff)
+      if(Math.abs(diff) < 30 * 1000) {
+        try {
+          await this.witnessDb.findOneAndUpdate({
+            did: verifyData.payload.node_id
+          }, {
+            $set: {
+              trusted: false
+            }
+          })
+        } catch {
+          
+        }
+      } else {
+        this.self.logger.warn(`received transaction with high lag. Possible replay attack - ${tx.transaction_id}`)
+      }
     } else if (json.action === 'announce_block') {
 
       /**
@@ -322,7 +366,27 @@ export class ChainBridge {
        */
       const expectedAccount = ""
       if(txInfo.account === expectedAccount) {
+        
+      }
 
+      const data = await this.self.ipfs.dag.get(CID.parse(json.block_hash))
+
+      // console.log(JSON.stringify(data.value, null, 2))
+      for(let tx of data.value.txs) {
+        await this.self.transactionPool.transactionPool.findOneAndUpdate({
+          id: tx.id.toString()
+        }, {
+          $set: {
+            status: TransactionDbStatus.included
+          }
+        })
+        console.log(tx)
+        const txData = (await this.self.ipfs.dag.get(tx.id)).value
+        const txData2 = (await this.self.ipfs.dag.get(tx.id, {
+          path: 'link'
+        })).value
+        const verifyData = await this.self.identity.verifyJWS(txData)
+        console.log(verifyData, txData, txData2)
       }
 
       // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
@@ -436,6 +500,8 @@ export class ChainBridge {
 
     void (async () => {
       for await(let block of this.streamOut) {
+        console.log('vsc block', block)
+        
         const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
         await this.blockHeaders.insertOne({
           height: await this.countHeight(block.block_hash),
@@ -483,7 +549,8 @@ export class ChainBridge {
                 const json = JSON.parse(payload.json)
                 await this.processCoreTransaction(tx, json, {
                   account: payload.required_posting_auths[0],
-                  block_height
+                  block_height,
+                  timestamp: new Date(block.timestamp + "Z")
                 })
               }
             }
@@ -511,10 +578,14 @@ export class ChainBridge {
     stream.startStream()
     
 
+    setInterval(() => {
+      this.self.logger.info(`current block lag ${stream.blockLag}`)
+    }, 60 * 1000)
+
     let producingBlock = false;
     setInterval(async() => {
       if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
-        this.self.logger.info(`current block lag ${stream.blockLag}`)
+        
         if (stream.blockLag < 5) {
           //Can produce a block
           const offsetBlock = stream.currentBlock - networks[network_id].genesisDay

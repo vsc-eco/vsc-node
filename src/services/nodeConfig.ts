@@ -122,7 +122,7 @@ export class Config {
   async init(config?) {
     const defaultConfig = {
       network: {
-        id: 'testnet/ab8b6cf1-b344-4ad3-8f81-f2d72c61f6b2',
+        id: 'testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c',
       },
       identity: {
         nodePrivate: null,

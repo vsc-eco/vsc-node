@@ -13,9 +13,6 @@ export const HiveClient = new Client(process.env.HIVE_HOST || 'https://hive-api.
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
-export const CERAMIC_HOST = process.env.CERAMIC_HOST || "https://ceramic.3speak.tv"
-
-
 export class fastStream {
 
   replayComplete: boolean

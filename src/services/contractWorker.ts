@@ -74,7 +74,7 @@ export class ContractWorker {
     }
 
     async start() {
-        this.batchExecuteContracts()
+        // this.batchExecuteContracts()
         NodeSchedule.scheduleJob('* * * * *', async () => {
             this.batchExecuteContracts()
         })

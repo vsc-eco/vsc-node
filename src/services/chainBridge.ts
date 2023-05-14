@@ -488,7 +488,7 @@ export class ChainBridge {
         (await this.stateHeaders.findOne({
           id: 'hive_head',
         })) || ({} as any)
-      ).block_num || 73348150  // pla: useful to set a manual startBlock here for debug purposes
+      ).block_num || networks[network_id].genesisDay  // pla: useful to set a manual startBlock here for debug purposes
     
     this.self.logger.debug('starting block stream at height', startBlock)
     

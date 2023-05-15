@@ -32,6 +32,7 @@ export class ChainBridge {
 
   blockQueue: PQueue
   block_height: number
+  ipfsQueue: PQueue
 
   constructor(self: CoreService) {
     this.self = self
@@ -54,7 +55,7 @@ export class ChainBridge {
     }
 
     let state_updates = {}
-    let txHashes = []
+    // let txHashes = []
     let transactions = []
     for (let txContainer of txs) {
       //Verify CID is available
@@ -62,9 +63,9 @@ export class ChainBridge {
         const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(txContainer.id))).value
         const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
         const [did] = kid.split('#')
-        this.self.logger.debug('signed tx', signedTransaction as any)
         const content = (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
-
+        
+        this.self.logger.debug('signed tx', signedTransaction as any)
         this.self.logger.debug('including tx in block', txContainer, payload)
 
         if (content.op === VSCTransactionTypes.call_contract) {
@@ -75,11 +76,11 @@ export class ChainBridge {
 
         }
 
-        txHashes.push({
-          op: txContainer.op,
-          id: CID.parse(txContainer.id),
-          lock_block: txContainer.lock_block,
-        })
+        // txHashes.push({
+        //   op: txContainer.op,
+        //   id: CID.parse(txContainer.id),
+        //   lock_block: txContainer.lock_block,
+        // })
 
         transactions.push({
           op: txContainer.op,
@@ -196,43 +197,62 @@ export class ChainBridge {
     )
 
     if (tx.op === VSCTransactionTypes.call_contract) {
-      if (this.self.config.get('witness.enabled')) {
+      // if (this.self.config.get('witness.enabled')) {
 
         // pla: the section below doesnt work when no contract can be retrieved from the local ipfs node. 
         // what to do when not beeing able to receive contract object? same for VSCTransactionTypes.contract_output
-        let auths = ['NOT FOUND']
+        let auths = []
         try {
-          const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
-          const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+          console.log('parsing tx', tx)
+          const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(tx.id as any)).value
+          const {content, auths: authsOut} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+          auths = authsOut;
+          console.log('tx content', content)
+          const alreadyExistingTx = await this.self.transactionPool.transactionPool.findOne({
+            id: tx.id.toString()
+          })
+
+          let local;
+          if(alreadyExistingTx) {
+            local = alreadyExistingTx.local
+          } else {
+            local = false;
+          }
+
+          await this.self.transactionPool.transactionPool.findOneAndUpdate({
+            id: tx.id.toString(),
+          }, {
+            $set: {
+              account_auth: auths[0],
+              op: tx.op,
+              lock_block: null,
+              status: TransactionDbStatus.included,
+              first_seen: new Date(),
+    
+              type: TransactionDbType.input,
+              included_in: blockHash,
+  
+              executed_in: null,
+              output: null,
+              
+              local,
+              accessible: true,
+              headers: {
+                contract_id: content.tx.contract_id
+              }
+            }
+          }, {
+            upsert: true
+          })
         } catch (e) {
+          console.log(e)
           this.self.logger.error("not able to receive contract from local ipfs node ", tx.id)
         }
 
-        await this.self.transactionPool.transactionPool.findOneAndUpdate({
-          id: tx.id.toString(),
-        }, {
-          $set: {
-            account_auth: auths[0],
-            op: tx.op,
-            lock_block: null,
-            status: TransactionDbStatus.included,
-            first_seen: new Date(),
-  
-            type: TransactionDbType.input,
-            included_in: blockHash,
-
-            executed_in: null,
-            output: null,
-  
-            local: false,
-            accessible: true
-          }
-        }, {
-          upsert: true
-        })
-      }
+        console.log('bockhash', blockHash)
+      // }
     } else if (tx.op === VSCTransactionTypes.contract_output) {
-      const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(CID.parse(tx.id) as any)).value
+      const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(tx.id as any)).value
       const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
       this.self.logger.debug("contract output received", content)
@@ -240,7 +260,7 @@ export class ChainBridge {
       //Do validation of executor pool
 
       await this.self.transactionPool.transactionPool.findOneAndUpdate({
-        id: tx.id,
+        id: tx.id.toString(),
       }, {
         $set: {
           account_auth: auths[0],
@@ -390,7 +410,10 @@ export class ChainBridge {
       }
 
       // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
-      this.events.emit('vsc_block', json)
+      this.events.emit('vsc_block', {
+        ...json,
+        tx
+      })
     } else if (json.action === 'create_contract') {
       try {
         await this.self.contractEngine.contractDb.insertOne({
@@ -465,7 +488,7 @@ export class ChainBridge {
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 
-    this.blockQueue = new (await import('p-queue')).default({concurrency: 1})
+    this.ipfsQueue = new (await import('p-queue')).default({concurrency: 4})
 
     this.witness = new WitnessService(this.self)
 
@@ -503,9 +526,12 @@ export class ChainBridge {
         console.log('vsc block', block)
         
         const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+        console.log(blockContent)
         await this.blockHeaders.insertOne({
           height: await this.countHeight(block.block_hash),
           id: block.block_hash,
+          hive_ref_block: block.tx.block_num,
+          hive_ref_tx: block.tx.transaction_id
         })
 
         for(let tx of blockContent.txs) {

@@ -41,35 +41,40 @@ export class ContractWorker {
         this.self.logger.debug('tx about to be batch executed', transactions)
 
         for (const transaction of transactions) {
-            const output = await this.self.contractEngine.contractExecuteRaw(transaction.headers.contract_id, [
-                transaction
-            ], {
-                benchmark: new BenchmarkContainer().createInstance()
-            })
+            try {
 
-            this.self.logger.debug('output of tx processing', transaction, output)
-
-            output.parent_tx_id = transaction.id
-
-            const txRaw: TransactionRaw = {
-                ...output,
-                op: VSCTransactionTypes.contract_output,
-                payload: null,
-                type: TransactionDbType.output
-            }
-
-            // pla: included original 'callContract' tx id in the contract output tx to let the nodes know that they can update their local tx pool state
-            const result = await this.self.transactionPool.createTransaction(txRaw)
-
-            await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                    id: transaction.id.toString(),
-                }, {
-                $set: {
-                    status: TransactionDbStatus.processed,
+                const output = await this.self.contractEngine.contractExecuteRaw(transaction.headers.contract_id, [
+                    transaction
+                ], {
+                    benchmark: new BenchmarkContainer().createInstance()
+                })
+    
+                this.self.logger.debug('output of tx processing', transaction, output)
+    
+                output.parent_tx_id = transaction.id
+    
+                const txRaw: TransactionRaw = {
+                    ...output,
+                    op: VSCTransactionTypes.contract_output,
+                    payload: null,
+                    type: TransactionDbType.output
                 }
-            })
+    
+                // pla: included original 'callContract' tx id in the contract output tx to let the nodes know that they can update their local tx pool state
+                const result = await this.self.transactionPool.createTransaction(txRaw)
+    
+                await this.self.transactionPool.transactionPool.findOneAndUpdate({
+                        id: transaction.id.toString(),
+                    }, {
+                    $set: {
+                        status: TransactionDbStatus.processed,
+                    }
+                })
+    
+                this.self.logger.debug('injected contract output tx into local db', result)
+            } catch {
 
-            this.self.logger.debug('injected contract output tx into local db', result)
+            }
         }
     }
 

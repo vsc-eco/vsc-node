@@ -212,6 +212,9 @@ export class ContractEngine {
     const contractInfo = await this.contractDb.findOne({
       id,
     })
+    if(!contractInfo) {
+      throw new Error('Smart contract not registered with node')
+    }
     let codeRaw = ''
     if(!this.contractCache[id]) {
       for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {

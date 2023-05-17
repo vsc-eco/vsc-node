@@ -140,7 +140,7 @@
         accept_newhostkey: true
         key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"
 
-    - name: Create parameterization .env file (hive active account)
+    - name: Create parameterization .env file
       lineinfile:
         path: "/app/node/.env"
         state: present

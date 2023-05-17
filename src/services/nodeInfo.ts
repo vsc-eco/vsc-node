@@ -1,5 +1,6 @@
-import { HiveClient } from "../utils";
 import { PrivateKey } from "@hiveio/dhive";
+import NodeSchedule from 'node-schedule'
+import { HiveClient } from "../utils";
 import { CoreService } from "./index";
 import moment from "moment";
 
@@ -8,6 +9,8 @@ export class NodeInfoService {
     self: CoreService;
     constructor(self: CoreService) {
         this.self = self
+
+        this.announceNode = this.announceNode.bind(this)
     }
     async announceNode() {
         /**
@@ -47,7 +50,7 @@ export class NodeInfoService {
             ts: new Date().toISOString(),
             hive_account: hiveAccount,
             witness: {
-                enabled: false,
+                enabled: this.self.config.get("witness.enabled") || false,
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
@@ -69,12 +72,13 @@ export class NodeInfoService {
             account: hiveAccount,
             memo_key: accountDetails.memo_key,
             json_metadata: JSON.stringify({
-                ...JSON.parse(accountDetails.json_metadata),
+                ...json_metadata,
                 vsc_node: registrationInfo
             })
         }, PrivateKey.from(process.env.HIVE_ACCOUNT_ACTIVE))
     }
     async start() {
+        NodeSchedule.scheduleJob('0 * * * *', this.announceNode)
         await this.announceNode()
     }
 }

@@ -9,7 +9,9 @@
 
 Ansible is a [deployment automation](https://opensource.com/resources/what-ansible) tool.
 
-You can install the VSC node via an ansible playbook. [Follow the instructions](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html#pip-install) to install ansible on your machine. Note: it is only available on linux (you can also use it in WSL).
+You can install the VSC node via an ansible playbook. [Follow the instructions](https://docs.ansible.com/ansible/latest/installation_guide/intro_installation.html#pip-install) to install ansible on your machine. Sshpass is also a requirement (`apt install sshpass`). Note: it is only available on linux (you can also use it in WSL).
+
+The installation has been tested on **ubuntu**.
 
 To use the supplied ansible script you will need to define a target node. This can be done by creating an `inventory.yml` file and dropping it in the root of this project. 
 ```yml

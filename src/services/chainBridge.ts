@@ -552,15 +552,30 @@ export class ChainBridge {
                   const {payload: proof, kid} = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
                   const [did] = kid.split('#')
                   console.log(proof)
+
+
+                  const witnessRecord = await this.witnessDb.findOne({
+                    did
+                  }) || {} as any
+
+                  const opts = {}
+                  if(proof.witness.enabled && witnessRecord.enabled !== true) {
+                      opts['enabled_at'] = block_height
+                  } else if(proof.witness.enabled === false && witnessRecord.enabled === true) {
+                    opts['enabled_at'] = null
+                  }
+
                   await this.witnessDb.findOneAndUpdate({
                     did,
                     account: payload.account,
-                    peer_id: proof.ipfs_peer_id
                   }, {
                     $set: {
+                      peer_id: proof.ipfs_peer_id,
                       signing_keys: proof.witness.signing_keys,
+                      enabled: proof.witness.enabled,
                       last_signed: new Date(proof.ts),
-                      net_id: proof.net_id
+                      net_id: proof.net_id,
+                      ...opts
                     }
                   }, {
                     upsert: true

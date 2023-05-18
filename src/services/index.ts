@@ -46,7 +46,7 @@ export class CoreService {
     contractWorker: ContractWorker;
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
-    multisig: MultisigCore;
+    // multisig: MultisigCore;
     nodeInfo: NodeInfoService;
     witness: WitnessService;
 
@@ -131,8 +131,8 @@ export class CoreService {
             this.witness = new WitnessService(this)
             await this.witness.start()
 
-            this.multisig = new MultisigCore(this, this.witness)
-            await this.multisig.start()
+            // this.multisig = new MultisigCore(this, this.witness)
+            // await this.multisig.start()
         }
         catch (err) {
             console.trace(err)

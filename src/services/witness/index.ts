@@ -1,22 +1,123 @@
-import { HiveClient } from "../../utils";
-import { CoreService } from "../";
 import { Collection } from "mongodb";
+import Crypto from 'crypto'
+import { Ed25519Provider } from "key-did-provider-ed25519";
+import KeyResolver from 'key-did-resolver'
+import { DID } from "dids";
+import shuffleSeed from 'shuffle-seed'
+import { CoreService } from "../";
+import { HiveClient } from "../../utils";
+
 
 
 export class WitnessService {
-    self: CoreService;
-    witnessDb: Collection;
-    constructor(self: CoreService) {
-        this.self = self;
-    }
+  self: CoreService
+  witnessDb: Collection
+  witnessSchedule: Array<{
+    account: string
+    bn: Number
+    bn_works: boolean
+    in_past: boolean
+    did: string
+  }>
+  constructor(self: CoreService) {
+    this.self = self
+  }
 
+  async weightedSchedule(totalRounds) {
+    const consensusRound = await this.calculateConsensusRound()
+    const witnessNodes = await this.witnessDb
+      .find({
+        $or: [
+          {
+            disabled_at: {
+              $gt: consensusRound.pastRoundHash,
+            },
+          },
+          {
+            disabled_at: {
+              $exists: false,
+            },
+          },
+        ],
+        trusted: true,
+        net_id: this.self.config.get('network.id'),
+        enabled_at: {
+          $lt: consensusRound.pastRoundHash,
+        },
+      })
+      .toArray()
 
-    async proposeRound() {
-        
-    }
+    const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
+    const blockHash = block.transaction_merkle_root
 
-    async start() {
-        this.witnessDb = this.self.db.collection('witnesses')
-        
+    let outSchedule = []
+    for (let x = 0; x < totalRounds; x++) {
+      if (witnessNodes[x % witnessNodes.length]) {
+        outSchedule.push(witnessNodes[x % witnessNodes.length])
+      }
     }
+    // console.log(outSchedule)
+    // console.log(Crypto.randomBytes(32).toString('base64'))
+    // outSchedule = shuffleSeed.shuffle(outSchedule, blockHash).map((e, index) => ({
+    //     account: e.account,
+    //     index: index * 20
+    // }));
+    // console.log((await this.applyBNSchedule(outSchedule)), witnessNodes.length, outSchedule.length)
+    return await this.applyBNSchedule(outSchedule)
+  }
+
+  async calculateConsensusRound() {
+    const blockNumber = await HiveClient.blockchain.getCurrentBlockNum()
+
+    // const mod1 = blockNumber % 20;
+    // console.log(mod1)
+    // console.log(mod1 + blockNumber)
+    // const mod2 = mod1 + blockNumber
+    // console.log(mod2 % 20)
+
+    const modLength = 20 * 60
+    const mod3 = blockNumber % modLength
+    const pastRoundHash = blockNumber - mod3
+    // console.log(
+    //   'blockNumber',
+    //   blockNumber,
+    //   'pastRoundHash',
+    //   pastRoundHash % modLength,
+    //   pastRoundHash,
+    // )
+    return {
+      nextRoundHash: blockNumber + (modLength - mod3),
+      pastRoundHash,
+      currentBlockNumber: blockNumber,
+    }
+  }
+
+  /**
+   * Applies block numbers to witness schedule
+   */
+  async applyBNSchedule(schedule: any[]) {
+    const consensusRound = await this.calculateConsensusRound()
+
+    return schedule.map((e, index) => {
+      return {
+        ...e,
+        bn: consensusRound.pastRoundHash + index * 20,
+        bn_works: (consensusRound.pastRoundHash + index * 20) % 20 === 0,
+        in_past: consensusRound.pastRoundHash + index * 20 < consensusRound.currentBlockNumber,
+      }
+    })
+  }
+
+  async start() {
+    this.witnessDb = this.self.db.collection('witnesses')
+
+    setInterval(async () => {
+      try {
+        this.witnessSchedule = await this.weightedSchedule(60)
+      } catch (ex) {
+        console.log(ex)
+      }
+    }, 15 * 1000)
+    // await this.weightedSchedule(60)
+  }
 }

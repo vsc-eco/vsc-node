@@ -44,13 +44,20 @@ export class NodeInfoService {
             }
         }
 
+        let witnessEnabled = this.self.config.get("witness.enabled");
+
+        if(typeof witnessEnabled === "undefined") {
+            witnessEnabled = false;
+        }
+
+
         const unsigned_proof = {
             net_id: this.self.config.get('network.id'),
             ipfs_peer_id: (await this.self.ipfs.id()).id.toString(),
             ts: new Date().toISOString(),
             hive_account: hiveAccount,
             witness: {
-                enabled: this.self.config.get("witness.enabled") || false,
+                enabled: witnessEnabled,
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),

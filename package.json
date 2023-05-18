@@ -34,6 +34,7 @@
     "node-schedule": "^2.1.0",
     "p-queue": "^7.2.0",
     "peer-id": "^0.16.0",
+    "shuffle-seed": "^1.1.6",
     "uuid": "^8.3.2",
     "vm2": "^3.9.9",
     "winston": "^3.8.2",

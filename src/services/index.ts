@@ -20,6 +20,7 @@ import { LoggerConfig } from "../types";
 import { PrivateKey } from "@hiveio/dhive";
 import { MultisigCore } from "./witness/multisig";
 import { NodeInfoService } from "./nodeInfo";
+import { WitnessService } from "./witness";
 
 interface CoreOptions {
     pathSuffix?: string
@@ -47,6 +48,7 @@ export class CoreService {
     loggerSettings: LoggerConfig;
     multisig: MultisigCore;
     nodeInfo: NodeInfoService;
+    witness: WitnessService;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
@@ -123,11 +125,14 @@ export class CoreService {
             this.p2pService = new P2PService(this)
             await this.p2pService.start()
 
-            this.multisig = new MultisigCore(this)
-            await this.multisig.start()
-
             this.nodeInfo = new NodeInfoService(this)
             await this.nodeInfo.start()
+
+            this.witness = new WitnessService(this)
+            await this.witness.start()
+
+            this.multisig = new MultisigCore(this, this.witness)
+            await this.multisig.start()
         }
         catch (err) {
             console.trace(err)

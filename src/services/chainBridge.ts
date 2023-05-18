@@ -561,8 +561,10 @@ export class ChainBridge {
                   const opts = {}
                   if(proof.witness.enabled && witnessRecord.enabled !== true) {
                       opts['enabled_at'] = block_height
+                      opts['disabled_at'] = null
                   } else if(proof.witness.enabled === false && witnessRecord.enabled === true) {
-                    opts['enabled_at'] = null
+                    // opts['enabled_at'] = null
+                    opts['disabled_at'] = block_height
                   }
 
                   await this.witnessDb.findOneAndUpdate({
@@ -625,22 +627,34 @@ export class ChainBridge {
 
     let producingBlock = false;
     setInterval(async() => {
-      if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
-        
         if (stream.blockLag < 5) {
           //Can produce a block
-          const offsetBlock = stream.currentBlock - networks[network_id].genesisDay
+          const offsetBlock = stream.currentBlock //- networks[network_id].genesisDay
           if((offsetBlock %  networks[network_id].roundLength) === 0) {
             if(!producingBlock) {
-              this.self.logger.info('Can produce block!! at', stream.currentBlock)
-              producingBlock = true;
-              await this.createBlock()
+              const nodeInfo = await this.witnessDb.findOne({
+                did: this.self.identity.id
+              })
+              if(nodeInfo) {
+                if(nodeInfo.enabled && nodeInfo.trusted) {
+                  const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
+                    return e.bn === offsetBlock
+                  }))
+
+                  console.log('scheduleSlot', scheduleSlot)
+                  
+                  if(scheduleSlot.did === this.self.identity.id) {
+                    this.self.logger.info('Can produce block!! at', stream.currentBlock)
+                    producingBlock = true;
+                    await this.createBlock()
+                  }
+                }
+              }
             }
           } else {
             producingBlock = false;
           }
         }
-      }
     }, 300)
   }
 }

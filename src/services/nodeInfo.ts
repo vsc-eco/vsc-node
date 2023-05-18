@@ -37,12 +37,6 @@ export class NodeInfoService {
         } catch {
             json_metadata = {}
         }
-        if(json_metadata.vsc_node) {
-            if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
-                //Node registration not required
-                return
-            }
-        }
 
         let witnessEnabled = this.self.config.get("witness.enabled");
 
@@ -50,10 +44,26 @@ export class NodeInfoService {
             witnessEnabled = false;
         }
 
+        const ipfs_peer_id = (await this.self.ipfs.id()).id.toString()
+
+        if(json_metadata.vsc_node) {
+            if(
+                json_metadata.vsc_node.unsigned_proof.witness.enabled === witnessEnabled && 
+                json_metadata.vsc_node.unsigned_proof.net_id === this.self.config.get('network.id') && 
+                json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id
+            ) {
+                if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
+                    //Node registration not required
+                    return
+                }
+            }
+        }
+
+
 
         const unsigned_proof = {
             net_id: this.self.config.get('network.id'),
-            ipfs_peer_id: (await this.self.ipfs.id()).id.toString(),
+            ipfs_peer_id,
             ts: new Date().toISOString(),
             hive_account: hiveAccount,
             witness: {

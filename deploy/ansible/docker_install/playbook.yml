@@ -18,6 +18,10 @@
       prompt: "Enter hive account posting key. If no key is provided the parameterization .env file will not be created.\n(Input is hidden)"
       default: ""
       private: true
+    - name: hive_account_active
+      prompt: "Enter hive account active key. If no key is provided the parameterization .env file will not be created.\n(Input is hidden)"
+      default: ""
+      private: true
   tasks:
     - name: Update and upgrade apt packages
       become: true
@@ -80,6 +84,11 @@
         groups: "docker"
         append: yes
 
+    - name: Creates ssh directory
+      file:
+        path: /home/{{ ansible_user }}/.ssh/
+        state: directory
+
     - name: Copy over ssh file
       copy:
         src: "{{ ssh_key_path }}"
@@ -131,23 +140,21 @@
         accept_newhostkey: true
         key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"
 
-    - name: Create parameterization .env file (hive account)
+    - name: Create parameterization .env file
       lineinfile:
         path: "/app/node/.env"
         state: present
-        search_string: "ACCOUNT="
+        search_string: "{{ item.search_string }}"
         create: true
-        line: HIVE_ACCOUNT="{{ hive_account }}"
-      when: hive_account != ""
-
-    - name: Create parameterization .env file (hive posting account)
-      lineinfile:
-        path: "/app/node/.env"
-        state: present
-        search_string: "POSTING="
-        create: true
-        line: HIVE_ACCOUNT_POSTING="{{ hive_account_posting }}"
-      when: hive_account_posting != ""
+        line: "{{ item.line }}"
+      when: hive_account_active != "" and hive_account_posting != "" and hive_account != ""
+      loop:
+      - { search_string: 'ACCOUNT=', line: "HIVE_ACCOUNT={{ hive_account }}" }
+      - { search_string: 'ACTIVE=', line: "HIVE_ACCOUNT_ACTIVE={{ hive_account_active }}" }
+      - { search_string: 'POSTING=', line: "HIVE_ACCOUNT_POSTING={{ hive_account_posting }}" }
+      - { search_string: 'MULTISIG_ACCOUNT=', line: "MULTISIG_ACCOUNT=vsc.beta" }
+      - { search_string: 'MULTISIG_ANTI_HACK=', line: "MULTISIG_ANTI_HACK=did:key:z6Mkj5mKz5EBnqqsyV2qBohYFuvTXpCuxzNMGSpa1FJRstze" }
+      - { search_string: 'MULTISIG_ANTI_HACK_KEY=', line: "MULTISIG_ANTI_HACK_KEY=" }
     
     - name: Changing perm of vsc-node .git dir
       file: "dest=/app/node/.git owner={{ ansible_user }} mode=u=rwX,g=rX,o=rX mode=a+x recurse=yes"

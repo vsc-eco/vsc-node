@@ -39,6 +39,8 @@ services:
     command:
       - daemon
       - --enable-pubsub-experiment
+      - --init-profile
+      - server
     networks:
       - vsc-node
     ports:

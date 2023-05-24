@@ -38,6 +38,11 @@ export class WitnessService {
               $exists: false,
             },
           },
+          {
+            disabled_at: {
+              $eq: null
+            },
+          },
         ],
         trusted: true,
         net_id: this.self.config.get('network.id'),
@@ -47,6 +52,32 @@ export class WitnessService {
       })
       .toArray()
 
+      // console.log(
+      //   witnessNodes.map((e) => e.account),
+      //   witnessNodes.map((e) => e.account).length,
+      //   JSON.stringify({
+      //     enabled_at: {
+      //       $lt: consensusRound.pastRoundHash,
+      //     },
+      //     $or: [
+      //       {
+      //         disabled_at: {
+      //           $gt: consensusRound.pastRoundHash,
+      //         },
+      //       },
+      //       {
+      //         disabled_at: {
+      //           $exists: false,
+      //         },
+      //       },
+      //       {
+      //         disabled_at: {
+      //           $eq: null,
+      //         },
+      //       },
+      //     ],
+      //   }, null, 2)
+      // )
     const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
     const blockHash = block.transaction_merkle_root
 

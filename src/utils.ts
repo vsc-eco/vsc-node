@@ -30,6 +30,7 @@ export class fastStream {
   headHeight: number
   headTracker: NodeJS.Timer
   logger: winston.Logger
+  finalStream: NodeJS.ReadableStream
   
   constructor(queue: PQueue, streamOpts: {
     startBlock: number,
@@ -150,12 +151,12 @@ export class fastStream {
       finalBlock
     })
     
-    const finalStream = HiveClient.blockchain.getBlockStream({
+    this.finalStream = HiveClient.blockchain.getBlockStream({
         from: this.parser_height,
         mode: BlockchainMode.Latest
     })
     await new Promise((resolve) => {
-      finalStream
+      this.finalStream
         .on('data', (async function (block) {
           const block_height = parseInt(block.block_id.slice(0, 8), 16)
           if (this.parser_height === block_height) {
@@ -176,7 +177,7 @@ export class fastStream {
           if (activeLength === 0) {
             //events.emit('end')
           }
-          finalStream.removeAllListeners()
+          this.finalStream.removeAllListeners()
           return resolve(null)
         }).bind(this))
     })
@@ -189,6 +190,17 @@ export class fastStream {
   async pauseStream() {
     this.streamPaused = false
     this.events.emit('unpause')
+  }
+
+  async killStream() {
+    clearInterval(this.eventQueue)
+    this.streamOut.end()
+    this.queue.clear()
+
+    if(this.finalStream) {
+      this.finalStream.removeAllListeners()
+      this.finalStream.pause()
+    }
   }
 
   async onDone() {
@@ -371,4 +383,18 @@ export class BenchmarkContainer {
 }
 
 
+export async function getCommitHash() {
+  const fsPromise = await import('fs/promises'); //Modular import
+  let buf
+  try {
+    buf = await fsPromise.readFile('./.git/refs/heads/main')
+  } catch {
+    try {
+      buf = await fsPromise.readFile('/root/git_commit')
+    } catch {
+  
+    }
+  }
 
+  return buf.toString();
+}

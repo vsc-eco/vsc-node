@@ -28,7 +28,8 @@ import { createJwsMultsign, verifyMultiJWS } from '../utils';
 
 enum PUBSUB_CHANNELS  {
     multicast = '/vsc/multicast',
-    routesAnnounce = '/vsc/multicast'
+    routesAnnounce = '/vsc/multicast',
+    memoryPool = '/vsc/memorypool'
 }
 
 enum MESSAGE_TYPES {
@@ -141,7 +142,7 @@ export class PeerChannel {
                                 sink.push(message.payload)
                             }
                         })
-                        this.logger.debug('peer events', events)
+                        // this.logger.debug('peer events', events)
                         for await (let item of drain) {
                             this.logger.debug('Channel Response', item)
                             await this.send({
@@ -359,6 +360,7 @@ export class P2PService {
     myPeerId: string;
     events: EventEmitter;
     multicastChannel: PeerChannel;
+    memoryPoolChannel: PeerChannel;
 
     constructor(self) {
         this.self = self;
@@ -522,6 +524,7 @@ export class P2PService {
             drain.end()
         })
     }
+
 
     async getPeerLatency(peerId: string) {
         
@@ -710,6 +713,10 @@ export class P2PService {
 
         this.multicastChannel = await PeerChannel.connectMulticast(this.self.ipfs, PUBSUB_CHANNELS.multicast)
         this.defaultRegister(this.multicastChannel)
+        
+        this.memoryPoolChannel = await PeerChannel.connectMulticast(this.self.ipfs, PUBSUB_CHANNELS.memoryPool)
+
+        this.self.transactionPool.channelRegister(this.memoryPoolChannel)
 
         // const msg = {
         //     type: MESSAGE_TYPES.mockSign,

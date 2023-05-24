@@ -1,12 +1,20 @@
 import { PrivateKey } from "@hiveio/dhive";
 import NodeSchedule from 'node-schedule'
-import { HiveClient } from "../utils";
+import { getCommitHash, HiveClient } from "../utils";
 import { CoreService } from "./index";
 import moment from "moment";
+import { Collection } from "mongodb";
 
 
 export class NodeInfoService {
     self: CoreService;
+    gitCommit: any;
+    nodeStatus: Collection<{
+        id: string
+        action: string
+        expries: Date
+    }>;
+
     constructor(self: CoreService) {
         this.self = self
 
@@ -39,9 +47,24 @@ export class NodeInfoService {
         }
 
         let witnessEnabled = this.self.config.get("witness.enabled");
+        let disableReason;
+
+        const nodeStatuses = await this.nodeStatus.find({
+            action: 'disable_witness',
+            expires: {
+                $gt: new Date()
+            }
+        }).toArray()
+
+
 
         if(typeof witnessEnabled === "undefined") {
             witnessEnabled = false;
+        }
+
+        if(nodeStatuses.length > 0) {
+            witnessEnabled = false
+            disableReason = nodeStatuses[0].id
         }
 
         const ipfs_peer_id = (await this.self.ipfs.id()).id.toString()
@@ -50,7 +73,9 @@ export class NodeInfoService {
             if(
                 json_metadata.vsc_node.unsigned_proof.witness.enabled === witnessEnabled && 
                 json_metadata.vsc_node.unsigned_proof.net_id === this.self.config.get('network.id') && 
-                json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id
+                json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id,
+                json_metadata.vsc_node.unsigned_proof.git_commit === this.gitCommit,
+                json_metadata.vsc_node.unsigned_proof.disable_reason === disableReason
             ) {
                 if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
                     //Node registration not required
@@ -66,6 +91,7 @@ export class NodeInfoService {
             ipfs_peer_id,
             ts: new Date().toISOString(),
             hive_account: hiveAccount,
+            git_commit: this.gitCommit,
             witness: {
                 enabled: witnessEnabled,
                 signing_keys: {
@@ -94,7 +120,35 @@ export class NodeInfoService {
             })
         }, PrivateKey.from(process.env.HIVE_ACCOUNT_ACTIVE))
     }
+
+    async setStatus(options: {
+        id: string
+        action: string
+        expires: Date
+    }) {
+        // await this.self
+        await this.nodeStatus.findOneAndUpdate({
+            id: options.id
+        }, {
+            $set: {
+                action: options.action,
+                expires: options.expires 
+            }
+        }, {
+            upsert: true
+        })
+    }
+
+    async retractStatus(id: string) {
+        await this.nodeStatus.findOneAndDelete({
+            id
+        })
+    }
+
     async start() {
+        this.nodeStatus = this.self.db.collection('node_status')
+
+        this.gitCommit = await getCommitHash()
         NodeSchedule.scheduleJob('0 * * * *', this.announceNode)
         await this.announceNode()
     }

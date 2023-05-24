@@ -18,6 +18,7 @@ import { IPFSHTTPClient } from 'ipfs-http-client'
 import { BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
+import moment from 'moment'
 
 export class ChainBridge {
   self: CoreService
@@ -32,12 +33,16 @@ export class ChainBridge {
 
   blockQueue: PQueue
   block_height: number
+  syncedAt: Date | null
   ipfsQueue: PQueue
+  hiveStream: fastStream
 
   constructor(self: CoreService) {
     this.self = self
 
     this.events = new EventEmitter()
+
+    this.syncedAt = null
   }
 
   async createBlock() {
@@ -481,31 +486,12 @@ export class ChainBridge {
   }
   
 
-  async start() {
-    this.stateHeaders = this.self.db.collection('state_headers')
-    this.blockHeaders = this.self.db.collection('block_headers')
-    this.witnessDb = this.self.db.collection('witnesses')
-
-    this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
-
-    this.ipfsQueue = new (await import('p-queue')).default({concurrency: 4})
-
-    this.witness = new WitnessService(this.self)
-
-    this.streamOut = Pushable()
-
-    this.events.on('vsc_block', (block) => {
-      this.streamOut.push(block)
-    })
-
-    NodeSchedule.scheduleJob('* * * * *', async () => {
-      await this.verifyMempool()
-    })
-
+  async streamStart() {
+    
     const network_id = this.self.config.get('network.id')
 
     this.self.logger.debug('current network_id', network_id)
-    
+
     let startBlock =
       (
         (await this.stateHeaders.findOne({
@@ -514,34 +500,13 @@ export class ChainBridge {
       ).block_num || networks[network_id].genesisDay  // pla: useful to set a manual startBlock here for debug purposes
     
     this.self.logger.debug('starting block stream at height', startBlock)
-    
-    const stream = await fastStream.create({
+    this.hiveStream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
       startBlock: startBlock,
       trackHead: true
     })
-
     void (async () => {
-      for await(let block of this.streamOut) {
-        console.log('vsc block', block)
-        
-        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
-        console.log(blockContent)
-        await this.blockHeaders.insertOne({
-          height: await this.countHeight(block.block_hash),
-          id: block.block_hash,
-          hive_ref_block: block.tx.block_num,
-          hive_ref_tx: block.tx.transaction_id
-        })
-
-        for(let tx of blockContent.txs) {
-          this.processVSCBlockTransaction(tx, block.block_hash);
-        }
-      }
-    })()
-
-    void (async () => {
-      for await(let [block_height, block] of stream.streamOut) {
+      for await(let [block_height, block] of this.hiveStream.streamOut) {
         this.block_height = block_height;
         for(let tx of block.transactions) {
           for(let [op_id, payload] of tx.operations) {
@@ -562,6 +527,7 @@ export class ChainBridge {
                   if(proof.witness.enabled && witnessRecord.enabled !== true) {
                       opts['enabled_at'] = block_height
                       opts['disabled_at'] = null
+                      opts['disabled_reason'] = null
                   } else if(proof.witness.enabled === false && witnessRecord.enabled === true) {
                     // opts['enabled_at'] = null
                     opts['disabled_at'] = block_height
@@ -618,18 +584,122 @@ export class ChainBridge {
         )
       }
     })()
-    stream.startStream()
+    this.hiveStream.startStream()
+  }
+
+  async streamStop() {
     
+  }
+
+  /**
+   * Verifies streaming is working correctly
+   */
+  async streamCheck() {
+    
+    if(this.syncedAt !== null) {
+      if(this.hiveStream.blockLag > 300) {
+        // await this.self.nodeInfo.announceNode({
+        //   action: "disable_witness",
+        //   disable_reason: "sync_fail"
+        // })
+
+        await this.self.nodeInfo.setStatus({
+          id: "out_of_sync",
+          action: "disable_witness",
+          expires: moment().add('1', 'day').toDate()
+        })
+
+        await this.self.nodeInfo.announceNode()
+        
+        this.hiveStream.killStream()
+        this.streamStart()
+        this.syncedAt = null
+
+        
+        return;
+      }
+      if(this.hiveStream.blockLag > 100) {
+        console.log('KILLING STREAM', this.hiveStream.blockLag)
+        this.hiveStream.killStream()
+        this.streamStart()
+        this.syncedAt = null
+
+        return
+      }
+    }
+    if(this.syncedAt === null && this.hiveStream.blockLag < 5) {
+      console.log('[streamCheck] System synced!')
+      this.syncedAt = new Date();
+      await this.self.nodeInfo.nodeStatus.deleteMany({
+        id: "out_of_sync",
+      })
+    }
+  }
+
+  async start() {
+    this.stateHeaders = this.self.db.collection('state_headers')
+    this.blockHeaders = this.self.db.collection('block_headers')
+    this.witnessDb = this.self.db.collection('witnesses')
+
+    this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
+
+    this.ipfsQueue = new (await import('p-queue')).default({concurrency: 4})
+
+    this.witness = new WitnessService(this.self)
+
+    this.streamOut = Pushable()
+
+    this.events.on('vsc_block', (block) => {
+      this.streamOut.push(block)
+    })
+
+    NodeSchedule.scheduleJob('* * * * *', async () => {
+      await this.verifyMempool()
+    })
+
+    // NodeSchedule.scheduleJob('* * * * *', async () => {
+    //   await this.streamCheck()
+    // })
+    
+    setInterval(() => {
+      this.streamCheck()
+    }, 5000)
+
+    await this.streamStart()
+    
+    const network_id = this.self.config.get('network.id')
+    
+    void (async () => {
+      for await(let block of this.streamOut) {
+        console.log('vsc block', block)
+        
+        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+        console.log(blockContent)
+        await this.blockHeaders.insertOne({
+          height: await this.countHeight(block.block_hash),
+          id: block.block_hash,
+          hive_ref_block: block.tx.block_num,
+          hive_ref_tx: block.tx.transaction_id,
+          // witnessed_by: {
+          //   hive_account: block.tx.posting
+          // }
+        })
+
+        for(let tx of blockContent.txs) {
+          this.processVSCBlockTransaction(tx, block.block_hash);
+        }
+      }
+    })()
 
     setInterval(() => {
-      this.self.logger.info(`current block lag ${stream.blockLag}`)
+      this.self.logger.info(`current block lag ${this.hiveStream.blockLag}`)
     }, 60 * 1000)
 
     let producingBlock = false;
     setInterval(async() => {
-        if (stream.blockLag < 5) {
+        if (this.hiveStream.blockLag < 5) {
           //Can produce a block
-          const offsetBlock = stream.currentBlock //- networks[network_id].genesisDay
+          const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
           if((offsetBlock %  networks[network_id].roundLength) === 0) {
             if(!producingBlock) {
               const nodeInfo = await this.witnessDb.findOne({
@@ -641,10 +711,10 @@ export class ChainBridge {
                     return e.bn === offsetBlock
                   }))
 
-                  console.log('scheduleSlot', scheduleSlot)
+                  // console.log('scheduleSlot', scheduleSlot)
                   
-                  if(scheduleSlot.did === this.self.identity.id) {
-                    this.self.logger.info('Can produce block!! at', stream.currentBlock)
+                  if(scheduleSlot?.did === this.self.identity.id) {
+                    this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
                     producingBlock = true;
                     await this.createBlock()
                   }

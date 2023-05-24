@@ -5,7 +5,7 @@ import { CID } from 'multiformats'
 import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher } from 'multiformats/hashes/sha2'
-import { BloomFilter } from 'bloom-filters'
+import BloomFilters from 'bloom-filters'
 import { CoreService } from '.'
 import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
 import { VM, NodeVM, VMScript } from 'vm2'
@@ -14,12 +14,14 @@ import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';
 import { PrivateKey } from '@hiveio/dhive'
 import Crypto from 'crypto'
-import { HiveClient } from '../utils'
+import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
 import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
+import { PeerChannel } from './pubsub'
+const {BloomFilter} = BloomFilters
 
 const INDEX_RULES = {}
 
@@ -89,16 +91,22 @@ export class TransactionPoolService {
 
     // pla: lets define an interface for the pubsub transaction dto
     // ... what about 'TransactionUnconfirmed'?
-    await this.self.ipfs.pubsub.publish(
-      '/vsc/memorypool',
-      Buffer.from(
-        JSON.stringify({
-          type: 'tx_announce',
-          tx_id: cid.toString(),
-          payload: dag,
-        }),
-      ),
-    )
+    // await this.self.ipfs.pubsub.publish(
+    //   '/vsc/memorypool',
+    //   Buffer.from(
+    //     JSON.stringify({
+    //       type: 'tx_announce',
+    //       tx_id: cid.toString(),
+    //       payload: dag,
+    //     }),
+    //   ),
+    // )
+    await this.self.p2pService.memoryPoolChannel.call('announce_tx', {
+      payload: {
+        id: cid.toString()
+      },
+      mode: 'basic'
+    })
 
     // const transactionPoolHead = (
     //   await Block.encode({
@@ -134,7 +142,7 @@ export class TransactionPoolService {
       node_id: nodeInfo.peer_id
     } as EnableWitness
 
-    const result = this.createCoreTransaction("vsc.enable_witness", json, setup)
+    const result = await this.createCoreTransaction("vsc.enable_witness", json, setup)
     setup.logger.debug('result', result)
   }
 
@@ -239,6 +247,72 @@ export class TransactionPoolService {
     this.contractCommitmentOperation(args, setup, CoreTransactionTypes.leave_contract);
   }
 
+
+  async processMempoolTX(txId: string) {
+    let auths = []
+    try {
+      
+      const alreadyExistingTx = await this.transactionPool.findOne({
+        id: txId.toString()
+      })
+      
+      let local;
+      if(!alreadyExistingTx) {
+        local = false;
+
+        const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(CID.parse(txId))).value
+        const {content, auths: authsOut} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+        auths = authsOut;
+        
+        await this.transactionPool.findOneAndUpdate({
+          id: txId.toString(),
+        }, {
+          $set: {
+            account_auth: auths[0],
+            op: content.op,
+            lock_block: null,
+            status: TransactionDbStatus.unconfirmed,
+            first_seen: new Date(),
+  
+            type: TransactionDbType.input,
+            included_in: null,
+  
+            executed_in: null,
+            output: null,
+            
+            local,
+            accessible: true,
+            headers: {
+              contract_id: content.tx.contract_id
+            }
+          }
+        }, {
+          upsert: true
+        })
+      }
+
+    } catch (e) {
+      console.log(e)
+      this.self.logger.error("not able to receive contract from local ipfs node ", txId)
+    }
+    
+
+  }
+
+  channelRegister(channel: PeerChannel) {
+    console.log('registering 30')
+    channel.register('announce_tx', async({from, message, drain, sink}) => {
+      // this.self.logger.debug('test registration', {from, message, drain, sink})
+      
+
+      console.log('tx', message)
+      await this.processMempoolTX(message.id)
+      drain.end()
+    }, {
+      loopbackOk: true
+    })
+  }
+
   async start() {
     this.transactionPool = this.self.db.collection('transaction_pool')
     this.blockHeaders = this.self.db.collection('block_headers')
@@ -254,12 +328,25 @@ export class TransactionPoolService {
       )
     } catch {}
 
-    this.self.ipfs.pubsub.subscribe('/vsc/memorypool', async (data) => {
-      const json = JSON.parse(String.fromCharCode.apply(null, data.data))
-      // const verify = await this.self.wallet.verifyJWS(json.payload)
-      // const { kid } = verify
-      // const [did] = kid.split('#')
-    })
+    // setInterval(async() => {
+    //   const ids = await this.transactionPool.distinct('id', {
+
+    //   })
+
+    //   const bf = BloomFilter.from(ids, 0.001).saveAsJSON()
+    //   this.self.p2pService.memoryPoolChannel.call('announce_tx', {
+    //     payload: {
+    //       tx: "hello world",
+    //       bf: {
+    //         _size: bf._size,
+    //         _nbHashes: bf._nbHashes,
+    //         _filter: bf._filter,
+    //         _seed: bf._seed
+    //       }
+    //     },
+    //     mode: "basic"
+    //   })
+    // }, 600000)
 
     // pla: DBG
     try {

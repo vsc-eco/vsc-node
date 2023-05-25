@@ -269,7 +269,7 @@ export class TransactionPoolService {
         }, {
           $set: {
             account_auth: auths[0],
-            op: content.op,
+            op: content.tx.op,
             lock_block: null,
             status: TransactionDbStatus.unconfirmed,
             first_seen: new Date(),

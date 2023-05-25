@@ -543,6 +543,7 @@ export class ChainBridge {
                       enabled: proof.witness.enabled,
                       last_signed: new Date(proof.ts),
                       net_id: proof.net_id,
+                      git_commit: proof.git_commit,
                       ...opts
                     }
                   }, {

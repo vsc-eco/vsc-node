@@ -596,6 +596,20 @@ export class ChainBridge {
    * Verifies streaming is working correctly
    */
   async streamCheck() {
+    if(this.hiveStream.blockLag > 300 && typeof this.hiveStream.blockLag === 'number') {
+      // await this.self.nodeInfo.announceNode({
+      //   action: "disable_witness",
+      //   disable_reason: "sync_fail"
+      // })
+
+      await this.self.nodeInfo.setStatus({
+        id: "out_of_sync",
+        action: "disable_witness",
+        expires: moment().add('1', 'day').toDate()
+      })
+
+      await this.self.nodeInfo.announceNode()
+    }
     
     if(this.syncedAt !== null) {
       if(this.hiveStream.blockLag > 300) {

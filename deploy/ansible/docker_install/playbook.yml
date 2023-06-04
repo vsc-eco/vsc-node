@@ -6,10 +6,6 @@
     NODEJS_VERSION: "18"
     IPFS_URL: "https://dist.ipfs.tech/kubo/v0.19.1/kubo_v0.19.1_linux-amd64.tar.gz"
   vars_prompt:
-    - name: ssh_key_path
-      prompt: "Enter path for ssh key of your github account. If no path is entered no ssh key is copied over.\nPath should be relative to this playbook!"
-      default: ""
-      private: false
     - name: hive_account
       prompt: "Enter hive account name. If no account is provided the parameterization .env file will not be created."
       default: ""
@@ -84,61 +80,20 @@
         groups: "docker"
         append: yes
 
-    - name: Creates ssh directory
-      file:
-        path: /home/{{ ansible_user }}/.ssh/
-        state: directory
-
-    - name: Copy over ssh file
-      copy:
-        src: "{{ ssh_key_path }}"
-        dest: "/home/{{ ansible_user }}/.ssh/github_private.key"
-        mode: 0400
-        owner: "{{ ansible_user }}"
-      when: ssh_key_path != ""
-
-    - name: Append configuration to ~/.ssh/config
-      lineinfile:
-        path: "/home/{{ ansible_user }}/.ssh/config"
-        create: true
-        line: |
-          Host github.com
-              HostName github.com
-              User git
-              PreferredAuthentications publickey
-              IdentityFile "/home/{{ ansible_user }}/.ssh/github_private.key"
-
     - name: Add the safe directory setting to ~/.gitconfig
       git_config:
         name: safe.directory
         scope: system
         value: "/app/node"
 
-    - name: Check if host key already exists in known_hosts
-      shell: grep "{{ inventory_hostname }}" /home/{{ ansible_user }}/.ssh/known_hosts
-      register: grep_output
-      ignore_errors: yes
-
-    - name: Fetch public key for target host
-      shell: ssh-keyscan github.com
-      register: ssh_keyscan_output
-      when: grep_output.rc != 0
-
-    - name: Add host to known_hosts
-      lineinfile:
-        line: "{{ ssh_keyscan_output.stdout }}"
-        dest: "/home/{{ ansible_user }}/.ssh/known_hosts"
-        create: true
-      when: ssh_keyscan_output.stdout != '' and grep_output.rc != 0
-
     - name: Git checkout vsc-node
       git:
-        repo: 'git@github.com:vaultec81/vsc-node.git'
+        repo: 'https://github.com/vsc-eco/vsc-node.git'
         dest: /app/node
         version: feature/add-ansible #main
         force: false
         accept_newhostkey: true
-        key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"
+        # key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"
 
     - name: Create parameterization .env file
       lineinfile:

@@ -8,9 +8,12 @@ import { ContractOutput, VSCTransactionTypes } from '../types/vscTransactions';
 
 export class ContractWorker {
     self: CoreService
+    network_id: string;
 
     constructor(self: CoreService) {
         this.self = self
+        
+        this.batchExecuteContracts = this.batchExecuteContracts.bind(this)
     }
 
     async hasExecuterJoinedContract(contract_id: string): Promise<boolean> {
@@ -25,6 +28,7 @@ export class ContractWorker {
     // pla: some regular occuring event needs to trigger this... on new vsc block received or smth?
     // pla: (obviously) has issues when it cant find the contract on the local ipfs node (contractExecuteRaw crashes)
     public async batchExecuteContracts() {
+        
 
         this.self.logger.info('EXECUTING SMART CONTRACTS')
 
@@ -72,16 +76,35 @@ export class ContractWorker {
                 })
     
                 this.self.logger.debug('injected contract output tx into local db', result)
-            } catch {
-
+            } catch(ex) {
+                // console.log(ex)
             }
         }
     }
 
     async start() {
-        // this.batchExecuteContracts()
-        NodeSchedule.scheduleJob('* * * * *', async () => {
-            this.batchExecuteContracts()
+        this.network_id = this.self.config.get('network.id')
+        
+        NodeSchedule.scheduleJob('/15 * * * *', async () => {
+            if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5) {
+        
+                const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
+                  did: this.self.identity.id,
+                })
+                if (nodeInfo) {
+                    //   const scheduleSlot = this.self.witness.witnessSchedule?.find((e) => {
+                    //     return e.bn === offsetBlock
+                    //   })
+
+                    const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
+
+                    if (nodeInfo.enabled && nodeInfo.trusted) {
+                        if (scheduleSlot?.did === this.self.identity.id) {
+                            await this.batchExecuteContracts()
+                        }
+                    }
+                }
+            }
         })
     }
 }

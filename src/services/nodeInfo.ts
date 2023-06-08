@@ -14,6 +14,7 @@ export class NodeInfoService {
         action: string
         expries: Date
     }>;
+    lastUpdate: Date;
 
     constructor(self: CoreService) {
         this.self = self
@@ -29,6 +30,11 @@ export class NodeInfoService {
          * This handles linkage between Hive account <--> DID
          * In P2P channels: link can be verified between DID <--> PeerId
          */
+
+
+        if(moment().subtract('1', 'minute').toDate() < this.lastUpdate && this.lastUpdate) {
+            return;
+        }
         
 
         const hiveAccount = process.env.HIVE_ACCOUNT
@@ -69,13 +75,14 @@ export class NodeInfoService {
 
         const ipfs_peer_id = (await this.self.ipfs.id()).id.toString()
 
+       
         if(json_metadata.vsc_node) {
             if(
                 json_metadata.vsc_node.unsigned_proof.witness.enabled === witnessEnabled && 
                 json_metadata.vsc_node.unsigned_proof.net_id === this.self.config.get('network.id') && 
                 json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id,
                 json_metadata.vsc_node.unsigned_proof.git_commit === this.gitCommit,
-                json_metadata.vsc_node.unsigned_proof.disable_reason === disableReason
+                json_metadata.vsc_node.unsigned_proof.witness.disable_reason === disableReason
             ) {
                 if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
                     //Node registration not required
@@ -94,6 +101,7 @@ export class NodeInfoService {
             git_commit: this.gitCommit,
             witness: {
                 enabled: witnessEnabled,
+                disable_reason: disableReason,
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
@@ -119,6 +127,8 @@ export class NodeInfoService {
                 vsc_node: registrationInfo
             })
         }, PrivateKey.from(process.env.HIVE_ACCOUNT_ACTIVE))
+
+        this.lastUpdate = new Date()
     }
 
     async setStatus(options: {

@@ -531,6 +531,7 @@ export class ChainBridge {
                   } else if(proof.witness.enabled === false && witnessRecord.enabled === true) {
                     // opts['enabled_at'] = null
                     opts['disabled_at'] = block_height
+                    opts["disabled_reason"] = proof.witness.disabled_reason
                   }
 
                   await this.witnessDb.findOneAndUpdate({

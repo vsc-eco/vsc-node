@@ -36,6 +36,7 @@ export const schema = `
     type ContractState {
         id: String
         state(key: String): JSON
+        stateKeys(key: String): JSON
         state_merkle: String
     }
     type FindContractResult {

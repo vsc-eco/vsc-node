@@ -287,17 +287,17 @@ export class ChainBridge {
       })
       
       await this.self.contractEngine.contractDb.findOneAndUpdate({
-        contract_id: content.contract_id
+        id: content.tx.contract_id
       }, {
         $set: {
-          state_merkle: content.state_m
+          state_merkle: content.tx.state_merkle
         }
       })
 
       // update parent tx (call contract)
       
       await this.self.transactionPool.transactionPool.findOneAndUpdate({
-        id: transactionRaw.parent_tx_id,
+        id: content.tx.parent_tx_id,
       }, {
           $set: {
               status: TransactionDbStatus.confirmed,

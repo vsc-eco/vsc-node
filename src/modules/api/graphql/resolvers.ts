@@ -17,15 +17,53 @@ export const Resolvers = {
       id: args.id,
     })
 
+    if(!data) {
+      return null;
+    }
+
     return {
       id: data.id,
       state_merkle: data.state_merkle,
+      stateKeys: async (args) => {
+        try {
+          let key = args.key ? `${args.key}` : null
+          const obj2 = await appContainer.self.ipfs.dag.get(CID.parse(data.state_merkle), {
+            path: key,
+          })
+          if(obj2.value.Links) {
+            return obj2.value.Links.map(e => {
+              return {
+                ...e,
+                Hash: e.Hash.toString()
+              }
+            })
+          } else {
+            return []
+          }
+        } catch {
+          return null;
+        }
+      },
       state: async (args) => {
         try {
+          let key = args.key ? `${args.key}` : null
+          
           const obj = await appContainer.self.ipfs.dag.resolve(data.state_merkle, {
-            path: `${args.key}`,
+            path: key,
           })
           const out = await appContainer.self.ipfs.dag.get(obj.cid)
+          console.log(out)
+
+          
+          if(key === null) {
+            let recursiveOutput = {}
+            for(let key of out.value.Links) {
+              const dagVal = await appContainer.self.ipfs.dag.get(key.Hash)
+              recursiveOutput[key.Name] = dagVal.value
+            }
+            return recursiveOutput;
+          }
+
           return out.value
         } catch {
           return null;

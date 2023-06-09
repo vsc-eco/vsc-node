@@ -115,7 +115,7 @@ export class NodeInfoService {
             signed_proof: await this.self.identity.createJWS(unsigned_proof),
         }
 
-        const dag = await this.self.ipfs.dag.put(registrationInfo)
+        const dag = await this.self.ipfs.dag.put(JSON.parse(JSON.stringify(registrationInfo)))
 
         const publishResult = await this.self.ipfs.name.publish(dag)
         console.log(publishResult)

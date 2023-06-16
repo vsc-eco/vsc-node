@@ -117,11 +117,10 @@ export class ContractEngine {
     }
     if (contract) {
       if (stateMerkle) {
-        stateCid = stateMerkle
+        stateCid = CID.parse(stateMerkle)
       } else {
         if (contract.state_merkle) {
           stateCid = CID.parse(contract.state_merkle)
-          stateCid = await this.self.ipfs.object.new()
         } else {
           stateCid = await this.self.ipfs.object.new()
         }
@@ -132,30 +131,127 @@ export class ContractEngine {
       client: {
         pull: async (key: string) => {
           try {
-            const obj = await this.self.ipfs.dag.resolve(stateCid, {
-              path: `${key}`,
+            console.log(stateCid)
+            const out = await this.self.ipfs.dag.resolve(stateCid, {
+              path: key,
             })
-            const out = await this.self.ipfs.dag.get(obj.cid)
-            return out.value
+
+            const data = await this.self.ipfs.dag.get(out.cid)
+
+            console.log(data)
+            if (out.cid.code === 0x70) {
+              //PD Dag
+              return JSON.parse(Buffer.from(data.value.Data).toString())
+            } else if (out.cid.code === 0x71) {
+              //CBOR dag
+              return data.value
+            } else {
+              //This shouldn't happen unless other issues are present.
+              return null
+            }
           } catch (ex) {
+            console.log(ex)
             return null
           }
         },
         update: async (key, value: any) => {
-          if (!value) {
-            return
-          }
-          const outCid = await this.self.ipfs.dag.put(value, {
-            pin: false
-          })
-          const merkleCid = await this.self.ipfs.object.patch.addLink(stateCid, {
-            Name: key,
-            Hash: outCid,
-          })
+          try {
 
-          stateCid = merkleCid.toString()
+            if (!value) {
+              return
+            }
+            let merkleCid = stateCid
+  
+            let linkExists
+            let dagData
+            let brokenPaths = []
+            try {
+              const resolvedCid = await this.self.ipfs.dag.resolve(merkleCid, {
+                path: key,
+              })
+  
+              const rawData = await this.self.ipfs.dag.get(resolvedCid.cid)
+              if (resolvedCid.cid.code === 0x70) {
+                dagData = JSON.parse(Buffer.from(rawData.value.Data).toString())
+              } else if (resolvedCid.cid.code === 0x71) {
+                dagData = rawData.value
+              }
+            } catch (ex) {
+              linkExists = false
+              let splitKey = key.split('/')
+              for (let x = 0; x < splitKey.length; x++) {
+                let partialKey = splitKey.slice(0, splitKey.length - 1 - x)
+                console.log(partialKey)
+  
+                try {
+                  const cid = await this.self.ipfs.dag.resolve(merkleCid, {
+                    path: partialKey.join('/'),
+                  })
+                  console.log(cid.cid.code)
+                  if (cid.cid.code === 0x70) {
+                    break
+                  } else {
+                    brokenPaths.push({
+                      path: partialKey.join('/'),
+                      cid: cid.cid,
+                      wrongFormat: true,
+                    })
+                  }
+                } catch {
+                  brokenPaths.push({ path: partialKey.join('/') })
+                }
+              }
+            }
+  
+            for (let brokenPath of brokenPaths.reverse()) {
+              if (brokenPath.wrongFormat) {
+                const data = await this.self.ipfs.dag.get(brokenPath.cid)
+                const linkCid = await this.self.ipfs.object.put({
+                  Data: Buffer.from(JSON.stringify(data.value)),
+                  Links: [],
+                })
+                merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
+                  Name: brokenPath.path,
+                  Hash: linkCid,
+                })
+              } else {
+                merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
+                  Name: brokenPath.path,
+                  Hash: CID.parse('QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n'),
+                })
+              }
+            }
+  
+            const dataCid = await this.self.ipfs.dag.put(value)
+  
+            merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
+              Name: key,
+              Hash: dataCid,
+            })
+  
+            stateCid = merkleCid
+          } catch (ex) {
+            console.log(ex)
+          }
           //TODO make this happen after contract call has been completely executed
           //stateCid = obj;
+        },
+        /**
+         * WIP: needs DAG type updates
+         * @param key 
+         * @returns 
+         */
+        ls: async (key) => {
+          try {
+            const pBufNode = await this.self.ipfs.object.get(`${stateCid}/${key}` as any)
+            console.log(pBufNode.Links)
+            return pBufNode.Links.map((e) => e.Name)
+          } catch {
+            return []
+          }
+        },
+        del: async (key) => {
+          //To be implemented!
         },
       },
       finish: () => {
@@ -246,12 +342,21 @@ export class ContractEngine {
       if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
+      
       const executeOutput = (await new Promise((resolve, reject) => {
         const vm = new NodeVM({
           sandbox: {
             api: {
               action: opData.action,
               payload: opData.payload,
+              input: {
+                sender: {
+                  type: "DID",
+                  id: op.account_auth
+                },
+                tx_id: op.id,
+                included_in: op.included_in
+              }
             },
             done: () => {
               return resolve(state.finish())
@@ -265,7 +370,7 @@ export class ContractEngine {
       stateMerkle = executeOutput.stateMerkle
     }
 
-    this.self.logger.debug('new state merkle of executed contract', stateMerkle)
+    this.self.logger.info('new state merkle of executed contract', stateMerkle)
     benchmark.stage('4')
     
     if(!(startMerkle instanceof CID)) {
@@ -291,12 +396,14 @@ export class ContractEngine {
       }
     })
 
+    
+
     this.self.logger.debug('state merkle object of executed contract', startMerkleObj)
     benchmark.stage('4.5')
     const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
 
     benchmark.stage('5')
-
+    
 
     let log_matrix = {}
     for (let logOp of merkleDiff) {
@@ -304,6 +411,9 @@ export class ContractEngine {
         let initObj = {}
         let endObj = {}
         if (logOp.op === 'replace') {
+          if(typeof logOp.value !== 'object') {
+            continue;
+          }
           const obj = await this.self.ipfs.dag.resolve(startMerkle, {
             path: `${logOp.value.Name}`,
           })
@@ -312,6 +422,9 @@ export class ContractEngine {
         //If statement for typescript reasons
         if (logOp.op === 'add' || logOp.op === 'replace') {
           try {
+            if(typeof logOp.value !== 'object') {
+              continue;
+            }
             const obj = await this.self.ipfs.dag.resolve(stateMerkle, {
               path: `${logOp.value.Name}`,
             })

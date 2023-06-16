@@ -85,7 +85,7 @@ export class ContractWorker {
     async start() {
         this.network_id = this.self.config.get('network.id')
         
-        NodeSchedule.scheduleJob('/15 * * * *', async () => {
+        setInterval(async() => {
             if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5) {
         
                 const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
@@ -105,6 +105,6 @@ export class ContractWorker {
                     }
                 }
             }
-        })
+        }, 15 * 1000)
     }
 }

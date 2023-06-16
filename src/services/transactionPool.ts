@@ -52,7 +52,7 @@ export class TransactionPoolService {
       lock_block: 'null', //Calculate on the fly 
     }
 
-    const dag = await this.self.wallet.createDagJWS(txContainer)
+    const dag = await this.self.identity.createDagJWS(txContainer)
 
     const cid = await this.self.ipfs.dag.put({
       ...dag.jws,
@@ -188,6 +188,7 @@ export class TransactionPoolService {
 
     const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
     setup.logger.debug('result', result)
+    return result;
   }
 
   public async callContract(contract_id: string, args: {action, payload: any}) {

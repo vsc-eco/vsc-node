@@ -48,6 +48,7 @@
     "eslint-config-prettier": "^8.3.0",
     "eslint-plugin-prettier": "^3.4.0",
     "jest": "^27.0.6",
+    "live-tsc": "^1.6.2",
     "nodemon": "^2.0.20",
     "prettier": "^2.4.1",
     "rimraf": "^5.0.0",
@@ -58,6 +59,8 @@
   },
   "scripts": {
     "build": "rimraf dist; tsc",
+    "contracts:deploy": "node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/scriptDeployContract.ts",
+    "contracts:compile": "cd contracts && live-tsc --src . --dest ./ -p ../live-tsc.json",
     "ts-node": "node --experimental-specifier-resolution=node --loader ts-node/esm",
     "start": "node --experimental-specifier-resolution=node  dist/index.js",
     "start:benchmark": "nodemon --exec \"node --experimental-specifier-resolution=node --loader ts-node/esm\" src/benchmarkVm.ts",

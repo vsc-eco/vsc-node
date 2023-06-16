@@ -1,0 +1,30 @@
+{
+
+    "compilerOptions": {
+
+      "target": "es2020",
+      "lib": [
+        "ES2021"
+      ],
+      "experimentalDecorators": true,
+      "emitDecoratorMetadata": true,                    
+
+      "module": "ES2020",
+      "moduleResolution": "node",
+     
+      "outDir": "./dist",
+     
+  
+      "esModuleInterop": true,
+      "forceConsistentCasingInFileNames": true,
+  
+      
+      "strict": false,
+     
+      "skipLibCheck": true, 
+      "paths": {
+        "@/*": ["./src/*"]
+      }
+    }
+  }
+  

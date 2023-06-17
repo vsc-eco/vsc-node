@@ -6,3 +6,4 @@ dist
 .env
 inventory.yml
 data
+contracts/example.js

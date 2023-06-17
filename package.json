@@ -21,6 +21,7 @@
     "graphql": "^16.5.0",
     "graphql-type-json": "^0.3.2",
     "graphql-yoga": "^3.6.0",
+    "hamt-sharding": "^3.0.2",
     "hive-tx": "^4.3.0",
     "ipfs-http-client": "^60.0.0",
     "it-pushable": "^1.4.2",

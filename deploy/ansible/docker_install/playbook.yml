@@ -90,7 +90,7 @@
       git:
         repo: 'https://github.com/vsc-eco/vsc-node.git'
         dest: /app/node
-        version: feature/add-ansible #main
+        version: main
         force: false
         accept_newhostkey: true
         # key_file: "/home/{{ ansible_user }}/.ssh/github_private.key"

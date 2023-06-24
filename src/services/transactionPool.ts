@@ -306,7 +306,7 @@ export class TransactionPoolService {
       // this.self.logger.debug('test registration', {from, message, drain, sink})
       
 
-      console.log('tx', message)
+      // console.log('tx', {message, from})
       await this.processMempoolTX(message.id)
       drain.end()
     }, {

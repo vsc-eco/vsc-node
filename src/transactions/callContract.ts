@@ -18,6 +18,7 @@ void (async () => {
       })
 
     // sample usage
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/callContract.ts <contract_id> <contract_method> <parameters>
     // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/callContract.ts 5b656c5eab07e7cbb954c8db7c359c0b5e0da2d4 set "{\"key\":\"Hello\", \"value\":\"world\"}"
     if(!contract_id || !action || !payload) {
         core.logger.error('Usage: callContract.ts <contract id> <action> <payload>')

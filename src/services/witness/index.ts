@@ -6,6 +6,7 @@ import { DID } from "dids";
 import shuffleSeed from 'shuffle-seed'
 import { CoreService } from "../";
 import { HiveClient } from "../../utils";
+import moment from "moment";
 
 
 
@@ -49,6 +50,9 @@ export class WitnessService {
         enabled_at: {
           $lt: consensusRound.pastRoundHash,
         },
+        last_signed: {
+          $gt: moment().subtract('5', 'day').toDate()
+        }
       })
       .toArray()
 
@@ -141,6 +145,16 @@ export class WitnessService {
 
   async start() {
     this.witnessDb = this.self.db.collection('witnesses')
+    
+    try {
+      await this.witnessDb.createIndex({
+        account: -1
+      }, {
+        unique: true
+      })
+    } catch(ex) {
+      console.log(ex)
+    }
 
     setInterval(async () => {
       try {

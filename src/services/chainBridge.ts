@@ -535,7 +535,6 @@ export class ChainBridge {
                   }
 
                   await this.witnessDb.findOneAndUpdate({
-                    did,
                     account: payload.account,
                   }, {
                     $set: {

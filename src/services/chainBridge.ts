@@ -538,6 +538,7 @@ export class ChainBridge {
                     account: payload.account,
                   }, {
                     $set: {
+                      did,
                       peer_id: proof.ipfs_peer_id,
                       signing_keys: proof.witness.signing_keys,
                       enabled: proof.witness.enabled,

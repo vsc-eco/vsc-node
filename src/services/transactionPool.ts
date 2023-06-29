@@ -45,11 +45,24 @@ export class TransactionPoolService {
 
   async createTransaction(transactionRaw: any) {
     this.self.logger.info('Creating transaction')
+
+    const latestBlockHeader = await this.blockHeaders.findOne({}, {
+      sort: {
+        height: -1
+      }
+    })
+
+    let lock_block = 'null'
+
+    if(latestBlockHeader) {
+      lock_block = latestBlockHeader.id
+    }
+
     const txContainer: TransactionContainer = {
       __t: 'vsc-tx',
       __v: '0.1',
       tx: transactionRaw,
-      lock_block: 'null', //Calculate on the fly 
+      lock_block
     }
 
     const dag = await this.self.identity.createDagJWS(txContainer)

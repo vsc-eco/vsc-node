@@ -110,9 +110,9 @@ export class CoreService {
                 this.wallet = did;
             }
             if(key === 'wallet') {
-                this.config.set('identity.signing_keys.posting', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'posting').toString())
-                this.config.set('identity.signing_keys.active', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'active').toString())
-                this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'owner').toString())
+                this.config.set('identity.signing_keys.posting', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'posting').toString())
+                this.config.set('identity.signing_keys.active', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'active').toString())
+                this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'owner').toString())
             }
         }
         if(noBackup === true) {

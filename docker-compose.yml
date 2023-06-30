@@ -22,6 +22,7 @@ services:
     volumes:
       - node-modules-store:/home/github/app/node_modules
       - ./data/vsc-node:/root/.vsc-node
+      - ./seed-backup.json:/root/.vsc-seed-backup.json
       - ./.git/refs/heads/main:/root/git_commit
 
   mongo:

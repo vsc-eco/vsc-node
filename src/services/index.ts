@@ -3,13 +3,14 @@ import * as IPFSHTTP from "ipfs-http-client";
 import Path from 'path'
 import os from 'os'
 import Crypto from 'crypto'
-import { Config } from "./nodeConfig";
 import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
 import KeyResolver from 'key-did-resolver'
+import { Db } from "mongodb";
+import fs from 'fs/promises'
+import { Config } from "./nodeConfig";
 import { TransactionPoolService } from "./transactionPool";
 import { mongo } from "./db";
-import { Db } from "mongodb";
 import { ChainBridge } from "./chainBridge";
 import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
@@ -65,14 +66,38 @@ export class CoreService {
     }
 
     private async setupKeys() {
+        let keyBackup = {}
+        let noBackup = false;
+        let keyBackupPath = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-seed-backup-' + this.options.pathSuffix) + ".json" : Path.join(os.homedir(), '.vsc-seed-backup.json')
+
+        //Check if identity already exists, if not load keybackup if exists
+        try {
+            await fs.stat(keyBackupPath)
+            if(this.config.get(`identity`)) {
+                try {
+                    const data = await fs.readFile(keyBackupPath)
+                    keyBackup = JSON.parse(data.toString());
+                } catch {
+    
+                }
+                Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix)
+            }
+        } catch {
+            noBackup = true
+        }
+        
+
         for(let key of ['node', 'wallet']) {
             let privateKey = null
-            if (this.config.get(`identity.${key}Private`)) {
-              privateKey = Buffer.from(this.config.get(`identity.${key}Private`), 'base64')
+            if (this.config.get(`identity.${key}Private`) || keyBackup[key]) {
+              privateKey = Buffer.from(this.config.get(`identity.${key}Private`) || keyBackup[key], 'base64')
             } else {
               privateKey = Crypto.randomBytes(32)
               const hex = privateKey.toString('base64')
               this.config.set(`identity.${key}Private`, hex)
+            }
+            if(!keyBackup[key]) {
+                keyBackup[key] = privateKey.toString('base64')
             }
             const keyPrivate = new Ed25519Provider(privateKey)
             const did = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
@@ -90,7 +115,16 @@ export class CoreService {
                 this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin('vsc.beta', privateKey.toString(), 'owner').toString())
             }
         }
+        if(noBackup === true) {
+            try {
+                await fs.writeFile(keyBackupPath, JSON.stringify(keyBackup))
+            } catch {
+    
+            }
+        }
     }
+
+    
 
     async start() {
         console.log('Starting')

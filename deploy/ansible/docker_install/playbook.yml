@@ -87,7 +87,7 @@
         value: "/app/node"
 
     - name: Changing perm of vsc-node dir
-      file: "dest=/app/ owner={{ ansible_user }} mode=u=rwX,g=rX,o=rX mode=a+x recurse=yes"
+      file: "dest=/app/ owner={{ ansible_user }} recurse=yes"
 
     - name: Git checkout vsc-node
       become_user: "{{ ansible_user }}"

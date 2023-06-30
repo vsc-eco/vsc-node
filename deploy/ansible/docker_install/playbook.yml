@@ -86,7 +86,11 @@
         scope: system
         value: "/app/node"
 
+    - name: Changing perm of vsc-node dir
+      file: "dest=/app/ owner={{ ansible_user }} recurse=yes"
+
     - name: Git checkout vsc-node
+      become_user: "{{ ansible_user }}"
       git:
         repo: 'https://github.com/vsc-eco/vsc-node.git'
         dest: /app/node
@@ -110,9 +114,6 @@
       - { search_string: 'MULTISIG_ACCOUNT=', line: "MULTISIG_ACCOUNT=vsc.beta" }
       - { search_string: 'MULTISIG_ANTI_HACK=', line: "MULTISIG_ANTI_HACK=did:key:z6Mkj5mKz5EBnqqsyV2qBohYFuvTXpCuxzNMGSpa1FJRstze" }
       - { search_string: 'MULTISIG_ANTI_HACK_KEY=', line: "MULTISIG_ANTI_HACK_KEY=" }
-    
-    - name: Changing perm of vsc-node .git dir
-      file: "dest=/app/node/.git owner={{ ansible_user }} mode=u=rwX,g=rX,o=rX mode=a+x recurse=yes"
 
     - name: register vsc's 'update.sh' as a cron job
       cron:

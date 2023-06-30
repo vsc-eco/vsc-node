@@ -51,7 +51,7 @@ export class WitnessService {
           $lt: consensusRound.pastRoundHash,
         },
         last_signed: {
-          $gt: moment().subtract('5', 'day').toDate()
+          $gt: moment().subtract('7', 'day').toDate()
         }
       })
       .toArray()

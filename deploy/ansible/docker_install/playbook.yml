@@ -120,7 +120,7 @@
         name: vsc-node
         minute: "0"
         user: "{{ ansible_user }}"
-        job: "/app/node/update.sh"
+        job: "/app/node && /app/node/update.sh"
 
     - name: Start up the vsc node
       docker_compose:

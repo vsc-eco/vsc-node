@@ -1,12 +1,46 @@
 import { Collection } from 'mongodb'
 import { NodeVM, VM, VMScript } from 'vm2'
 import { CID } from 'multiformats'
-import { CoreService } from './index'
 import jsonpatch from 'fast-json-patch'
+import SHA256 from 'crypto-js/sha256'
+import enchex from 'crypto-js/enc-hex'
+import { CoreService } from './index'
 import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
 
+class MockDate extends Date {
+
+  constructor(val) {
+      if(val) {
+          if(typeof val === 'string') {
+              if(val.endsWith('Z')) {
+                  super(val)
+              } else {
+                  super(val + "Z")
+              }
+          } else {
+              super(val)
+          }
+      } else {
+          super(0);
+      }
+      // console.log(this)
+      // this = new Date(0)
+  }
+
+  getTimezoneOffset() {
+      return 0;
+  }
+
+  toLocaleString() {
+      return this.toUTCString()
+  }
+
+  static now() {
+      return 0;
+  }
+}
 let codeTemplate = `
 function wrapper () {
     RegExp.prototype.constructor = function () { };
@@ -346,6 +380,16 @@ export class ContractEngine {
       const executeOutput = (await new Promise((resolve, reject) => {
         const vm = new NodeVM({
           sandbox: {
+            Date: MockDate,
+            utils: {
+              SHA256: (payloadToHash) => {
+                if (typeof payloadToHash === 'string') {
+                  return SHA256(payloadToHash).toString(enchex);
+                }
+    
+                return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
+              },
+            },
             api: {
               action: opData.action,
               payload: opData.payload,

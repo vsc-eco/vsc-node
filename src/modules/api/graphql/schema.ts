@@ -15,6 +15,7 @@ export const schema = `
         CONFIRMED
         FAILED
         INCLUDED
+        PROCESSED
     }
     enum TransactionType {
         NULL

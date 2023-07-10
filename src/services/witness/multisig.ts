@@ -7,9 +7,11 @@ import { CoreService } from "..";
 hive.api.setOptions({ url: 'https://api.hive.blog' })
 
 export class MultisigCore {
+    witness: WitnessService;
     self: CoreService;
 
-    constructor(self: CoreService) {
+    constructor(self: CoreService, witness: WitnessService) {
+        this.witness = witness
         this.self = self;
     }
 

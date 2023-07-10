@@ -22,7 +22,7 @@ import { PrivateKey } from "@hiveio/dhive";
 import { MultisigCore } from "./witness/multisig";
 import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
-
+import networks from "./networks";
 interface CoreOptions {
     pathSuffix?: string
     dbSuffix?: string
@@ -50,6 +50,8 @@ export class CoreService {
     // multisig: MultisigCore;
     nodeInfo: NodeInfoService;
     witness: WitnessService;
+    networkId: any;
+    multisig: MultisigCore;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};

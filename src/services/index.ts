@@ -110,9 +110,9 @@ export class CoreService {
                 this.wallet = did;
             }
             if(key === 'wallet') {
-                this.config.set('identity.signing_keys.posting', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'posting').toString())
-                this.config.set('identity.signing_keys.active', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'active').toString())
-                this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin(process.env.MULTISIG_ACCOUNT, privateKey.toString(), 'owner').toString())
+                this.config.set('identity.signing_keys.posting', PrivateKey.fromLogin(networks[this.networkId].multisigAccount, privateKey.toString(), 'posting').toString())
+                this.config.set('identity.signing_keys.active', PrivateKey.fromLogin(networks[this.networkId].multisigAccount, privateKey.toString(), 'active').toString())
+                this.config.set('identity.signing_keys.owner', PrivateKey.fromLogin(networks[this.networkId].multisigAccount, privateKey.toString(), 'owner').toString())
             }
         }
         if(noBackup === true) {
@@ -165,8 +165,8 @@ export class CoreService {
             this.witness = new WitnessService(this)
             await this.witness.start()
 
-            // this.multisig = new MultisigCore(this, this.witness)
-            // await this.multisig.start()
+            this.multisig = new MultisigCore(this, this.witness)
+            await this.multisig.start()
         }
         catch (err) {
             console.trace(err)

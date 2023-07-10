@@ -545,6 +545,7 @@ export class ChainBridge {
                       last_signed: new Date(proof.ts),
                       net_id: proof.net_id,
                       git_commit: proof.git_commit,
+                      plugins: proof.witness.plugins || [],
                       ...opts
                     }
                   }, {

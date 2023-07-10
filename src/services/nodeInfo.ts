@@ -82,7 +82,8 @@ export class NodeInfoService {
                 json_metadata.vsc_node.unsigned_proof.net_id === this.self.config.get('network.id') && 
                 json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id,
                 json_metadata.vsc_node.unsigned_proof.git_commit === this.gitCommit,
-                json_metadata.vsc_node.unsigned_proof.witness.disabled_reason === disableReason
+                json_metadata.vsc_node.unsigned_proof.witness.disabled_reason === disableReason,
+                json_metadata.vsc_node.unsigned_proof.witness.plugins.includes('multisig')
             ) {
                 if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
                     //Node registration not required
@@ -102,6 +103,7 @@ export class NodeInfoService {
             witness: {
                 enabled: witnessEnabled,
                 disabled_reason: disableReason,
+                plugins: ['multisig'],
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),

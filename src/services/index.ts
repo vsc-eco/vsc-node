@@ -132,6 +132,7 @@ export class CoreService {
         const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
         this.config = new Config(homeDir)
         await this.config.open()
+        this.networkId = this.config.get('network.id')
         this.logger = getLogger(this.loggerSettings || {
             prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
             printMetadata: this.config.get('logger.printMetadata'),

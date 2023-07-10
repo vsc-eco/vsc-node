@@ -3,6 +3,7 @@ import moment from 'moment'
 import hive from '@hiveio/hive-js'
 import { HiveClient } from "../../utils";
 import { CoreService } from "..";
+import { WitnessService } from ".";
 
 hive.api.setOptions({ url: 'https://api.hive.blog' })
 

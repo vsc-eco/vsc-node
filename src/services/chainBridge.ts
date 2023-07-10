@@ -723,12 +723,12 @@ export class ChainBridge {
                 did: this.self.identity.id
               })
               if(nodeInfo) {
+                const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
+                  return e.bn === offsetBlock
+                }))
+                // console.log('scheduleSlot', scheduleSlot)
                 if(nodeInfo.enabled && nodeInfo.trusted) {
-                  const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
-                    return e.bn === offsetBlock
-                  }))
 
-                  // console.log('scheduleSlot', scheduleSlot)
                   
                   if(scheduleSlot?.did === this.self.identity.id) {
                     this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)

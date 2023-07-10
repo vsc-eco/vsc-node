@@ -87,7 +87,7 @@ export class ContractWorker {
         
         setInterval(async() => {
             if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
-                console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)
+                // console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)
         
                 const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
                   did: this.self.identity.id,

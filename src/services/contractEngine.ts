@@ -1,5 +1,5 @@
 import { Collection } from 'mongodb'
-import { Isolate } from 'isolated-vm'
+import ivm from 'isolated-vm'
 import { CID } from 'multiformats'
 import jsonpatch from 'fast-json-patch'
 import SHA256 from 'crypto-js/sha256'
@@ -377,7 +377,7 @@ export class ContractEngine {
         startMerkle = state.startMerkle.toString()
       }
 
-      const isolate = new Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
+      const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
       context.global.setSync('Date', MockDate)
       context.global.setSync('utils', {

@@ -379,6 +379,7 @@ export class ContractEngine {
 
       const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
+      context.global.setSync('global', context.global.derefInto())
       context.global.setSync('Date', MockDate)
       context.global.setSync('utils', {
         SHA256: (payloadToHash) => {

@@ -1,5 +1,5 @@
 import { Collection } from 'mongodb'
-import { NodeVM, VM, VMScript } from 'vm2'
+import { Isolate } from 'isolated-vm'
 import { CID } from 'multiformats'
 import jsonpatch from 'fast-json-patch'
 import SHA256 from 'crypto-js/sha256'
@@ -297,6 +297,7 @@ export class ContractEngine {
     }
   }
 
+  /*
   async executeContract(id, call, args) {
     const contractInfo = await this.contractDb.findOne({
       id,
@@ -327,6 +328,7 @@ export class ContractEngine {
     })
     await vm.run(script, 'vm.js')
   }
+  */
 
   /**
    * Executes a list of operations
@@ -356,8 +358,6 @@ export class ContractEngine {
     }
     
     let code = codeTemplate.replace('###ACTIONS###', codeRaw)
-    
-    const script = new VMScript(code).compile()
 
     let stateMerkle
     let startMerkle
@@ -376,41 +376,35 @@ export class ContractEngine {
       if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
-      
-      const executeOutput = (await new Promise((resolve, reject) => {
-        const vm = new NodeVM({
-          sandbox: {
-            Date: MockDate,
-            utils: {
-              SHA256: (payloadToHash) => {
-                if (typeof payloadToHash === 'string') {
-                  return SHA256(payloadToHash).toString(enchex);
-                }
-    
-                return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
-              },
-            },
-            api: {
-              action: opData.action,
-              payload: opData.payload,
-              input: {
-                sender: {
-                  type: "DID",
-                  id: op.account_auth
-                },
-                tx_id: op.id,
-                included_in: op.included_in
-              }
-            },
-            done: () => {
-              return resolve(state.finish())
-            },
-            // console: "redirect",
-            state: state.client,
+
+      const isolate = new Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
+      const context = await isolate.createContext()
+      context.global.setSync('Date', MockDate)
+      context.global.setSync('utils', {
+        SHA256: (payloadToHash) => {
+          if (typeof payloadToHash === 'string') {
+            return SHA256(payloadToHash).toString(enchex);
+          }
+
+          return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
+        },
+      })
+      context.global.setSync('api', {
+        action: opData.action,
+        payload: opData.payload,
+        input: {
+          sender: {
+            type: "DID",
+            id: op.account_auth
           },
-        })
-        vm.run(script, 'vm.js')
-      })) as { stateMerkle: string }
+          tx_id: op.id,
+          included_in: op.included_in
+        }
+      })
+      context.global.setSync('state', state.client)
+      context.global.setSync('done', state.finish)
+      const compiled = await isolate.compileScript(code)
+      const executeOutput = await compiled.run(context) as { stateMerkle: string }
       stateMerkle = executeOutput.stateMerkle
     }
 

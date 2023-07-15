@@ -24,6 +24,7 @@
     "hamt-sharding": "^3.0.2",
     "hive-tx": "^4.3.0",
     "ipfs-http-client": "^60.0.0",
+    "isolated-vm": "^4.5.0",
     "it-pushable": "^1.4.2",
     "k-bucket": "^5.1.0",
     "key-did-provider-ed25519": "^1.1.0",
@@ -37,7 +38,6 @@
     "peer-id": "^0.16.0",
     "shuffle-seed": "^1.1.6",
     "uuid": "^8.3.2",
-    "vm2": "^3.9.19",
     "winston": "^3.8.2",
     "xor-distance": "^2.0.0"
   },

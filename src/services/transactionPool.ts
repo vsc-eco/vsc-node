@@ -18,7 +18,7 @@ import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
 const {BloomFilter} = BloomFilters
@@ -32,6 +32,27 @@ export class TransactionPoolService {
 
   constructor(self: CoreService) {
     this.self = self
+    HiveClient.broadcast.transfer
+  }
+
+  private static async createCoreTransferTransaction(to: string, amount: string, setup: {identity, config}, memo?: string) {
+    //create transfer object
+    const data = {
+      from: process.env.HIVE_ACCOUNT!,
+      to: to,
+      amount: amount,
+      memo: memo
+    };
+    
+    return await HiveClient.broadcast.transfer(data, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+  }
+
+  // to convert the amount for a transfer, necessary as described here 
+  // https://gitlab.syncad.com/hive/hive-js/tree/master/doc#transfer
+  private static formatAmount(amount, assetSymbol) {
+    const formattedAmount = Number(amount).toFixed(3);
+    
+    return `${formattedAmount} ${assetSymbol}`;
   }
 
   private static async createCoreTransaction(id: string, json: CoreBaseTransaction, setup: {identity, config, ipfsClient}) {
@@ -157,6 +178,24 @@ export class TransactionPoolService {
 
     const result = await this.createCoreTransaction("vsc.enable_witness", json, setup)
     setup.logger.debug('result', result)
+  }
+
+  // pla: additional information about the value transfer is put into the memo field of the transaction
+  // for some use cases, eg a deposit _to a contract_, this is necessary as we need the information of the target contract to deposit
+  // if a user sends funds to the multi sig address without any attached data that tells us what he wants to do with his funds
+  // we default to deposit it into his safe
+  static async deposit(args: { amount: number, contractId?: string }, setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info(`Depositing funds (${args.amount}) to personal safe`)
+    const memo = JSON.stringify({
+      net_id: setup.config.get('network.id'),
+      action: args.contractId ? CoreTransactionTypes.deposit_to_contract : CoreTransactionTypes.deposit_to_safe,
+      contractId: args.contractId
+    } as Deposit)
+
+    const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, memo)
+
+    setup.logger.debug('result', result)
+    return result;
   }
 
   static async createContract(args: { name: string; code: string, description: string }, setup: {identity, config, ipfsClient, logger}) {

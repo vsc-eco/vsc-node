@@ -15,10 +15,11 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
+import { AccountSafe, BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
+import { PayloadTooLargeException } from '@nestjs/common'
 
 export class ChainBridge {
   self: CoreService
@@ -28,6 +29,7 @@ export class ChainBridge {
   contracts: Collection
   witness: WitnessService
   witnessDb: Collection
+  accountsSafeDb: Collection<AccountSafe>
   events: EventEmitter
   streamOut: Pushable.Pushable<any>
 
@@ -54,7 +56,7 @@ export class ChainBridge {
       .toArray()
     this.self.logger.debug('creating block with following unconfirmed tx', txs)
 
-    if(txs.length === 0) {
+    if (txs.length === 0) {
       this.self.logger.info('not creating block, no tx found')
       return;
     }
@@ -69,7 +71,7 @@ export class ChainBridge {
         const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
         const [did] = kid.split('#')
         const content = (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
-        
+
         this.self.logger.debug('signed tx', signedTransaction as any)
         this.self.logger.debug('including tx in block', txContainer, payload)
 
@@ -167,7 +169,7 @@ export class ChainBridge {
             },
           },
         )
-      } catch {}
+      } catch { }
     }
   }
 
@@ -175,7 +177,7 @@ export class ChainBridge {
     let block = (await this.self.ipfs.dag.get(CID.parse(id))).value
     let height = 0
 
-    for (;;) {
+    for (; ;) {
       if (block.previous) {
         block = (await this.self.ipfs.dag.get(block.previous)).value
         height = height + 1
@@ -204,61 +206,61 @@ export class ChainBridge {
     if (tx.op === VSCTransactionTypes.call_contract) {
       // if (this.self.config.get('witness.enabled')) {
 
-        // pla: the section below doesnt work when no contract can be retrieved from the local ipfs node. 
-        // what to do when not beeing able to receive contract object? same for VSCTransactionTypes.contract_output
-        let auths = []
-        try {
-          console.log('parsing tx', tx)
-          const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(tx.id as any)).value
-          const {content, auths: authsOut} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
-          auths = authsOut;
-          console.log('tx content', content)
-          const alreadyExistingTx = await this.self.transactionPool.transactionPool.findOne({
-            id: tx.id.toString()
-          })
+      // pla: the section below doesnt work when no contract can be retrieved from the local ipfs node. 
+      // what to do when not beeing able to receive contract object? same for VSCTransactionTypes.contract_output
+      let auths = []
+      try {
+        console.log('parsing tx', tx)
+        const transactionRaw: ContractInput = (await this.self.ipfs.dag.get(tx.id as any)).value
+        const { content, auths: authsOut } = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+        auths = authsOut;
+        console.log('tx content', content)
+        const alreadyExistingTx = await this.self.transactionPool.transactionPool.findOne({
+          id: tx.id.toString()
+        })
 
-          let local;
-          if(alreadyExistingTx) {
-            local = alreadyExistingTx.local
-          } else {
-            local = false;
-          }
-
-          await this.self.transactionPool.transactionPool.findOneAndUpdate({
-            id: tx.id.toString(),
-          }, {
-            $set: {
-              account_auth: auths[0],
-              op: tx.op,
-              lock_block: null,
-              status: TransactionDbStatus.included,
-              first_seen: new Date(),
-    
-              type: TransactionDbType.input,
-              included_in: blockHash,
-  
-              executed_in: null,
-              output: null,
-              
-              local,
-              accessible: true,
-              headers: {
-                contract_id: content.tx.contract_id
-              }
-            }
-          }, {
-            upsert: true
-          })
-        } catch (e) {
-          console.log(e)
-          this.self.logger.error("not able to receive contract from local ipfs node ", tx.id)
+        let local;
+        if (alreadyExistingTx) {
+          local = alreadyExistingTx.local
+        } else {
+          local = false;
         }
 
-        console.log('bockhash', blockHash)
+        await this.self.transactionPool.transactionPool.findOneAndUpdate({
+          id: tx.id.toString(),
+        }, {
+          $set: {
+            account_auth: auths[0],
+            op: tx.op,
+            lock_block: null,
+            status: TransactionDbStatus.included,
+            first_seen: new Date(),
+
+            type: TransactionDbType.input,
+            included_in: blockHash,
+
+            executed_in: null,
+            output: null,
+
+            local,
+            accessible: true,
+            headers: {
+              contract_id: content.tx.contract_id
+            }
+          }
+        }, {
+          upsert: true
+        })
+      } catch (e) {
+        console.log(e)
+        this.self.logger.error("not able to receive contract from local ipfs node ", tx.id)
+      }
+
+      console.log('bockhash', blockHash)
       // }
     } else if (tx.op === VSCTransactionTypes.contract_output) {
       const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(tx.id as any)).value
-      const {content, auths} = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
+      const { content, auths } = await unwrapDagJws(transactionRaw, this.self.ipfs, this.self.identity)
 
       this.self.logger.debug("contract output received", content)
 
@@ -285,7 +287,7 @@ export class ChainBridge {
       }, {
         upsert: true
       })
-      
+
       await this.self.contractEngine.contractDb.findOneAndUpdate({
         id: content.tx.contract_id
       }, {
@@ -295,18 +297,21 @@ export class ChainBridge {
       })
 
       // update parent tx (call contract)
-      
+
       await this.self.transactionPool.transactionPool.findOneAndUpdate({
         id: content.tx.parent_tx_id,
       }, {
-          $set: {
-              status: TransactionDbStatus.confirmed,
-              executed_in: blockHash
-          }
+        $set: {
+          status: TransactionDbStatus.confirmed,
+          executed_in: blockHash
+        }
       });
     }
     else if (tx.op === VSCTransactionTypes.update_contract) {
       // pla: TBD update general stuff in regards to the contract... description etc.
+    }
+    else if (tx.op === VSCTransactionTypes.transferFunds) {
+      // in here update the balance sheet of a contract, do the calculation on top of the local state, then check the supplied hash if they are equal
     }
   }
 
@@ -315,12 +320,12 @@ export class ChainBridge {
     block_height: string
     timestamp: Date
   }) {
-    if(json.net_id !== this.self.config.get('network.id')) {
+    if (json.net_id !== this.self.config.get('network.id')) {
       this.self.logger.warn('received transaction from a different network id! - will not process')
       return;
     }
     console.log(json)
-    if(json.action === "enable_witness") {
+    if (json.action === CoreTransactionTypes.enable_witness) {
       await this.witnessDb.findOneAndUpdate({
         name: txInfo.account
       }, {
@@ -332,7 +337,7 @@ export class ChainBridge {
       }, {
         upsert: true
       })
-    } else if (json.action === 'disable_witness') {
+    } else if (json.action === CoreTransactionTypes.disable_witness) {
       await this.witnessDb.findOneAndUpdate({
         name: txInfo.account
       }, {
@@ -342,13 +347,13 @@ export class ChainBridge {
       }, {
         upsert: true
       })
-    } else if(json.action === "allow_witness") { 
+    } else if (json.action === CoreTransactionTypes.allow_witness) {
       const verifyData = await this.self.identity.verifyJWS(json.proof)
       console.log('allow witness', verifyData)
       console.log(tx, verifyData.payload)
-      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime() 
+      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime()
       console.log('tx diff', diff)
-      if(Math.abs(diff) < 30 * 1000) {
+      if (Math.abs(diff) < 30 * 1000) {
         try {
           await this.witnessDb.findOneAndUpdate({
             did: verifyData.payload.node_id
@@ -363,13 +368,13 @@ export class ChainBridge {
       } else {
         this.self.logger.warn(`received transaction with high lag. Possible replay attack - ${tx.transaction_id}`)
       }
-    } else if(json.action === "disallow_witness") {
+    } else if (json.action === CoreTransactionTypes.dissallow_witness) {
       const verifyData = await this.self.identity.verifyJWS(json.proof)
       console.log('allow witness', verifyData)
       console.log(tx, verifyData.payload)
-      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime() 
+      const diff = txInfo.timestamp.getTime() - new Date(verifyData.payload.ts).getTime()
       console.log('tx diff', diff)
-      if(Math.abs(diff) < 30 * 1000) {
+      if (Math.abs(diff) < 30 * 1000) {
         try {
           await this.witnessDb.findOneAndUpdate({
             did: verifyData.payload.node_id
@@ -379,25 +384,25 @@ export class ChainBridge {
             }
           })
         } catch {
-          
+
         }
       } else {
         this.self.logger.warn(`received transaction with high lag. Possible replay attack - ${tx.transaction_id}`)
       }
-    } else if (json.action === 'announce_block') {
+    } else if (json.action === CoreTransactionTypes.announce_block) {
 
       /**
        * TODO: Calculate expected witness account
        */
       const expectedAccount = ""
-      if(txInfo.account === expectedAccount) {
-        
+      if (txInfo.account === expectedAccount) {
+
       }
 
       const data = await this.self.ipfs.dag.get(CID.parse(json.block_hash))
 
       // console.log(JSON.stringify(data.value, null, 2))
-      for(let tx of data.value.txs) {
+      for (let tx of data.value.txs) {
         await this.self.transactionPool.transactionPool.findOneAndUpdate({
           id: tx.id.toString()
         }, {
@@ -419,21 +424,21 @@ export class ChainBridge {
         ...json,
         tx
       })
-    } else if (json.action === 'create_contract') {
+    } else if (json.action === CoreTransactionTypes.create_contract) {
       try {
         await this.self.contractEngine.contractDb.insertOne({
           id: tx.transaction_id,
           manifest_id: json.manifest_id,
           name: json.name,
           code: json.code,
-          state_merkle: (await this.self.ipfs.object.new({template: 'unixfs-dir'})).toString(),
+          state_merkle: (await this.self.ipfs.object.new({ template: 'unixfs-dir' })).toString(),
           creation_tx: tx.transaction_id,
           created_at: tx.expiration
         } as Contract)
-      } catch (err){
+      } catch (err) {
         this.self.logger.error('not able to inject contract into the local database', tx.transaction_id)
       }
-    } else if (json.action === 'join_contract') {
+    } else if (json.action === CoreTransactionTypes.join_contract) {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
         contract_id: json.contract_id,
         node_identity: json.node_identity
@@ -464,7 +469,7 @@ export class ChainBridge {
           }
         })
       }
-    } else if (json.action === 'leave_contract') {
+    } else if (json.action === CoreTransactionTypes.leave_contract) {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
         contract_id: json.contract_id,
         node_identity: json.node_identity
@@ -479,15 +484,43 @@ export class ChainBridge {
       } else {
         this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
-  } else {
+    } else if (json.action === CoreTransactionTypes.deposit_to_contract) {
+        // tbd, update balance sheet of contract here
+    } else if (json.action === CoreTransactionTypes.deposit_to_safe) {    
+      this.accountsSafeDb.findOneAndUpdate({
+        account: txInfo.account,        
+        }, {
+          $inc: {
+            balance: json.amount
+          },
+          $push: {
+            txs: tx.transaction_id
+          },
+          $set: {
+            stateHash: {
+              $sha256: {
+                $reduce: {
+                  input: "$txs",
+                  initialValue: "",
+                  in: { $concat: ["$$value", "$$this"] }
+                }
+              }
+            }
+          }
+        }, {
+        upsert: true
+      });
+    } else if (json.action === CoreTransactionTypes.withdraw_from_safe) {
+
+    } else {
       //Unrecognized transaction
       this.self.logger.warn('not recognized tx type', json.action)
     }
   }
-  
+
 
   async streamStart() {
-    
+
     const network_id = this.self.config.get('network.id')
 
     this.self.logger.debug('current network_id', network_id)
@@ -498,7 +531,7 @@ export class ChainBridge {
           id: 'hive_head',
         })) || ({} as any)
       ).block_num || networks[network_id].genesisDay  // pla: useful to set a manual startBlock here for debug purposes
-    
+
     this.self.logger.debug('starting block stream at height', startBlock)
     this.hiveStream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
@@ -506,15 +539,15 @@ export class ChainBridge {
       trackHead: true
     })
     void (async () => {
-      for await(let [block_height, block] of this.hiveStream.streamOut) {
+      for await (let [block_height, block] of this.hiveStream.streamOut) {
         this.block_height = block_height;
-        for(let tx of block.transactions) {
-          for(let [op_id, payload] of tx.operations) {
-            if(op_id === "account_update") {
+        for (let tx of block.transactions) {
+          for (let [op_id, payload] of tx.operations) {
+            if (op_id === "account_update") {
               try {
                 const json_metadata = JSON.parse(payload.json_metadata)
-                if(json_metadata.vsc_node) {
-                  const {payload: proof, kid} = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
+                if (json_metadata.vsc_node) {
+                  const { payload: proof, kid } = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
                   const [did] = kid.split('#')
                   console.log(proof)
 
@@ -524,11 +557,11 @@ export class ChainBridge {
                   }) || {} as any
 
                   const opts = {}
-                  if(proof.witness.enabled && witnessRecord.enabled !== true) {
-                      opts['enabled_at'] = block_height
-                      opts['disabled_at'] = null
-                      opts['disabled_reason'] = null
-                  } else if(proof.witness.enabled === false && witnessRecord.enabled === true) {
+                  if (proof.witness.enabled && witnessRecord.enabled !== true) {
+                    opts['enabled_at'] = block_height
+                    opts['disabled_at'] = null
+                    opts['disabled_reason'] = null
+                  } else if (proof.witness.enabled === false && witnessRecord.enabled === true) {
                     // opts['enabled_at'] = null
                     opts['disabled_at'] = block_height
                     opts["disabled_reason"] = proof.witness.disabled_reason
@@ -553,10 +586,10 @@ export class ChainBridge {
                   })
                 }
               } catch {
-                
+
               }
             }
-            if(op_id === "custom_json") {
+            if (op_id === "custom_json") {
               if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
                 const json = JSON.parse(payload.json)
                 await this.processCoreTransaction(tx, json, {
@@ -565,11 +598,24 @@ export class ChainBridge {
                   timestamp: new Date(block.timestamp + "Z")
                 })
               }
-            }
+            } else if (op_id === "transfer") {
+              // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
+              if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
+                if (payload.memo) {
+                  const json = JSON.parse(payload.memo)
+                  await this.processCoreTransaction(tx, json, {
+                    account: payload.from,
+                    block_height,
+                    timestamp: new Date(block.timestamp + "Z")
+                  })
+                } else {
+                  this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
+                }              
+            }             
           }
         }
 
-        if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) { 
+        if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
           this.self.logger.debug(`current block_head height ${block_height}`)
         }
         await this.stateHeaders.findOneAndUpdate(
@@ -591,14 +637,14 @@ export class ChainBridge {
   }
 
   async streamStop() {
-    
+
   }
 
   /**
    * Verifies streaming is working correctly
    */
   async streamCheck() {
-    if(this.hiveStream.blockLag > 300 && typeof this.hiveStream.blockLag === 'number') {
+    if (this.hiveStream.blockLag > 300 && typeof this.hiveStream.blockLag === 'number') {
       // await this.self.nodeInfo.announceNode({
       //   action: "disable_witness",
       //   disable_reason: "sync_fail"
@@ -612,9 +658,9 @@ export class ChainBridge {
 
       await this.self.nodeInfo.announceNode()
     }
-    
-    if(this.syncedAt !== null) {
-      if(this.hiveStream.blockLag > 300) {
+
+    if (this.syncedAt !== null) {
+      if (this.hiveStream.blockLag > 300) {
         // await this.self.nodeInfo.announceNode({
         //   action: "disable_witness",
         //   disable_reason: "sync_fail"
@@ -627,15 +673,15 @@ export class ChainBridge {
         })
 
         await this.self.nodeInfo.announceNode()
-        
+
         this.hiveStream.killStream()
         this.streamStart()
         this.syncedAt = null
 
-        
+
         return;
       }
-      if(this.hiveStream.blockLag > 100) {
+      if (this.hiveStream.blockLag > 100) {
         console.log('KILLING STREAM', this.hiveStream.blockLag)
         this.hiveStream.killStream()
         this.streamStart()
@@ -644,7 +690,7 @@ export class ChainBridge {
         return
       }
     }
-    if(this.syncedAt === null && this.hiveStream.blockLag < 5) {
+    if (this.syncedAt === null && this.hiveStream.blockLag < 5) {
       console.log('[streamCheck] System synced!')
       this.syncedAt = new Date();
       await this.self.nodeInfo.nodeStatus.deleteMany({
@@ -657,10 +703,11 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
+    this.accountsSafeDb = this.self.db.collection('account_funds')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 
-    this.ipfsQueue = new (await import('p-queue')).default({concurrency: 4})
+    this.ipfsQueue = new (await import('p-queue')).default({ concurrency: 4 })
 
     this.witness = new WitnessService(this.self)
 
@@ -677,19 +724,19 @@ export class ChainBridge {
     // NodeSchedule.scheduleJob('* * * * *', async () => {
     //   await this.streamCheck()
     // })
-    
+
     setInterval(() => {
       this.streamCheck()
     }, 5000)
 
     await this.streamStart()
-    
+
     const network_id = this.self.config.get('network.id')
-    
+
     void (async () => {
-      for await(let block of this.streamOut) {
+      for await (let block of this.streamOut) {
         console.log('vsc block', block)
-        
+
         const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
         console.log(blockContent)
         await this.blockHeaders.insertOne({
@@ -702,7 +749,7 @@ export class ChainBridge {
           // }
         })
 
-        for(let tx of blockContent.txs) {
+        for (let tx of blockContent.txs) {
           this.processVSCBlockTransaction(tx, block.block_hash);
         }
       }
@@ -713,35 +760,35 @@ export class ChainBridge {
     }, 60 * 1000)
 
     let producingBlock = false;
-    setInterval(async() => {
-        if (this.hiveStream.blockLag < 5) {
-          //Can produce a block
-          const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
-          if((offsetBlock %  networks[network_id].roundLength) === 0) {
-            if(!producingBlock) {
-              const nodeInfo = await this.witnessDb.findOne({
-                did: this.self.identity.id
-              })
-              if(nodeInfo) {
-                const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
-                  return e.bn === offsetBlock
-                }))
-                // console.log('scheduleSlot', scheduleSlot)
-                if(nodeInfo.enabled && nodeInfo.trusted) {
+    setInterval(async () => {
+      if (this.hiveStream.blockLag < 5) {
+        //Can produce a block
+        const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
+        if ((offsetBlock % networks[network_id].roundLength) === 0) {
+          if (!producingBlock) {
+            const nodeInfo = await this.witnessDb.findOne({
+              did: this.self.identity.id
+            })
+            if (nodeInfo) {
+              const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
+                return e.bn === offsetBlock
+              }))
+              // console.log('scheduleSlot', scheduleSlot)
+              if (nodeInfo.enabled && nodeInfo.trusted) {
 
-                  
-                  if(scheduleSlot?.did === this.self.identity.id) {
-                    this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
-                    producingBlock = true;
-                    await this.createBlock()
-                  }
+
+                if (scheduleSlot?.did === this.self.identity.id) {
+                  this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
+                  producingBlock = true;
+                  await this.createBlock()
                 }
               }
             }
-          } else {
-            producingBlock = false;
           }
+        } else {
+          producingBlock = false;
         }
+      }
     }, 300)
   }
 }

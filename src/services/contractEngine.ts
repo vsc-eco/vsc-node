@@ -8,6 +8,7 @@ import { CoreService } from './index'
 import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
+import { DID } from 'dids'
 
 class MockDate extends Date {
 
@@ -87,6 +88,15 @@ export class ContractEngine {
     this.self = self
 
     this.contractCache = {}
+  }
+
+  private async transferFunds(to: DID, amount: number) {
+    // to be implemented
+  }
+
+  private async withdrawFunds(amount: number) {
+    // to be implemented
+    // uses transferFunds under the hood
   }
 
   private async contractStateExecutor(id: string) {
@@ -400,7 +410,9 @@ export class ContractEngine {
                 },
                 tx_id: op.id,
                 included_in: op.included_in
-              }
+              },
+              transferFunds: this.transferFunds,
+              withdrawFunds: this.withdrawFunds
             },
             done: () => {
               return resolve(state.finish())

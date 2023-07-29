@@ -13,6 +13,12 @@ export interface BlockRecord {
   timestamp: Date | string
 }
 
+export interface AccountSafe {
+  id: string; // the did of the account
+  amount: number;
+  stateHash: any; // on the fly calculated hash of all prior transactions that led to the current amount of funds for quick verification
+  txs: Array<string> // all transactions that led to the current amount of funds, for debugging purposes, produce the stateHash
+}
 
 export interface TransactionContainer {
   id?: string //Created during signing

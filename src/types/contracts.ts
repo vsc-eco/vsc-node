@@ -21,7 +21,13 @@ export interface Contract {
   code: string
   state_merkle?: string //V0 of contract state
   creation_tx?: string
-  created_at?: Date
+  created_at?: Date,
+  balance: ContractBalanceSheet
+}
+
+export interface ContractBalanceSheet {
+  hash: string
+  // TBD
 }
 
 export interface ContractCommitment {

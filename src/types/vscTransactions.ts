@@ -43,4 +43,5 @@ export enum VSCTransactionTypes {
     call_contract = "call_contract",
     contract_output = "contract_output",
     update_contract = "update_contract",
+    transferFunds = "transfer_funds",
 }

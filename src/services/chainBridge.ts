@@ -645,9 +645,8 @@ export class ChainBridge {
 
               }
             }
-
-            if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
-              if (op_id === "custom_json") {
+            if(op_id === "custom_json") {
+              if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
                 const json = JSON.parse(payload.json)
                 await this.processCoreTransaction(tx, json, {
                   account: payload.required_posting_auths[0],
@@ -761,8 +760,6 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-    this.accountBalanceDb = this.self.db.collection('account_balance')
-    this.contractBalanceDb = this.self.db.collection('contract_balance')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 

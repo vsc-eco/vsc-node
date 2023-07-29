@@ -19,6 +19,7 @@ export class OutputActions {
   constructor() {
     this.opStack = []
   }
+import { DID } from 'dids'
 
   addHiveOp(input: HiveOps) {
     return this.opStack.push(input)

@@ -509,6 +509,24 @@ export class ChainBridge {
       for await(let [block_height, block] of this.hiveStream.streamOut) {
         this.block_height = block_height;
         for(let tx of block.transactions) {
+          const headerOp = tx.operations[tx.operations.length - 1]
+          if(headerOp[0] === "custom_json") {
+            if (headerOp[1].required_posting_auths.includes(networks[this.self.config.get('network.id')].multisigAccount)) {
+              try {
+                const json = JSON.parse(headerOp[1].json)
+                
+                await this.self.transactionPool.transactionPool.findOneAndUpdate({
+                  id: json.ref_id
+                }, {
+                  $set: {
+                    'output_actions.$.ref_id': tx.id
+                  }
+                })
+              } catch {
+
+              }
+            }
+          }
           for(let [op_id, payload] of tx.operations) {
             if(op_id === "account_update") {
               try {

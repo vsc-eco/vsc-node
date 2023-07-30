@@ -279,8 +279,12 @@ export class PeerChannel {
             }, options.streamTimeout)
         }
         this.events.on('message', (msg) => {
+
             if(req_id === msg.req_id) {
                 if(msg.flags && msg.flags.includes('end')) {
+                    if(options.responseOrigin === 'many') {
+                        return;
+                    }
                     drain.end()
                 } else {
                     drain.push(msg)

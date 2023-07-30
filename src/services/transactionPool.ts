@@ -95,7 +95,8 @@ export class TransactionPoolService {
         output: null,
         headers: {
           contract_id: (txContainer.tx as any).contract_id
-        }
+        },
+        output_actions: (txContainer as any).tx.output_actions
       })
       this.self.logger.debug('injected tx into local db', tx)
     } catch (ex) {

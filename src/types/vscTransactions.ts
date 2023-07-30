@@ -33,6 +33,7 @@ export interface ContractOutput extends CoreVSCTransaction {
         log: JsonPatchOp[]
       }
     >
+    chain_actions: any | null
 }
 
 export interface TransactionContractLogMatrix {

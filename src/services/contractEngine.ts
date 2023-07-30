@@ -9,7 +9,21 @@ import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
 import { DID } from 'dids'
+import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 
+export type HiveOps = CustomJsonOperation | TransferOperation
+
+export class OutputActions {
+  opStack: Array<any>
+
+  constructor() {
+    this.opStack = []
+  }
+
+  addHiveOp(input: HiveOps) {
+    return this.opStack.push(input)
+  }
+}
 class MockDate extends Date {
 
   constructor(val) {
@@ -369,6 +383,7 @@ export class ContractEngine {
     
     const script = new VMScript(code).compile()
 
+    let chainActions = null
     let stateMerkle
     let startMerkle
     for (let op of operations) {
@@ -391,6 +406,7 @@ export class ContractEngine {
         const vm = new NodeVM({
           sandbox: {
             Date: MockDate,
+            OutputActions,
             utils: {
               SHA256: (payloadToHash) => {
                 if (typeof payloadToHash === 'string') {
@@ -399,6 +415,11 @@ export class ContractEngine {
     
                 return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
               },
+            },
+            output: {
+              setChainActions: (actions) => {
+                chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
+              }
             },
             api: {
               action: opData.action,
@@ -516,6 +537,7 @@ export class ContractEngine {
       }),
       state_merkle: stateMerkle.toString(),
       log_matrix,
+      chain_actions: chainActions
     } as ContractOutput
   }
 

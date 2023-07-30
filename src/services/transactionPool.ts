@@ -184,12 +184,13 @@ export class TransactionPoolService {
   // for some use cases, eg a deposit _to a contract_, this is necessary as we need the information of the target contract to deposit
   // if a user sends funds to the multi sig address without any attached data that tells us what he wants to do with his funds
   // we default to deposit it into his safe
-  static async deposit(args: { amount: number, contractId?: string }, setup: {identity, config, ipfsClient, logger}) {
+  static async deposit(args: { amount: number, contractId?: string, to?: string }, setup: {identity, config, ipfsClient, logger}) {
     setup.logger.info(`Depositing funds (${args.amount}) to personal safe`)
     const memo = JSON.stringify({
       net_id: setup.config.get('network.id'),
-      action: args.contractId ? CoreTransactionTypes.deposit_to_contract : CoreTransactionTypes.deposit_to_safe,
-      contractId: args.contractId
+      action: args.contractId ? CoreTransactionTypes.deposit_to_contract : CoreTransactionTypes.deposit_to_account,
+      contractId: args.contractId,
+      to: args.to
     } as Deposit)
 
     const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, memo)

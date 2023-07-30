@@ -15,7 +15,7 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { AccountSafe, BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
+import { AccountDeposit, AccountSafe, BlockRecord, ContractDeposit, Deposit, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
@@ -29,7 +29,8 @@ export class ChainBridge {
   contracts: Collection
   witness: WitnessService
   witnessDb: Collection
-  accountsSafeDb: Collection<AccountSafe>
+  accountBalanceDb: Collection<Deposit>
+  contractBalanceDb: Collection<Deposit>
   events: EventEmitter
   streamOut: Pushable.Pushable<any>
 
@@ -484,32 +485,35 @@ export class ChainBridge {
       } else {
         this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
-    } else if (json.action === CoreTransactionTypes.deposit_to_contract) {
-        // tbd, update balance sheet of contract here
-    } else if (json.action === CoreTransactionTypes.deposit_to_safe) {    
-      this.accountsSafeDb.findOneAndUpdate({
-        account: txInfo.account,        
-        }, {
-          $inc: {
-            balance: json.amount
-          },
-          $push: {
-            txs: tx.transaction_id
-          },
-          $set: {
-            stateHash: {
-              $sha256: {
-                $reduce: {
-                  input: "$txs",
-                  initialValue: "",
-                  in: { $concat: ["$$value", "$$this"] }
-                }
-              }
-            }
-          }
-        }, {
-        upsert: true
-      });
+    } else if (json.action === CoreTransactionTypes.deposit_to_account || json.action === CoreTransactionTypes.deposit_to_contract) {
+      if (json.to === process.env.MULTISIG_ACCOUNT) {
+        if (json.action === CoreTransactionTypes.deposit_to_contract) {      
+          this.contractBalanceDb.insertOne(
+            {
+              id: tx.transaction_id,
+              original_deposit: json.amount,
+              active_balance: json.amount,
+              state_hash: null,
+              created_at: tx.expiration,
+              balance_owner: json.to ?? txInfo.account, // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
+              from: txInfo.account,
+              contract_id: json.contract_id
+            } as ContractDeposit);        
+        } else if (json.action === CoreTransactionTypes.deposit_to_account) {            
+          this.accountBalanceDb.insertOne({
+            id: tx.transaction_id,
+            original_deposit: json.amount,
+            active_balance: json.amount,
+            state_hash: null,
+            created_at: tx.expiration,
+            balance_owner: json.to ?? txInfo.account,
+            from: txInfo.account
+          } as AccountDeposit);
+        }
+      }
+      else {
+        this.self.logger.warn(`received deposit (${json.action}), but the target account is not the multisig acc`, tx.transaction_id)
+      }
     } else if (json.action === CoreTransactionTypes.withdraw_from_safe) {
 
     } else {
@@ -517,7 +521,40 @@ export class ChainBridge {
       this.self.logger.warn('not recognized tx type', json.action)
     }
   }
+  
+  // pla: maybe move calc functions to different class
+  async calculateAccountBalance(accountId: string) {
+    let balance = 0
+    await this.accountBalanceDb.find({
+      balance_owner: accountId
+    }).
+      forEach((deposit) => {
+        balance += deposit.active_balance
+    })
 
+    return balance;
+  }
+
+  async calculateAccountBalanceStateHash(accountId: string) {
+    
+  }
+
+  async calculateContractBalanceStateHash(accountId: string) {
+    
+  }
+
+  async calculateContractBalance(accountId: string, contractId: string) {
+    let balance = 0
+    await this.contractBalanceDb.find({
+      balance_owner: accountId,
+      contract_id: contractId
+    }).
+      forEach((deposit) => {
+        balance += deposit.active_balance
+    })
+
+    return balance;
+  }
 
   async streamStart() {
 
@@ -589,29 +626,31 @@ export class ChainBridge {
 
               }
             }
-            if (op_id === "custom_json") {
-              if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
+
+            if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
+              if (op_id === "custom_json") {
                 const json = JSON.parse(payload.json)
                 await this.processCoreTransaction(tx, json, {
                   account: payload.required_posting_auths[0],
                   block_height,
                   timestamp: new Date(block.timestamp + "Z")
-                })
-              }
-            } else if (op_id === "transfer") {
-              // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
-              if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
-                if (payload.memo) {
-                  const json = JSON.parse(payload.memo)
-                  await this.processCoreTransaction(tx, json, {
-                    account: payload.from,
-                    block_height,
-                    timestamp: new Date(block.timestamp + "Z")
-                  })
-                } else {
-                  this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
-                }              
-            }             
+                })              
+              } else if (op_id === "transfer") {
+                // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
+                if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
+                  if (payload.memo) {
+                    const json = JSON.parse(payload.memo)
+                    await this.processCoreTransaction(tx, json, {
+                      account: payload.from,
+                      block_height,
+                      timestamp: new Date(block.timestamp + "Z")
+                    })
+                  } else {
+                    this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
+                  }     
+                }         
+              }  
+            }           
           }
         }
 
@@ -703,7 +742,8 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-    this.accountsSafeDb = this.self.db.collection('account_funds')
+    this.accountBalanceDb = this.self.db.collection('account_balance')
+    this.contractBalanceDb = this.self.db.collection('contract_balance')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 

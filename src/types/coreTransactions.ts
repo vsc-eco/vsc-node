@@ -8,7 +8,8 @@ export interface CoreBaseTransaction {
 
 
 export interface Deposit extends CoreBaseTransaction {
-  action: CoreTransactionTypes.deposit_to_contract | CoreTransactionTypes.deposit_to_safe;  
+  action: CoreTransactionTypes.deposit_to_contract | CoreTransactionTypes.deposit_to_account;  
+  to?: string; // pla: deposit on someone elses behave
   contract_id?: string;
 }
 
@@ -62,7 +63,7 @@ export enum CoreTransactionTypes {
     join_contract = "join_contract", //Joins a contract as an executor
     leave_contract = "leave_contract", //Leaves a contract as an executor
     deposit_to_contract = "deposit_to_contract",
-    deposit_to_safe = "deposit_to_safe",
+    deposit_to_account = "deposit_to_account",
     withdraw_from_safe = "withdraw_from_safe",
 
     //Maybe? Not sure where it fits

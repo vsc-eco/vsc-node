@@ -22,12 +22,7 @@ export interface Contract {
   state_merkle?: string //V0 of contract state
   creation_tx?: string
   created_at?: Date,
-  balance: ContractBalanceSheet
-}
-
-export interface ContractBalanceSheet {
-  hash: string
-  // TBD
+  balanceTransactions?: string[] //List of transaction ids that have affected the balance of the contract
 }
 
 export interface ContractCommitment {

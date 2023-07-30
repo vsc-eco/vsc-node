@@ -13,12 +13,24 @@ export interface BlockRecord {
   timestamp: Date | string
 }
 
-export interface AccountSafe {
-  id: string; // the did of the account
-  amount: number;
-  stateHash: any; // on the fly calculated hash of all prior transactions that led to the current amount of funds for quick verification
-  txs: Array<string> // all transactions that led to the current amount of funds, for debugging purposes, produce the stateHash
+// this interface is used for deposits to a contract and to a users personal balance (safe)
+export interface Deposit {
+  from: string; // the account id that the funds are coming from
+  id: string; // the initial transaction id (may be a vsc or a hive tx id)
+  original_deposit: number; // the original amount deposited
+  active_balance: number; // the current amount of funds available for withdrawal
+  state_hash: any; // hash of all prior transactions that led to the current active amount of funds for quick verification
+  created_at: Date;
+  balance_owner: string; // the account id that owns the balance
 }
+
+// pla: extra interfaces for the different deposit types as they may diverge
+
+export interface ContractDeposit extends Deposit {
+  contract_id: string;
+}
+
+export interface AccountDeposit extends Deposit {}
 
 export interface TransactionContainer {
   id?: string //Created during signing

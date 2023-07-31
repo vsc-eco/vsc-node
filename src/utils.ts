@@ -398,3 +398,23 @@ export async function getCommitHash() {
 
   return buf.toString();
 }
+
+export function calcBlockInterval(options: {
+  currentBlock: number,
+  intervalLength: number,
+  marginLength?: number
+}) {
+
+  const {currentBlock, intervalLength} = options;
+
+  const currentMod = currentBlock % intervalLength
+  const last = currentBlock - currentMod
+
+  return {
+    next: currentBlock + (intervalLength - currentMod),
+    last,
+    currentMod,
+    isActive: currentMod === 0,
+    isMarginActive: options.marginLength ? currentMod < options.marginLength : false
+  }
+}

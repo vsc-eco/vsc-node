@@ -5,6 +5,7 @@ export * from './contracts'
 //Engrained into the blockchain for reference
 export interface BlockRecord {
   __t: 'vsc-block'
+  __v: '0.1'
   state_updates: Record<string, string>
   //txs
   txs: Array<TransactionConfirmed>
@@ -40,6 +41,7 @@ export interface TransactionDbRecord {
   accessible: boolean
 
   headers: Record<string, any>
+  output_actions?: any
 }
 
 export enum TransactionDbStatus {
@@ -89,4 +91,13 @@ export interface LoggerConfig {
   prefix: string,
   level: string,
   printMetadata: boolean
+}
+
+
+export interface DidAuthRecord {
+  account: string
+  authority_type: "posting" | "active"
+  valid_from: number
+  valid_to: number | null
+  tx_ref
 }

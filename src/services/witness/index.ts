@@ -7,6 +7,7 @@ import shuffleSeed from 'shuffle-seed'
 import { CoreService } from "../";
 import { HiveClient } from "../../utils";
 import moment from "moment";
+import { createSafeDivision } from "./multisig";
 
 
 
@@ -56,10 +57,40 @@ export class WitnessService {
       })
       .toArray()
 
+      console.log('witnessNodes', witnessNodes.map(e => e.account), witnessNodes.map(e => e.account).length)
+
+      // console.log(JSON.stringify({
+      //   $or: [
+      //     {
+      //       disabled_at: {
+      //         $gt: consensusRound.pastRoundHash,
+      //       },
+      //     },
+      //     {
+      //       disabled_at: {
+      //         $exists: false,
+      //       },
+      //     },
+      //     {
+      //       disabled_at: {
+      //         $eq: null
+      //       },
+      //     },
+      //   ],
+      //   trusted: true,
+      //   net_id: this.self.config.get('network.id'),
+      //   enabled_at: {
+      //     $lt: consensusRound.pastRoundHash,
+      //   },
+      //   // last_signed: {
+      //   //   $gt: moment().subtract('5', 'day').toDate()
+      //   // }
+      // }))
+
       // console.log(
       //   witnessNodes.map((e) => e.account),
       //   witnessNodes.map((e) => e.account).length,
-      //   JSON.stringify({
+      //   /*JSON.stringify({
       //     enabled_at: {
       //       $lt: consensusRound.pastRoundHash,
       //     },
@@ -80,11 +111,16 @@ export class WitnessService {
       //         },
       //       },
       //     ],
-      //   }, null, 2)
+      //   }, null, 2)*/
       // )
     const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
-    const blockHash = block.transaction_merkle_root
+    
 
+    const data = createSafeDivision({
+      factorMin: 6,
+      factorMax: 11,
+      map: witnessNodes
+    })
     let outSchedule = []
     for (let x = 0; x < totalRounds; x++) {
       if (witnessNodes[x % witnessNodes.length]) {
@@ -159,6 +195,7 @@ export class WitnessService {
     setInterval(async () => {
       try {
         this.witnessSchedule = await this.weightedSchedule(60)
+        // console.log('witnessSchedule', this.witnessSchedule)
       } catch (ex) {
         console.log(ex)
       }

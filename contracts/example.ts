@@ -1,4 +1,4 @@
-
+import _ from '../src/environment'
 
 actions.init = async () => {
     // console.log('hello world! This contract is ready for action!')
@@ -60,4 +60,11 @@ actions.dupTo = async ({
 
 actions.transfer = async ({}) => {
 
+}
+
+actions.postJson = ({json}) => {
+    const outputActions = new OutputActions();
+    outputActions.addHiveOp(['custom_json', {json: JSON.stringify(json), id: 'test'}])
+    output.setChainActions(outputActions)
+    
 }

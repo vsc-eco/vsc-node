@@ -265,7 +265,8 @@ export class PeerChannel {
         payload: any,
         // stream: Pushable<any>,c
         mode?: "stream" | "basic",
-        streamTimeout?: number
+        streamTimeout?: number,
+        responseOrigin?: "single" | "many"
     }): Promise<{
         drain: Pushable<any>
         req_id: string

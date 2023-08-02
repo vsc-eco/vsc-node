@@ -572,6 +572,10 @@ export class ChainBridge {
         })) || ({} as any)
       ).block_num || networks[network_id].genesisDay  // pla: useful to set a manual startBlock here for debug purposes
 
+    if (!isNaN(this.self.config.get('debug.startBlock'))) {
+      startBlock = +this.self.config.get('debug.startBlock');
+    }
+
     this.self.logger.debug('starting block stream at height', startBlock)
     this.hiveStream = await fastStream.create({
       //startBlock: networks[network_id].genesisDay,
@@ -655,23 +659,23 @@ export class ChainBridge {
                   block_height,
                   timestamp: new Date(block.timestamp + "Z")
                 })              
-              } else if (op_id === "transfer") {
-                // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
-                if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
-                  if (payload.memo) {
-                    const json = JSON.parse(payload.memo)
-                    await this.processCoreTransaction(tx, json, {
-                      account: payload.from,
-                      block_height,
-                      timestamp: new Date(block.timestamp + "Z")
-                    })
-                  } else {
-                    this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
-                  }     
-                }         
-              }  
-            }           
-          }
+              }
+            } else if (op_id === "transfer") {
+              // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
+              if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
+                if (payload.memo) {
+                  const json = JSON.parse(payload.memo)
+                  await this.processCoreTransaction(tx, json, {
+                    account: payload.from, // from or payload.required_posting_auths[0]?
+                    block_height,
+                    timestamp: new Date(block.timestamp + "Z")
+                  })
+                } else {
+                  this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
+                }     
+              }         
+            }  
+          }           
         }
 
         if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {

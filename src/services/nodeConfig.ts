@@ -155,6 +155,10 @@ export class Config {
       logger: {
         printMetadata: true,
         level: "debug"
+      },
+      debug: {
+        overrideSchedule: false,
+        startBlock: null
       }
     }
 

@@ -18,7 +18,7 @@ import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract } from '../types/coreTransactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, Withdraw } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
 const {BloomFilter} = BloomFilters
@@ -196,6 +196,20 @@ export class TransactionPoolService {
 
     const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, memo)
 
+    setup.logger.debug('result', result)
+    return result;
+  }
+
+  static async withdraw(args: { amount: number}, setup: {identity, config, ipfsClient, logger}) {
+    setup.logger.info(`Withdrawing funds (${args.amount}) from personal account`)
+
+    const json = {
+      net_id: setup.config.get('network.id'),
+      action: CoreTransactionTypes.withdraw_from_account,
+      amount: args.amount
+    } as Withdraw
+
+    const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
     setup.logger.debug('result', result)
     return result;
   }

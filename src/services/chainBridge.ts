@@ -489,7 +489,7 @@ export class ChainBridge {
     } else if (json.action === CoreTransactionTypes.deposit_to_account || json.action === CoreTransactionTypes.deposit_to_contract) {
       if (json.to === process.env.MULTISIG_ACCOUNT) {
         if (json.action === CoreTransactionTypes.deposit_to_contract) {      
-          this.contractBalanceDb.insertOne(
+          await this.contractBalanceDb.insertOne(
             {
               id: tx.transaction_id,
               original_deposit: json.amount,
@@ -501,7 +501,7 @@ export class ChainBridge {
               contract_id: json.contract_id
             } as ContractDeposit);        
         } else if (json.action === CoreTransactionTypes.deposit_to_account) {            
-          this.accountBalanceDb.insertOne({
+          await this.accountBalanceDb.insertOne({
             id: tx.transaction_id,
             original_deposit: json.amount,
             active_balance: json.amount,
@@ -515,8 +515,10 @@ export class ChainBridge {
       else {
         this.self.logger.warn(`received deposit (${json.action}), but the target account is not the multisig acc`, tx.transaction_id)
       }
-    } else if (json.action === CoreTransactionTypes.withdraw_from_safe) {
-
+    } else if (json.action === CoreTransactionTypes.withdraw_from_account) {
+      if (this.self.config.get('multisig.enabled')) {
+        // pla: if a withdraw tx has been received, every witness that is part of the multisig should prepare/ send a tx
+      }
     } else {
       //Unrecognized transaction
       this.self.logger.warn('not recognized tx type', json.action)

@@ -434,7 +434,10 @@ export class ContractEngine {
                 included_in: op.included_in
               },
               transferFunds: this.transferFunds,
-              withdrawFunds: this.withdrawFunds
+              withdrawFunds: this.withdrawFunds,
+              getBalance: (accountId: string) => {
+                return this.self.chainBridge.calculateContractBalance(accountId, id)
+              }
             },
             done: () => {
               return resolve(state.finish())

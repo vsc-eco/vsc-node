@@ -6,11 +6,16 @@ export interface CoreBaseTransaction {
   net_id: string;
 }
 
-
 export interface Deposit extends CoreBaseTransaction {
   action: CoreTransactionTypes.deposit_to_contract | CoreTransactionTypes.deposit_to_account;  
   to?: string; // pla: deposit on someone elses behave
   contract_id?: string;
+}
+
+// pla: withdraws from the user safe
+export interface Withdraw extends CoreBaseTransaction {
+  action: CoreTransactionTypes.withdraw_from_account;
+  amount: number;
 }
 
 export interface AnnounceBlock extends CoreBaseTransaction {
@@ -44,12 +49,6 @@ export interface LeaveContract extends CoreBaseTransaction {
   node_id: string;
 }
 
-// pla: withdraws from the user safe
-export interface Withdraw extends CoreBaseTransaction {
-  action: CoreTransactionTypes.withdraw_from_safe;
-  
-}
-
 export enum CoreTransactionTypes {
     announce_block = "announce_block",
     announce_leaf = "announce_leaf",
@@ -64,7 +63,7 @@ export enum CoreTransactionTypes {
     leave_contract = "leave_contract", //Leaves a contract as an executor
     deposit_to_contract = "deposit_to_contract",
     deposit_to_account = "deposit_to_account",
-    withdraw_from_safe = "withdraw_from_safe",
+    withdraw_from_account = "withdraw_from_account",
 
     //Maybe? Not sure where it fits
     link_did = "link_did",

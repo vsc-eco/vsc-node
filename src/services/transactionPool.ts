@@ -316,6 +316,18 @@ export class TransactionPoolService {
     this.contractCommitmentOperation(args, setup, CoreTransactionTypes.leave_contract);
   }
 
+  async initiateWithdraw() {
+
+  }
+
+  async initiateTransfer(from: string, to: string, amount: number) {
+    const isMultisigApproved = true; 
+    if (isMultisigApproved) {
+      // UPDATE DATABASE DEPOSIT ENTRIES HERE, NO DONT DO THAT, WE NEED A NEW TRANSFER TYPE FOR "MULTISIG CONFIRMED TRANSFER" THAT IS THEN INTERPRETED BY EVERY NODE
+      // finalize and settle the approved transaction
+      // TransactionPoolService.createCoreTransferTransaction(); 
+    }
+  }
 
   async processMempoolTX(txId: string) {
     let auths = []

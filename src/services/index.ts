@@ -24,13 +24,8 @@ import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
 import networks from "./networks";
 interface CoreOptions {
-    pathSuffix?: string
     dbSuffix?: string
-    ipfsApi?: string
-    debugHelper?: {
-        nodePublicAdresses?: Array<string>,
-        serviceName?: string
-    }
+
 }
 
 export class CoreService {
@@ -42,7 +37,6 @@ export class CoreService {
     db: Db;
     chainBridge: ChainBridge;
     contractEngine: ContractEngine;
-    options: CoreOptions;
     p2pService: P2PService;
     contractWorker: ContractWorker;
     logger: winston.Logger;
@@ -53,24 +47,12 @@ export class CoreService {
     networkId: any;
     multisig: MultisigCore;
 
-    constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
-        this.options = options || {};
-
-        if(!this.options.ipfsApi) {
-            this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"
-        }
-        if(!this.options.debugHelper) {
-            this.options.debugHelper = {}
-            if (!this.options.debugHelper.nodePublicAdresses) {
-                this.options.debugHelper.nodePublicAdresses = []
-            }
-        }
-    }
+    constructor(loggerSettings?: LoggerConfig) {}
 
     private async setupKeys() {
         let keyBackup = {}
         let noBackup = false;
-        let keyBackupPath = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-seed-backup-' + this.options.pathSuffix) + ".json" : Path.join(os.homedir(), '.vsc-seed-backup.json')
+        let keyBackupPath = Path.join(this.getConfigDir, '.vsc-seed-backup.json')
 
         //Check if identity already exists, if not load keybackup if exists
         try {
@@ -82,7 +64,6 @@ export class CoreService {
                 } catch {
     
                 }
-                Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix)
             }
         } catch {
             noBackup = true
@@ -126,22 +107,50 @@ export class CoreService {
         }
     }
 
-    
+    get getConfigDir(): string {
+        return this.config.get('setupIdentification.configSuffix') !== '' ? Path.join(os.homedir(), '.vsc-node-' + this.config.get('setupIdentification.configSuffix')) : Path.join(os.homedir(), '.vsc-node')
+    }
+
+    async dropTables() {
+        const collections = [
+            'state_headers',
+            'block_headers',
+            'witnesses',
+            'account_balances',
+            'contract_balances',
+            'account_balance_operations',
+            'contract_balance_operations',
+            'contracts',
+            'contract_commitment',
+            'contract_log',
+            'node_status',
+            'peers',
+            'transaction_pool',
+            'block_headers'
+        ]
+
+        for(let collection of collections) {
+            await this.db.collection(collection).deleteMany({})
+        }
+    }
 
     async start() {
         console.log('Starting')
-        this.ipfs = IPFSHTTP.create({url: process.env.IPFS_HOST || "/ip4/127.0.0.1/tcp/5001"});
-        const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
-        this.config = new Config(homeDir)
+        this.ipfs = IPFSHTTP.create({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')});
+        this.config = new Config(this.getConfigDir)
         await this.config.open()
         this.networkId = this.config.get('network.id')
         this.logger = getLogger(this.loggerSettings || {
-            prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
+            prefix: 'core',
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
         })
-        this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
+        this.db = this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
         await mongo.connect()
+        if (this.config.get('debug.dropTablesOnStartup')) {
+            await this.dropTables();
+        }     
+
         await this.setupKeys();
 
         console.log('Starting part way')

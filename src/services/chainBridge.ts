@@ -15,7 +15,7 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { AccountDeposit, AccountSafe, BlockRecord, ContractDeposit, Deposit, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
+import { AccountDeposit, AccountSafe, BlockRecord, ContractDeposit, Deposit, TransactionConfirmed, TransactionDbStatus, TransactionDbType, Transfer } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
@@ -30,7 +30,9 @@ export class ChainBridge {
   witness: WitnessService
   witnessDb: Collection
   accountBalanceDb: Collection<Deposit>
+  accountBalanceOperationsDb: Collection<Transfer>
   contractBalanceDb: Collection<Deposit>
+  contractBalanceOperationsDb: Collection<Transfer>
   events: EventEmitter
   streamOut: Pushable.Pushable<any>
 
@@ -421,7 +423,7 @@ export class ChainBridge {
         console.log(verifyData, txData, txData2)
       }
 
-      // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
+      // TODO, determine if the received block was proposed by the correct witness
       this.events.emit('vsc_block', {
         ...json,
         tx
@@ -538,6 +540,13 @@ export class ChainBridge {
     return balance;
   }
 
+  // pla: check if the user actually has the active funds he/she claims to have
+  // just database checks basically, will be done by every one of the nodes that signs the multisig
+  // should work with contracts equally as with account balances!
+  async verifyTransferAttempt() {
+
+  }
+
   async calculateAccountBalanceStateHash(accountId: string) {
     
   }
@@ -574,6 +583,12 @@ export class ChainBridge {
 
     if (!isNaN(this.self.config.get('debug.startBlock'))) {
       startBlock = +this.self.config.get('debug.startBlock');
+    }
+
+    if (this.self.config.get('debug.startAtCurrentBlock')) {
+      const currentBlock = await HiveClient.blockchain.getCurrentBlock();
+      const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16);
+      startBlock = block_height;
     }
 
     this.self.logger.debug('starting block stream at height', startBlock)
@@ -678,7 +693,7 @@ export class ChainBridge {
           }           
         }
 
-        if (this.self.options.debugHelper.nodePublicAdresses.includes(this.self.config.get('identity.nodePublic'))) {
+        if (this.self.config.get('debug.debugNodeAddresses').includes(this.self.config.get('identity.nodePublic'))) {
           this.self.logger.debug(`current block_head height ${block_height}`)
         }
         await this.stateHeaders.findOneAndUpdate(
@@ -766,8 +781,10 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-    this.accountBalanceDb = this.self.db.collection('account_balance')
-    this.contractBalanceDb = this.self.db.collection('contract_balance')
+    this.accountBalanceDb = this.self.db.collection('account_balances')
+    this.contractBalanceDb = this.self.db.collection('contract_balances')
+    this.accountBalanceOperationsDb = this.self.db.collection('account_balance_operations')
+    this.contractBalanceOperationsDb = this.self.db.collection('contract_balance_operations')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 

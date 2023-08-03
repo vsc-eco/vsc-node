@@ -124,6 +124,10 @@ export class Config {
       network: {
         id: 'testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c',
       },
+      setupIdentification: {
+        dbSuffix: '',
+        configSuffix: ''
+      },
       identity: {
         nodePrivate: null,
         nodePublic: null,
@@ -157,8 +161,11 @@ export class Config {
         level: "debug"
       },
       debug: {
+        debugNodeAddresses: ["did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5", "did:key:z6Mkofo9CvXkfTEr1twKpjWYvZqZzaEu4zT8gMATP6renNJg"],
         overrideSchedule: false,
-        startBlock: null
+        startBlock: null,
+        startAtCurrentBlock: false,
+        dropTablesOnStartup: false
       }
     }
 

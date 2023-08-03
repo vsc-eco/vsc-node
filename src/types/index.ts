@@ -25,6 +25,11 @@ export interface Deposit {
   balance_owner: string; // the account id that owns the balance
 }
 
+// pla: for withdraws and transfers
+export interface Transfer {
+
+}
+
 // pla: extra interfaces for the different deposit types as they may diverge
 
 export interface ContractDeposit extends Deposit {

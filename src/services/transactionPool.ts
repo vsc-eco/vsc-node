@@ -205,7 +205,6 @@ export class TransactionPoolService {
 
     const json = {
       net_id: setup.config.get('network.id'),
-      action: CoreTransactionTypes.withdraw_from_account,
       amount: args.amount
     } as Withdraw
 

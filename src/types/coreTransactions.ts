@@ -12,9 +12,25 @@ export interface Deposit extends CoreBaseTransaction {
   contract_id?: string;
 }
 
-// pla: withdraws from the user safe
-export interface Withdraw extends CoreBaseTransaction {
-  action: CoreTransactionTypes.withdraw_from_account;
+// pla: withdraws from the user safe to a hive account
+export interface WithdrawRequest extends CoreBaseTransaction {
+  action: CoreTransactionTypes.withdraw_request;
+  amount: number;
+}
+
+export interface WithdrawFinalization extends CoreBaseTransaction {
+  action: CoreTransactionTypes.withdraw_finalization;
+  amount: number;
+}
+
+// pla: transfers funds internally in the vsc network between contracts and/ or accounts
+export interface TransferRequest extends CoreBaseTransaction {
+  action: CoreTransactionTypes.transfer_request;
+  amount: number;
+}
+
+export interface TransferFinalization extends CoreBaseTransaction {
+  action: CoreTransactionTypes.transfer_finalization;
   amount: number;
 }
 
@@ -63,7 +79,10 @@ export enum CoreTransactionTypes {
     leave_contract = "leave_contract", //Leaves a contract as an executor
     deposit_to_contract = "deposit_to_contract",
     deposit_to_account = "deposit_to_account",
-    withdraw_from_account = "withdraw_from_account",
+    withdraw_request = "withdraw_request",
+    withdraw_finalization = "withdraw_finalization",
+    transfer_request = "transfer_request",
+    transfer_finalization = "transfer_finalization",
 
     //Maybe? Not sure where it fits
     link_did = "link_did",

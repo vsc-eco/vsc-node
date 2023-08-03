@@ -15,7 +15,7 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { AccountDeposit, AccountSafe, BlockRecord, ContractDeposit, Deposit, TransactionConfirmed, TransactionDbStatus, TransactionDbType, Transfer } from '../types'
+import { AccountDeposit, BalanceController, BlockRecord, ContractDeposit, CreationLock, Deposit, FinalizedTransfer, TransactionConfirmed, TransactionDbStatus, TransactionDbType, Transfer, Withdraw } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
@@ -491,36 +491,64 @@ export class ChainBridge {
     } else if (json.action === CoreTransactionTypes.deposit_to_account || json.action === CoreTransactionTypes.deposit_to_contract) {
       if (json.to === process.env.MULTISIG_ACCOUNT) {
         if (json.action === CoreTransactionTypes.deposit_to_contract) {      
-          await this.contractBalanceDb.insertOne(
-            {
-              id: tx.transaction_id,
-              original_deposit: json.amount,
-              active_balance: json.amount,
-              state_hash: null,
-              created_at: tx.expiration,
-              balance_owner: json.to ?? txInfo.account, // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
-              from: txInfo.account,
-              contract_id: json.contract_id
-            } as ContractDeposit);        
+          await this.contractBalanceDb.insertOne({
+            from: txInfo.account,
+            id: tx.transaction_id,
+            orig_balance: json.amount,
+            active_balance: json.amount,
+            created_at: tx.expiration,
+            last_interacted_at: tx.expiration,
+            controllers: [{ type: 'HIVE', authority: json.to ?? txInfo.account} as BalanceController], // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
+            outputs: [],
+            asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+            created_lock: {
+              block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
+              expire_block: +txInfo.block_height + 20, // 20 is currently hard coded as the expiry period for the block, there are prob various reasons to make this parameterizable/ dynamic/ select a different value
+              included_block: +txInfo.block_height
+            } as CreationLock,
+            contract_id: json.contract_id
+          } as ContractDeposit);        
         } else if (json.action === CoreTransactionTypes.deposit_to_account) {            
           await this.accountBalanceDb.insertOne({
+            from: txInfo.account,
             id: tx.transaction_id,
-            original_deposit: json.amount,
+            orig_balance: json.amount,
             active_balance: json.amount,
-            state_hash: null,
             created_at: tx.expiration,
-            balance_owner: json.to ?? txInfo.account,
-            from: txInfo.account
+            last_interacted_at: tx.expiration,
+            controllers: [{ type: 'HIVE', authority: json.to ?? txInfo.account} as BalanceController], // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
+            outputs: [],
+            asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+            created_lock: {
+              block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
+              expire_block: +txInfo.block_height + 20, // 20 is currently hard coded as the expiry period for the block, there are prob various reasons to make this parameterizable/ dynamic/ select a different value
+              included_block: +txInfo.block_height
+            } as CreationLock,
           } as AccountDeposit);
         }
       }
       else {
         this.self.logger.warn(`received deposit (${json.action}), but the target account is not the multisig acc`, tx.transaction_id)
       }
-    } else if (json.action === CoreTransactionTypes.withdraw_from_account) {
-      if (this.self.config.get('multisig.enabled')) {
-        // pla: if a withdraw tx has been received, every witness that is part of the multisig should prepare/ send a tx
+    } else if (json.action === CoreTransactionTypes.withdraw_request) {
+      await this.accountBalanceOperationsDb.insertOne({
+        id: tx.transaction_id,
+        //....
+      } as Withdraw);     
+      // if (this.self.config.get('multisig.enabled')) {
+      //   // pla: if a withdraw tx has been received, every witness that is part of the multisig should prepare/ send a tx
+      // }
+    } else if (json.action === CoreTransactionTypes.withdraw_finalization) {
+      if (tx.from === 'vsc.beta') {
+        // pla: just update the deposit entry here, set 'finalized' of the withdraw entry to true
+        // add the tx id of this transaction to the Deposit data entry (outputs)
+      } else {
+        this.self.logger.warn(`received withdraw finalization from non multisig account, disregarding`, tx.transaction_id)
       }
+    } else if (json.action === CoreTransactionTypes.transfer_request) {
+      // TBD
+    } else if (json.action === CoreTransactionTypes.transfer_finalization) {
+      // TBD
     } else {
       //Unrecognized transaction
       this.self.logger.warn('not recognized tx type', json.action)
@@ -545,14 +573,6 @@ export class ChainBridge {
   // should work with contracts equally as with account balances!
   async verifyTransferAttempt() {
 
-  }
-
-  async calculateAccountBalanceStateHash(accountId: string) {
-    
-  }
-
-  async calculateContractBalanceStateHash(accountId: string) {
-    
   }
 
   async calculateContractBalance(accountId: string, contractId: string) {

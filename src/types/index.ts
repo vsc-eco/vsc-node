@@ -22,17 +22,17 @@ export interface Deposit {
   active_balance: number; // the current amount of funds available for withdrawal
   created_at: Date;
   last_interacted_at: Date;
-  controllers: Array<BalanceController>; // accounts that have permissions to operate on the deposit
   outputs: Array<string>; // ipfs links of transactions that operated on the deposit (withdraws, transfers)
   asset_type: string,
-  created_lock: CreationLock,
+  created: BlockRef,
+  transferLock: BlockRef | null,
   // state_hash: any; // hash of all prior transactions that led to the current active amount of funds for quick verification
   // controller_hash: string
 }
 
-export interface CreationLock {
+export interface BlockRef {
   block_ref: string,
-  expire_block: number,
+  expire_block?: number,
   included_block: number 
 }
 
@@ -42,29 +42,42 @@ export interface BalanceController {
 }
 
 export interface ContractDeposit extends Deposit {
+  controllers: Array<BalanceController>; // accounts that have permissions to operate on the deposit
   contract_id: string;
 }
 
-export interface AccountDeposit extends Deposit {}
+export interface AccountDeposit extends Deposit {
+  controller: BalanceController
+}
+
+export interface DepositDrain {
+  deposit_id: string,
+  amount: number
+}
 
 export interface BalanceUpdate {
   id: string, // hive tx id
   amount: number,
   created_at: Date;
+  inputs: Array<DepositDrain>; // list of deposits that are considered in this balance update
   finalized: boolean; // pla: important property, when user requests a transfer/ withdraw it is not finalized yet. only after the assurance of the viability of the tx and the actual execution/ move of the funds this is updated
+  isValid: boolean;
+  lifetime: BlockRef;
+  type: string;
 }
 
 // pla: for transfers within the vsc network (contract to contract, vsc account to vsc account, contract to vsc account), still anchored as a core tx on hive
 export interface Transfer extends BalanceUpdate {
-  from_deposit_id?: string, // pla: if not supplied the user sends funds from the internal vsc account balance
-  to_deposit_id?: string, // pla: if not supplied the user receives the funds on his internal vsc account balance
-
+  from_contract_id?: string, // pla: if not supplied the user sends funds from the internal vsc account balance
+  to_contract_id?: string, // pla: if not supplied the user receives the funds on his internal vsc account balance
+  type: 'transfer'
   // note: there will be checks that only either one of them can be undefined
 }
 
 // For withdraws FROM the multisig account TO a specified hive account, funds are always withdrawn from the user account that requests the withdraw
 export interface Withdraw extends BalanceUpdate {
-  account_id: string // hive account
+  account_id: string // hive account where the funds should be sent to
+  type: 'withdraw'
 }
 
 export interface TransactionContainer {

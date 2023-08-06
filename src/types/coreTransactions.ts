@@ -21,6 +21,7 @@ export interface WithdrawRequest extends CoreBaseTransaction {
 export interface WithdrawFinalization extends CoreBaseTransaction {
   action: CoreTransactionTypes.withdraw_finalization;
   amount: number;
+  request_id: string;
 }
 
 // pla: transfers funds internally in the vsc network between contracts and/ or accounts
@@ -32,6 +33,7 @@ export interface TransferRequest extends CoreBaseTransaction {
 export interface TransferFinalization extends CoreBaseTransaction {
   action: CoreTransactionTypes.transfer_finalization;
   amount: number;
+  request_id: string;
 }
 
 export interface AnnounceBlock extends CoreBaseTransaction {

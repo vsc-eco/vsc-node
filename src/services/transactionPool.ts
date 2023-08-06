@@ -35,7 +35,7 @@ export class TransactionPoolService {
     HiveClient.broadcast.transfer
   }
 
-  private static async createCoreTransferTransaction(to: string, amount: string, setup: {identity, config}, memo?: string) {
+  public static async createCoreTransferTransaction(to: string, amount: string, setup: {identity, config}, memo?: string) {
     //create transfer object
     const data = {
       from: process.env.HIVE_ACCOUNT!,

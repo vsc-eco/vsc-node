@@ -15,7 +15,7 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { BlockRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
+import { BlockHeader, BlockRecord, DidAuthRecord, TransactionConfirmed, TransactionDbStatus, TransactionDbType } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
@@ -23,7 +23,7 @@ import moment from 'moment'
 export class ChainBridge {
   self: CoreService
   hiveKey: dhive.PrivateKey
-  blockHeaders: Collection
+  blockHeaders: Collection<BlockHeader>
   stateHeaders: Collection
   contracts: Collection
   witness: WitnessService
@@ -281,7 +281,8 @@ export class ChainBridge {
           output: null,
 
           local: false,
-          accessible: true
+          accessible: true,
+          output_actions: content.tx.chain_actions
         }
       }, {
         upsert: true
@@ -418,6 +419,7 @@ export class ChainBridge {
       // alp: DEBUG: ASSUME THE WITNESS ACC IS ALREADY CALC'D
       this.events.emit('vsc_block', {
         ...json,
+        ...txInfo,
         tx
       })
     } else if (json.action === 'create_contract') {
@@ -674,7 +676,7 @@ export class ChainBridge {
 
   async start() {
     this.stateHeaders = this.self.db.collection('state_headers')
-    this.blockHeaders = this.self.db.collection('block_headers')
+    this.blockHeaders = this.self.db.collection<BlockHeader>('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
@@ -716,6 +718,7 @@ export class ChainBridge {
           id: block.block_hash,
           hive_ref_block: block.tx.block_num,
           hive_ref_tx: block.tx.transaction_id,
+          hive_ref_date: block.timestamp
           // witnessed_by: {
           //   hive_account: block.tx.posting
           // }

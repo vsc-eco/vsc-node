@@ -22,8 +22,8 @@ declare global {
 }
 
 interface StateInterface {
-  pull(key: string): Promise<any>
-  update(key: string, value: any): Promise<void>
+  pull<T>(key: string): Promise<T>
+  update<T>(key: string, value: T): Promise<void>
   ls(key: string): Promise<Array<string>>
 }
 interface APInterface {
@@ -34,6 +34,8 @@ interface APInterface {
     },
     tx_id: string,
     included_in: string
+    included_block: number
+    included_date: Date
   }
 }
 

@@ -44,7 +44,7 @@ export class TransactionPoolService {
       memo: memo
     };
     
-    return await HiveClient.broadcast.transfer(data, PrivateKey.from(process.env.HIVE_ACCOUNT_POSTING!))
+    return await HiveClient.broadcast.transfer(data, PrivateKey.from(process.env.HIVE_ACCOUNT_ACTIVE!))
   }
 
   // to convert the amount for a transfer, necessary as described here 
@@ -189,10 +189,13 @@ export class TransactionPoolService {
     setup.logger.info(`Depositing funds (${args.amount}) to personal safe`)
     const memo = JSON.stringify({
       net_id: setup.config.get('network.id'),
-      action: args.contractId ? CoreTransactionTypes.deposit_to_contract : CoreTransactionTypes.deposit_to_account,
-      contractId: args.contractId,
+      action: CoreTransactionTypes.deposit,
       to: args.to
     } as Deposit)
+
+    if (args.contractId) {
+      memo['contract_id'] = args.contractId
+    }
 
     const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, memo)
 

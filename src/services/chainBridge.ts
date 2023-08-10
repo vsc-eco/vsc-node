@@ -15,7 +15,7 @@ import { CommitmentStatus, Contract, ContractCommitment } from '../types/contrac
 import EventEmitter from 'events'
 import { DagJWS, DagJWSResult, DID } from 'dids'
 import { IPFSHTTPClient } from 'ipfs-http-client'
-import { AccountDeposit, BalanceController, BalanceUpdate, BlockRecord, BlockRef, ContractDeposit, CreationLock, Deposit, DepositDrain, FinalizedTransfer, MultisigTask, TransactionConfirmed, TransactionDbStatus, TransactionDbType, Transfer, Withdraw } from '../types'
+import { BalanceController, BlockRecord, BlockRef, Deposit, DepositDrain, TimeLock, TransactionConfirmed, TransactionDbStatus, TransactionDbType, WithdrawLock } from '../types'
 import { VSCTransactionTypes, ContractInput, ContractOutput } from '../types/vscTransactions'
 import { CoreTransactionTypes } from '../types/coreTransactions'
 import moment from 'moment'
@@ -33,13 +33,10 @@ export class ChainBridge {
   contracts: Collection
   witness: WitnessService
   witnessDb: Collection
-  accountBalanceDb: Collection<Deposit>
-  accountBalanceOperationsDb: Collection<BalanceUpdate>
-  contractBalanceDb: Collection<Deposit>
-  contractBalanceOperationsDb: Collection<BalanceUpdate>
+  balanceDb: Collection<Deposit>
   events: EventEmitter
   streamOut: Pushable.Pushable<any>
-  multiSigBalanceUpdateBuffer: Array<BalanceUpdate>
+  multiSigWithdrawBuffer: Array<Deposit>
 
   blockQueue: PQueue
   block_height: number
@@ -326,20 +323,20 @@ export class ChainBridge {
 
   // pla: the multisig consensus has been reached and a selected node now transfers the funds
   // move to transactionpoolservice?
-  async finalizeBalanceUpdate(balanceUpdate: BalanceUpdate) {
+  async finalizeBalanceUpdate(depositId: string) {
     const memo: WithdrawFinalization = {
-      amount: balanceUpdate.amount,
       net_id: this.self.config.get('network.id'), 
-      request_id: balanceUpdate.id
+      deposit_id: depositId
     } as WithdrawFinalization
 
-    //TransactionPoolService.createCoreTransferTransaction...
+    //TransactionPoolService.createCoreTransferTransaction... (amount = depositId.active_balance)
   }
 
   async processCoreTransaction(tx: any, json: any, txInfo: {
     account: string,
-    block_height: string
-    timestamp: Date
+    block_height: string,
+    timestamp: Date,
+    amount?: number
   }) {
     if (json.net_id !== this.self.config.get('network.id')) {
       this.self.logger.warn('received transaction from a different network id! - will not process')
@@ -505,182 +502,215 @@ export class ChainBridge {
       } else {
         this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
-    } else if (json.action === CoreTransactionTypes.deposit_to_account || json.action === CoreTransactionTypes.deposit_to_contract) {
-      if (json.to === process.env.MULTISIG_ACCOUNT) {
-        if (json.action === CoreTransactionTypes.deposit_to_contract) {      
-          await this.contractBalanceDb.insertOne({
-            from: txInfo.account,
-            id: tx.transaction_id,
-            orig_balance: json.amount,
-            active_balance: json.amount,
-            created_at: tx.expiration,
-            last_interacted_at: tx.expiration,
-            controllers: [{ type: 'HIVE', authority: json.to ?? txInfo.account} as BalanceController], // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
-            outputs: [],
-            asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
-            created: {
-              block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
-              expire_block: +txInfo.block_height + 20, // 20 is currently hard coded as the expiry period for the block, there are prob various reasons to make this parameterizable/ dynamic/ select a different value
-              included_block: +txInfo.block_height
-            } as BlockRef,
-            contract_id: json.contract_id
-          } as ContractDeposit);        
-        } else if (json.action === CoreTransactionTypes.deposit_to_account) {            
-          await this.accountBalanceDb.insertOne({
-            from: txInfo.account,
-            id: tx.transaction_id,
-            orig_balance: json.amount,
-            active_balance: json.amount,
-            created_at: tx.expiration,
-            last_interacted_at: tx.expiration,
-            controller: { type: 'HIVE', authority: json.to ?? txInfo.account} as BalanceController, // pla: maybe problem that needs to be fixed, people may wanna supply human readable hive account addresses, but if done this way, depending on if the user supplied a 'to' address, we may also have normal account ids in here
-            outputs: [],
-            asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
-            created: {
-              block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
-              expire_block: +txInfo.block_height + 20, // 20 is currently hard coded as the expiry period for the block, there are prob various reasons to make this parameterizable/ dynamic/ select a different value
-              included_block: +txInfo.block_height
-            } as BlockRef,
-          } as AccountDeposit);
+    } else if (json.action === CoreTransactionTypes.deposit) {
+      if (json.to === process.env.MULTISIG_ACCOUNT) {   
+        const balanceController = { type: 'HIVE', authority: json.to ?? txInfo.account, conditions: []} as BalanceController
+
+        const deposit = {
+          from: txInfo.account,
+          id: tx.transaction_id,
+          orig_balance: txInfo.amount,
+          active_balance: txInfo.amount,
+          created_at: tx.expiration,
+          last_interacted_at: tx.expiration,
+          outputs: [],
+          inputs: [],
+          asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+          create_block: {
+            block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
+            included_block: +txInfo.block_height
+          } as BlockRef,
+          controllers: [balanceController],
+        } as Deposit
+
+        if (json.contract_id) {
+          deposit.contract_id = json.contract_id ?? null // limits the deposit on a specific contract
         }
+
+        await this.balanceDb.insertOne(deposit);        
       }
       else {
         this.self.logger.warn(`received deposit (${json.action}), but the target account is not the multisig acc`, tx.transaction_id)
       }
     } else if (json.action === CoreTransactionTypes.withdraw_request) {
-      const withdrawRequest = {
-        id: tx.transaction_id,
-        amount: json.amount,
-        account_id: json.to ? json.to : txInfo.account,
-        created_at: tx.expiration,
+      let deposits = await this.getUserControlledBalances(txInfo.account);
 
-      } as Withdraw;
+      const currentBlock = {
+        block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
+        included_block: +txInfo.block_height
+      } as BlockRef
 
-      const deposits = await this.accountBalanceDb.find({"controller.authority": txInfo.account});
+      deposits = this.getDepositsWithMetConditions(deposits, currentBlock);
 
-      const choosenDeposits: Array<DepositDrain> = [];
-      let missingAmount = withdrawRequest.amount;
-      for (let deposit of deposits) {
-        if (deposit.active_balance !== 0) {
-          if (deposit.transferLock === null || deposit.transferLock.expire_block < txInfo.block_height) {
-            let drainedBalance: number;
-            if (missingAmount > deposit.active_balance) {
-              drainedBalance = deposit.active_balance;
-            } else {
-              drainedBalance = deposit.active_balance - missingAmount; 
-            }
-            missingAmount -= drainedBalance;
-            choosenDeposits.push({ deposit_id: deposit.id, amount: drainedBalance });        
-            
-            if (missingAmount == 0) {
-              break;
-            }
-          }
-        }
-      }
+      const determinedDepositDrains = this.determineDepositDrains(deposits, json.amount);
 
-      if (missingAmount !== 0) {
-        withdrawRequest.isValid = false;
-        this.self.logger.warn('withdraw request failed, not sufficient funds available', json)
+      if (!determinedDepositDrains.isEnoughBalance) {
+        this.self.logger.warn('withdraw request failed, not sufficient funds available, will not add to database', json)
       } else {
-        const currentBlock = { 
-          block_ref: '', // pass on block id to processCoretx
-          expire_block: +txInfo.block_height + 20,
-          included_block: +txInfo.block_height
-        }
+        const WITHDRAW_FAILED_BLOCK_DISTANCE = 200; // pla: this setting determines within how many blocks the withdraw should be executed by the multisig allowed nodes, if they fail to do so the withdraw is unlocked again and the balance will be treated like a deposit again
+        const userBalanceController = { 
+          type: 'HIVE', 
+          authority: json.to ?? txInfo.account, 
+          conditions: [
+            {
+              type: 'TIME',
+              lock_applied: currentBlock,
+              expiration_block: currentBlock.included_block + WITHDRAW_FAILED_BLOCK_DISTANCE
+            } as TimeLock
+          ]
+        } as BalanceController
 
-        withdrawRequest.isValid = true;
-        withdrawRequest.inputs = choosenDeposits;
-        withdrawRequest.lifetime = currentBlock;
+        const multisigBalanceController = { 
+          type: 'HIVE', 
+          authority: process.env.MULTISIG_ACCOUNT, 
+          conditions: [
+            {
+              type: 'WITHDRAW',
+              expiration_block: currentBlock.included_block + WITHDRAW_FAILED_BLOCK_DISTANCE // here the failed block distance is the other way around, the multisig only has the time window from the withdraw request until the WITHDRAW_FAILED_BLOCK_DISTANCE to execute the withdraw
+            } as WithdrawLock
+          ]
+        } as BalanceController
 
-        for (let deposit of withdrawRequest.inputs) {
-          await this.accountBalanceDb.updateOne({ id: deposit.deposit_id }, 
+        const deposit = {
+          from: txInfo.account,
+          id: tx.transaction_id,
+          orig_balance: json.amount,
+          active_balance: json.amount,
+          created_at: tx.expiration,
+          last_interacted_at: tx.expiration,
+          outputs: [],
+          inputs: [...determinedDepositDrains.deposits],
+          asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+          create_block: currentBlock,
+          controllers: [userBalanceController, multisigBalanceController],
+        } as Deposit
+
+        await this.balanceDb.insertOne(deposit); 
+        
+        await this.updateSourceDeposits(determinedDepositDrains.deposits, tx.transaction_id);
+
+        // pla: should probably not store this in memory, but rather in a database so the tasks for the multisig allowed nodes are not lost
+        this.multiSigWithdrawBuffer.push(deposit);
+      }
+    } else if (json.action === CoreTransactionTypes.withdraw_finalization) {
+      if (tx.from === process.env.MULTISIG_ACCOUNT) {
+        const deposit = await this.balanceDb.findOne({ id: json.deposit_id })
+
+        if (deposit.active_balance === txInfo.amount) {
+          await this.balanceDb.updateOne({ id: json.deposit_id }, 
             { 
-              $set: { 
-                transferLock: currentBlock
-              } 
+              $set: {
+                active_balance: 0
+              }
             }
           )
+        } else {
+          // pla: something went really wrong here, if this is the case, def. investigate
+          this.self.logger.warn(`received withdraw finalization, but the balance is not the same as the withdraw request, will not update the balance`, tx.transaction_id)
         }
-
-        this.multiSigBalanceUpdateBuffer.push(withdrawRequest);
-      }
-    
-      this.accountBalanceOperationsDb.insertOne(withdrawRequest);
-
-    } else if (json.action === CoreTransactionTypes.withdraw_finalization) {
-      if (tx.from === 'vsc.beta') {
-        const withdraw = await this.accountBalanceOperationsDb.findOne({
-          id: json.request_id
-        })  
-
-        for (let deposit of withdraw.inputs) {
-          await this.accountBalanceDb.findOneAndUpdate({
-            id: deposit.deposit_id
-          }, {
-            $set: {
-              transferLock: null,
-              last_interacted_at: tx.expiration              
-            },
-            $inc: {
-              active_balance: (deposit.amount * -1)
-            },
-            $push: {
-              outputs: withdraw.id
-            }
-          })
-        }
-        
-        await this.accountBalanceOperationsDb.findOneAndUpdate({
-          id: json.request_id
-        }, {
-          $set: {
-            finalized: true
-          }
-        })  
       } else {
         this.self.logger.warn(`received withdraw finalization from non multisig account, disregarding`, tx.transaction_id)
       }
-    } else if (json.action === CoreTransactionTypes.transfer_request) {
-      // TBD
-    } else if (json.action === CoreTransactionTypes.transfer_finalization) {
-
-
-
-
-      // TBD
     } else {
       //Unrecognized transaction
       this.self.logger.warn('not recognized tx type', json.action)
     }
   }
+
+  // used when a withdraw/ transfer has taken place and the outputs of the deposits are updated with their reference deposits that received the balance
+  async updateSourceDeposits(depositDrains: Array<DepositDrain>, targetDepositId: string) {
+    for (let depositDrain of depositDrains) {
+      const outputDepositDrain = {
+        deposit_id: targetDepositId,
+        amount: depositDrain.amount
+      } as DepositDrain
+
+      await this.balanceDb.updateOne({ id: depositDrain.deposit_id }, 
+        { 
+          $inc: {
+            active_balance: depositDrain.amount * -1
+          },
+          $push: { 
+            outputs: outputDepositDrain
+          },
+          $set: {
+            last_interacted_at: new Date()
+          }
+        }
+      )
+    }
+  }
+
+  determineDepositDrains(deposits: Array<Deposit>, amount: number): { isEnoughBalance: boolean, deposits: Array<DepositDrain> } {
+    let missingAmount = amount;
+    const choosenDeposits = [];
+
+    for (let deposit of deposits) {
+      if (deposit.active_balance !== 0) {
+        let drainedBalance: number;
+        if (missingAmount > deposit.active_balance) {
+          drainedBalance = deposit.active_balance;
+        } else {
+          drainedBalance = deposit.active_balance - missingAmount; 
+        }
+        missingAmount -= drainedBalance;
+        choosenDeposits.push({ deposit_id: deposit.id, amount: drainedBalance });        
+        
+        if (missingAmount == 0) {
+          break;
+        }
+      }
+    }
+
+    return { isEnoughBalance: missingAmount === 0, deposits: choosenDeposits };
+  }
+
+  // pla: in here verify the controller conditions, if not met the deposit cannot be drained at this point
+  getDepositsWithMetConditions(deposits: Array<Deposit>, currentBlock: BlockRef, hashSolvers?: Array<string>): Array<Deposit> {
+    // ... if found condition hashlock ... verify if supplied secret is correct
+    // ... if found timelock, verify against current block
+    
+    // return deposits here but sort by active_balance
+    return deposits.sort((a, b) => {
+      if (a.active_balance < b.active_balance) {
+          return -1;
+      }
+      if (a.active_balance > b.active_balance) {
+          return 1;
+      }
+      return 0;
+    });
+  }
+
+  async getUserControlledBalances(accountId: string, contractId?: string): Promise<Array<Deposit>> {
+    
+    const userOwnedBalancesQuery = {
+      'controllers': {
+          $elemMatch: {
+              'type': { $in: ['HIVE', 'DID'] }, // maybe its needed to convert the hive account into did as well as the deposit from the user might not be his hive acc id, so some deposits would slip through
+              'authority': accountId
+          }
+      }
+    };
+
+    if (contractId) {
+      userOwnedBalancesQuery['controllers']['$elemMatch']['contract_id'] = contractId;
+    }
+
+    return await this.balanceDb.find(userOwnedBalancesQuery).toArray();
+  }
   
-  // pla: maybe move calc functions to different class
-  async calculateAccountBalance(accountId: string) {
+  // get the users total balance for general deposits or for a specific contract
+  async calculateBalanceSum(accountId: string, currentBlock: BlockRef, contractId?: string, hashSolvers?: Array<string>) {
     let balance = 0
-    await this.accountBalanceDb.find({
-      balance_owner: accountId
-    }).
-      forEach((deposit) => {
-        balance += deposit.active_balance
-    })
 
-    return balance;
-  }
+    let deposits = await this.getUserControlledBalances(accountId, contractId); 
 
-  async verifyTransferAttempt(): boolean {
+    deposits = this.getDepositsWithMetConditions(deposits, currentBlock, hashSolvers);
 
-  }
-
-  async calculateContractBalance(accountId: string, contractId: string) {
-    let balance = 0
-    await this.contractBalanceDb.find({
-      balance_owner: accountId,
-      contract_id: contractId
-    }).
-      forEach((deposit) => {
-        balance += deposit.active_balance
-    })
+    for (let deposit of deposits) {
+      balance += deposit.active_balance;
+    }
 
     return balance;
   }
@@ -790,7 +820,7 @@ export class ChainBridge {
                   account: payload.required_posting_auths[0],
                   block_height,
                   timestamp: new Date(block.timestamp + "Z")
-                })              
+                })   
               }
             } else if (op_id === "transfer") {
               // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
@@ -800,7 +830,8 @@ export class ChainBridge {
                   await this.processCoreTransaction(tx, json, {
                     account: payload.from, // from or payload.required_posting_auths[0]?
                     block_height,
-                    timestamp: new Date(block.timestamp + "Z")
+                    timestamp: new Date(block.timestamp + "Z"),
+                    amount? : payload.amount
                   })
                 } else {
                   this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
@@ -826,46 +857,29 @@ export class ChainBridge {
             upsert: true,
           },
         )
-        
-        // pla: it probably makes sense to do this async
-        for (let balanceUpdate of this.multiSigBalanceUpdateBuffer) {
-          // adding an arbitrary value on top of the included block right now to 
-          // confirm that there are no other tx that alter the same deposits and that everything hopefully has converged by then
+
+        for (let i = this.multiSigWithdrawBuffer.length - 1; i >= 0; i--) {
+          const withdraw = this.multiSigWithdrawBuffer[i];
+          // ensure that there is a safe distance between the receival of the withdraw request and the current block
           const SAFE_BLOCK_DISTANCE = 5
-          if (balanceUpdate.lifetime.included_block + SAFE_BLOCK_DISTANCE < block_height) {
-            if (balanceUpdate.lifetime.expire_block > block_height) {
+          if (withdraw.create_block.included_block + SAFE_BLOCK_DISTANCE < block_height) {
+            const multisigBalanceController = withdraw.controllers.find(c => c.authority === process.env.MULTISIG_ACCOUNT)
 
-            // sign the balance update and publish via p2p multisig
-            // maybe do some more checks/ verifications to ensure that everything is working as intended, maybe do the initial deposit check again
-
-            } else {
-              if (balanceUpdate.type == 'transfer') {
-
-              } else if (balanceUpdate.type == 'withdraw') {
-                // remove transfer locks from deposit objects
-
-                for (let deposit of balanceUpdate.inputs) {
-                  await this.accountBalanceDb.findOneAndUpdate({
-                    id: deposit.deposit_id
-                  }, {
-                    $set: {
-                      transferLock: null
-                    }
-                  })
-                }
-
-                await this.accountBalanceOperationsDb.findOneAndUpdate({
-                  id: balanceUpdate.id
-                }, {
-                  $set: {
-                    finalized: true,
-                    isValid: false
-                  }
-                })
+            if (multisigBalanceController) {
+              const withdrawLock = <WithdrawLock>multisigBalanceController.conditions.find(c => c.type === 'WITHDRAW')
+              
+              if (withdrawLock && withdrawLock.expiration_block > block_height) {
+                
+                // sign the balance update and publish via p2p multisig
+                // maybe do some more checks/ verifications to ensure that everything is working as intended
+                continue;
               }
-            }        
-          } 
-            
+            }
+
+            // when we get to this point, something has gone wrong (either the request is expired, something is wrong in the data and so on)
+            // and we remove the withdraw request from the buffer
+            this.multiSigWithdrawBuffer.splice(i, 1);
+          }
         }
       }
     })()
@@ -939,15 +953,12 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-    this.accountBalanceDb = this.self.db.collection('account_balances')
-    this.contractBalanceDb = this.self.db.collection('contract_balances')
-    this.accountBalanceOperationsDb = this.self.db.collection('account_balance_operations')
-    this.contractBalanceOperationsDb = this.self.db.collection('contract_balance_operations')
+    this.balanceDb = this.self.db.collection('account_balances')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 
     this.ipfsQueue = new (await import('p-queue')).default({ concurrency: 4 })
-    this.multiSigBalanceUpdateBuffer = [] 
+    this.multiSigWithdrawBuffer = [] 
 
     this.witness = new WitnessService(this.self)
 

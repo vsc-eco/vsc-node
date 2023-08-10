@@ -17,37 +17,50 @@ export interface BlockRecord {
 // this interface is used for deposits to a contract and to a users personal balance (safe)
 export interface Deposit {
   from: string; // the account id that the funds are coming from
-  id: string; // the initial transaction id (may be a vsc or a hive tx id)
+  id: string; // the initial transaction id (hive tx id if the deposit is from hive, vsc tx id if the deposit is a transfer from another contract)
   orig_balance: number; // the original amount deposited
   active_balance: number; // the current amount of funds available for withdrawal
   created_at: Date;
   last_interacted_at: Date;
-  outputs: Array<string>; // ipfs links of transactions that operated on the deposit (withdraws, transfers)
+  outputs: Array<DepositDrain>; // when balance leaves the deposit, either via internal vsc transfer or hive withdraw request, the tx id is added here
+  inputs: Array<DepositDrain>; // when balance not directly comes from a hive tx, but an internal transfer it is a sum of different deposit (ids), in that case they are added here
   asset_type: string,
-  created: BlockRef,
-  transferLock: BlockRef | null,
-  // state_hash: any; // hash of all prior transactions that led to the current active amount of funds for quick verification
-  // controller_hash: string
+  create_block: BlockRef,
+  controllers: Array<BalanceController>;
+  contract_id?: string;
+  controllers_hash: string;
 }
 
 export interface BlockRef {
-  block_ref: string,
-  expire_block?: number,
+  block_ref?: string,
   included_block: number 
 }
 
 export interface BalanceController {
   type: 'HIVE' | 'DID',
-  authority: string
+  authority: string,
+  conditions: Array<BalanceAccessCondition>
 }
 
-export interface ContractDeposit extends Deposit {
-  controllers: Array<BalanceController>; // accounts that have permissions to operate on the deposit
-  contract_id: string;
+export interface BalanceAccessCondition {
+  type: 'TIME' | 'HASH' | 'WITHDRAW',
+  value: string
 }
 
-export interface AccountDeposit extends Deposit {
-  controller: BalanceController
+export interface TimeLock extends BalanceAccessCondition {
+  type: 'TIME',
+  lock_applied: BlockRef,
+  expiration_block: number
+}
+
+export interface HashLock extends BalanceAccessCondition {
+  type: 'HASH',
+  hash: string,
+}
+
+export interface WithdrawLock extends BalanceAccessCondition {
+  type: 'WITHDRAW',
+  expiration_block: number
 }
 
 export interface DepositDrain {
@@ -55,39 +68,9 @@ export interface DepositDrain {
   amount: number
 }
 
-export interface BalanceUpdate {
-  id: string, // hive tx id
-  amount: number,
-  created_at: Date;
-  inputs: Array<DepositDrain>; // list of deposits that are considered in this balance update
-  finalized: boolean; // pla: important property, when user requests a transfer/ withdraw it is not finalized yet. only after the assurance of the viability of the tx and the actual execution/ move of the funds this is updated
-  isValid: boolean;
-  lifetime: BlockRef;
-  type: string;
-}
-
-// pla: for transfers within the vsc network (contract to contract, vsc account to vsc account, contract to vsc account), still anchored as a core tx on hive
-export interface Transfer extends BalanceUpdate {
-  from_contract_id?: string, // pla: if not supplied the user sends funds from the internal vsc account balance
-  to_contract_id?: string, // pla: if not supplied the user receives the funds on his internal vsc account balance
-  type: 'transfer'
-  // note: there will be checks that only either one of them can be undefined
-}
-
-// For withdraws FROM the multisig account TO a specified hive account, funds are always withdrawn from the user account that requests the withdraw
-export interface Withdraw extends BalanceUpdate {
-  account_id: string // hive account where the funds should be sent to
-  type: 'withdraw'
-}
-
-export interface TransactionContainer {
-  id?: string //Created during signing
-  __t: 'vsc-tx'
-  __v: '0.1'
-  lock_block: string
-  included_in?: string | null
-  accessible?: boolean
-  tx: TransactionRaw
+export interface DepositDrain {
+  deposit_id: string,
+  amount: number
 }
 
 export interface TransactionDbRecord {

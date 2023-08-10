@@ -7,7 +7,7 @@ export interface CoreBaseTransaction {
 }
 
 export interface Deposit extends CoreBaseTransaction {
-  action: CoreTransactionTypes.deposit_to_contract | CoreTransactionTypes.deposit_to_account;  
+  action: CoreTransactionTypes.deposit;  
   to?: string; // pla: deposit on someone elses behave
   contract_id?: string;
 }
@@ -20,20 +20,7 @@ export interface WithdrawRequest extends CoreBaseTransaction {
 
 export interface WithdrawFinalization extends CoreBaseTransaction {
   action: CoreTransactionTypes.withdraw_finalization;
-  amount: number;
-  request_id: string;
-}
-
-// pla: transfers funds internally in the vsc network between contracts and/ or accounts
-export interface TransferRequest extends CoreBaseTransaction {
-  action: CoreTransactionTypes.transfer_request;
-  amount: number;
-}
-
-export interface TransferFinalization extends CoreBaseTransaction {
-  action: CoreTransactionTypes.transfer_finalization;
-  amount: number;
-  request_id: string;
+  deposit_id: string;
 }
 
 export interface AnnounceBlock extends CoreBaseTransaction {
@@ -79,12 +66,9 @@ export enum CoreTransactionTypes {
     create_contract = "create_contract",
     join_contract = "join_contract", //Joins a contract as an executor
     leave_contract = "leave_contract", //Leaves a contract as an executor
-    deposit_to_contract = "deposit_to_contract",
-    deposit_to_account = "deposit_to_account",
+    deposit = "deposit",
     withdraw_request = "withdraw_request",
     withdraw_finalization = "withdraw_finalization",
-    transfer_request = "transfer_request",
-    transfer_finalization = "transfer_finalization",
 
     //Maybe? Not sure where it fits
     link_did = "link_did",

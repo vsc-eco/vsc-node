@@ -11,13 +11,11 @@ import KeyResolver from 'key-did-resolver'
 import { Config } from "../services/nodeConfig";
 import { getLogger } from '../logger';
 
-const homeDir = Path.join(os.homedir(), '.vsc-node')
-
 let identity = null;
 
 export async function init() {
     
-    const config = new Config(homeDir)
+    const config = new Config(Config.getConfigDir())
     await config.open()
 
     const logger = getLogger({

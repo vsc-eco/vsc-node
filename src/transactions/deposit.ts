@@ -13,7 +13,7 @@ void (async () => {
     // contract_id = target contract where the funds should be deposited
     // to = target account which is credited with the funds
     // when no 'to' parameter is supplied, the funds are deposited to the account that publishes the transaction
-    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/deposit.ts 15 --contract_id=351d68f85ab150c71e577ae4ab406eacb6fb4b2a --to=sudokurious
+    // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/deposit.ts 1
 
     const setup: {identity, config, ipfsClient, logger} = await init()
         
@@ -31,7 +31,7 @@ void (async () => {
 
     await TransactionPoolService.deposit({
         contractId: contractId,
-        amount: +process.argv[3],
+        amount: +process.argv[2],
         to: to
     },
     setup);

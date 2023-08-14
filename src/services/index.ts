@@ -1,7 +1,6 @@
 import { CID, IPFSHTTPClient } from "ipfs-http-client";
 import * as IPFSHTTP from "ipfs-http-client";
 import Path from 'path'
-import os from 'os'
 import Crypto from 'crypto'
 import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
@@ -52,7 +51,7 @@ export class CoreService {
     private async setupKeys() {
         let keyBackup = {}
         let noBackup = false;
-        let keyBackupPath = Path.join(this.getConfigDir, '.vsc-seed-backup.json')
+        let keyBackupPath = Path.join(Config.getConfigDir(), '.vsc-seed-backup.json')
 
         //Check if identity already exists, if not load keybackup if exists
         try {
@@ -107,19 +106,12 @@ export class CoreService {
         }
     }
 
-    get getConfigDir(): string {
-        return this.config.get('setupIdentification.configSuffix') !== '' ? Path.join(os.homedir(), '.vsc-node-' + this.config.get('setupIdentification.configSuffix')) : Path.join(os.homedir(), '.vsc-node')
-    }
-
     async dropTables() {
         const collections = [
             'state_headers',
             'block_headers',
             'witnesses',
-            'account_balances',
-            'contract_balances',
-            'account_balance_operations',
-            'contract_balance_operations',
+            'balances',
             'contracts',
             'contract_commitment',
             'contract_log',
@@ -136,16 +128,16 @@ export class CoreService {
 
     async start() {
         console.log('Starting')
-        this.ipfs = IPFSHTTP.create({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')});
-        this.config = new Config(this.getConfigDir)
+        this.config = new Config(Config.getConfigDir())
         await this.config.open()
+        this.ipfs = IPFSHTTP.create({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')});
         this.networkId = this.config.get('network.id')
         this.logger = getLogger(this.loggerSettings || {
             prefix: 'core',
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
         })
-        this.db = this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
+        this.db = this.config.get('setupIdentification.dbSuffix') !== undefined && this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
         await mongo.connect()
         if (this.config.get('debug.dropTablesOnStartup')) {
             await this.dropTables();

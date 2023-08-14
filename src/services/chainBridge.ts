@@ -336,7 +336,8 @@ export class ChainBridge {
     account: string,
     block_height: string,
     timestamp: Date,
-    amount?: number
+    amount?: number,
+    to?: string
   }) {
     if (json.net_id !== this.self.config.get('network.id')) {
       this.self.logger.warn('received transaction from a different network id! - will not process')
@@ -503,7 +504,7 @@ export class ChainBridge {
         this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
     } else if (json.action === CoreTransactionTypes.deposit) {
-      if (json.to === process.env.MULTISIG_ACCOUNT) {   
+      if (txInfo.to === process.env.MULTISIG_ACCOUNT) {   
         const balanceController = { type: 'HIVE', authority: json.to ?? txInfo.account, conditions: []} as BalanceController
 
         const deposit = {
@@ -726,9 +727,9 @@ export class ChainBridge {
         (await this.stateHeaders.findOne({
           id: 'hive_head',
         })) || ({} as any)
-      ).block_num || networks[network_id].genesisDay  // pla: useful to set a manual startBlock here for debug purposes
+      ).block_num || networks[network_id].genesisDay
 
-    if (!isNaN(this.self.config.get('debug.startBlock'))) {
+    if (this.self.config.get('debug.startBlock') !== undefined && this.self.config.get('debug.startBlock') !== null) {
       startBlock = +this.self.config.get('debug.startBlock');
     }
 
@@ -831,7 +832,8 @@ export class ChainBridge {
                     account: payload.from, // from or payload.required_posting_auths[0]?
                     block_height,
                     timestamp: new Date(block.timestamp + "Z"),
-                    amount? : payload.amount
+                    amount : payload.amount,
+                    to: payload.to
                   })
                 } else {
                   this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
@@ -953,7 +955,7 @@ export class ChainBridge {
     this.stateHeaders = this.self.db.collection('state_headers')
     this.blockHeaders = this.self.db.collection('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
-    this.balanceDb = this.self.db.collection('account_balances')
+    this.balanceDb = this.self.db.collection('balances')
 
     this.hiveKey = PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING)
 

@@ -4,6 +4,8 @@ import mergeOptions from 'merge-options'
 import { Key } from 'interface-datastore'
 import { FsDatastore } from 'datastore-fs'
 import fs from 'fs'
+import Path from 'path'
+import os from 'os'
 
 function obj_set(obj, props, value) {
   if (typeof props == 'string') {
@@ -52,6 +54,7 @@ class ChildConfig {
     return this.parentConfig.set(`${this.rootKey}.${key}`, value)
   }
 }
+
 export class Config {
   config: any
   datastore: any
@@ -81,6 +84,11 @@ export class Config {
   save() {
     const buf = Buffer.from(JSON.stringify(this.config, null, 2))
     this.datastore.put(new Key('config'), buf)
+  }
+  static getConfigDir(): string {
+    return process.env.CONFIG_SUFFIX !== undefined && process.env.CONFIG_SUFFIX !== '' ? 
+        Path.join(os.homedir(), '.vsc-node-' + process.env.CONFIG_SUFFIX) 
+        : Path.join(os.homedir(), '.vsc-node')
   }
   /**
    *
@@ -125,8 +133,7 @@ export class Config {
         id: 'testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c',
       },
       setupIdentification: {
-        dbSuffix: '',
-        configSuffix: ''
+        dbSuffix: ''
       },
       identity: {
         nodePrivate: null,

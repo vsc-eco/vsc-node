@@ -18,7 +18,7 @@ import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, Withdraw } from '../types/coreTransactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawRequest } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
 const {BloomFilter} = BloomFilters
@@ -209,7 +209,7 @@ export class TransactionPoolService {
     const json = {
       net_id: setup.config.get('network.id'),
       amount: args.amount
-    } as Withdraw
+    } as WithdrawRequest
 
     const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
     setup.logger.debug('result', result)

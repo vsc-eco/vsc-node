@@ -37,7 +37,7 @@ export interface BlockRef {
 }
 
 export interface BalanceController {
-  type: 'HIVE' | 'DID',
+  type: 'HIVE' | 'DID' | 'CONTRACT',
   authority: string,
   conditions: Array<BalanceAccessCondition>
 }
@@ -71,6 +71,16 @@ export interface DepositDrain {
 export interface DepositDrain {
   deposit_id: string,
   amount: number
+}
+
+export interface TransactionContainer {
+  id?: string //Created during signing
+  __t: 'vsc-tx'
+  __v: '0.1'
+  lock_block: string
+  included_in?: string | null
+  accessible?: boolean
+  tx: TransactionRaw
 }
 
 export interface TransactionDbRecord {

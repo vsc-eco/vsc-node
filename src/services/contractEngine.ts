@@ -10,6 +10,7 @@ import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
 import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
+import { BlockRef } from '@/types'
 
 export type HiveOps = CustomJsonOperation | TransferOperation
 
@@ -19,7 +20,6 @@ export class OutputActions {
   constructor() {
     this.opStack = []
   }
-import { DID } from 'dids'
 
   addHiveOp(input: HiveOps) {
     return this.opStack.push(input)
@@ -436,7 +436,9 @@ export class ContractEngine {
               transferFunds: this.transferFunds,
               withdrawFunds: this.withdrawFunds,
               getBalance: (accountId: string) => {
-                return this.self.chainBridge.calculateContractBalance(accountId, id)
+                return this.self.chainBridge.calculateBalanceSum(accountId, {
+                  // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
+                } as BlockRef, id)
               }
             },
             done: () => {

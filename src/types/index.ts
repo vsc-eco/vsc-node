@@ -24,8 +24,8 @@ export interface Deposit {
   last_interacted_at: Date;
   outputs: Array<DepositDrain>; // when balance leaves the deposit, either via internal vsc transfer or hive withdraw request, the tx id is added here
   inputs: Array<DepositDrain>; // when balance not directly comes from a hive tx, but an internal transfer it is a sum of different deposit (ids), in that case they are added here
-  asset_type: string,
-  create_block: BlockRef,
+  asset_type: string;
+  create_block: BlockRef;
   controllers: Array<BalanceController>;
   contract_id?: string;
   controllers_hash: string;

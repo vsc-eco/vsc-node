@@ -326,7 +326,8 @@ export class ChainBridge {
   async finalizeBalanceUpdate(depositId: string) {
     const memo: WithdrawFinalization = {
       net_id: this.self.config.get('network.id'), 
-      deposit_id: depositId
+      deposit_id: depositId,
+      action: CoreTransactionTypes.withdraw_finalization
     } as WithdrawFinalization
 
     //TransactionPoolService.createCoreTransferTransaction... (amount = depositId.active_balance)
@@ -336,7 +337,7 @@ export class ChainBridge {
     account: string,
     block_height: string,
     timestamp: Date,
-    amount?: number,
+    amount?: string,
     to?: string
   }) {
     if (json.net_id !== this.self.config.get('network.id')) {
@@ -507,16 +508,18 @@ export class ChainBridge {
       if (txInfo.to === process.env.MULTISIG_ACCOUNT) {   
         const balanceController = { type: 'HIVE', authority: json.to ?? txInfo.account, conditions: []} as BalanceController
 
+        const transferedCurrency = TransactionPoolService.parseFormattedAmount(txInfo.amount);
+
         const deposit = {
           from: txInfo.account,
           id: tx.transaction_id,
-          orig_balance: txInfo.amount,
-          active_balance: txInfo.amount,
+          orig_balance: transferedCurrency.amount,
+          active_balance: transferedCurrency.amount,
           created_at: tx.expiration,
           last_interacted_at: tx.expiration,
           outputs: [],
           inputs: [],
-          asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+          asset_type: transferedCurrency.assetSymbol,
           create_block: {
             block_ref: '', // txInfo.block_ref TODO, block ref still needs to be passed down to processCoreTransaction -> txInfo 
             included_block: +txInfo.block_height
@@ -581,7 +584,7 @@ export class ChainBridge {
           last_interacted_at: tx.expiration,
           outputs: [],
           inputs: [...determinedDepositDrains.deposits],
-          asset_type: 'HIVE', // TODO, update so its recognized what type of asset has been sent
+          asset_type: 'HIVE', // TODO, update so its recognized what type of asset has requested for withdraw
           create_block: currentBlock,
           controllers: [userBalanceController, multisigBalanceController],
         } as Deposit
@@ -590,14 +593,16 @@ export class ChainBridge {
         
         await this.updateSourceDeposits(determinedDepositDrains.deposits, tx.transaction_id);
 
-        // pla: should probably not store this in memory, but rather in a database so the tasks for the multisig allowed nodes are not lost
+        // pla: TODO STORE in a database so the tasks for the multisig allowed nodes are not lost on restart
         this.multiSigWithdrawBuffer.push(deposit);
       }
     } else if (json.action === CoreTransactionTypes.withdraw_finalization) {
       if (tx.from === process.env.MULTISIG_ACCOUNT) {
+        const transferedCurrency = TransactionPoolService.parseFormattedAmount(txInfo.amount);
+
         const deposit = await this.balanceDb.findOne({ id: json.deposit_id })
 
-        if (deposit.active_balance === txInfo.amount) {
+        if (deposit.active_balance === transferedCurrency.amount) {
           await this.balanceDb.updateOne({ id: json.deposit_id }, 
             { 
               $set: {
@@ -652,7 +657,7 @@ export class ChainBridge {
         if (missingAmount > deposit.active_balance) {
           drainedBalance = deposit.active_balance;
         } else {
-          drainedBalance = deposit.active_balance - missingAmount; 
+          drainedBalance = missingAmount; 
         }
         missingAmount -= drainedBalance;
         choosenDeposits.push({ deposit_id: deposit.id, amount: drainedBalance });        
@@ -663,6 +668,7 @@ export class ChainBridge {
       }
     }
 
+    // pla: TODO probably still has rounding issues
     return { isEnoughBalance: missingAmount === 0, deposits: choosenDeposits };
   }
 
@@ -683,6 +689,7 @@ export class ChainBridge {
     });
   }
 
+  // pla: TODO, filter for the asset type, a user might only withdraw/ transfer a specific asset in one tx
   async getUserControlledBalances(accountId: string, contractId?: string): Promise<Array<Deposit>> {
     
     const userOwnedBalancesQuery = {
@@ -871,15 +878,15 @@ export class ChainBridge {
               const withdrawLock = <WithdrawLock>multisigBalanceController.conditions.find(c => c.type === 'WITHDRAW')
               
               if (withdrawLock && withdrawLock.expiration_block > block_height) {
-                
+                this.self.logger.info(`withdraw request for deposit ${withdraw.id} has been finalized`)
                 // sign the balance update and publish via p2p multisig
                 // maybe do some more checks/ verifications to ensure that everything is working as intended
-                continue;
               }
             }
 
-            // when we get to this point, something has gone wrong (either the request is expired, something is wrong in the data and so on)
-            // and we remove the withdraw request from the buffer
+            // when we get to this point, something has gone wrong OR we successfully signed and proposed the withdraw
+            // in an error case either the request is expired, something is wrong with the data and so on
+            // we remove the withdraw request from the buffer
             this.multiSigWithdrawBuffer.splice(i, 1);
           }
         }

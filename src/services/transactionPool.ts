@@ -18,7 +18,7 @@ import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
-import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawRequest } from '../types/coreTransactions'
+import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawFinalization, WithdrawRequest } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
 const {BloomFilter} = BloomFilters
@@ -35,6 +35,7 @@ export class TransactionPoolService {
     HiveClient.broadcast.transfer
   }
 
+  // pla: TODO make parametrizable so the multisig account can also be used as sender
   public static async createCoreTransferTransaction(to: string, amount: string, setup: {identity, config}, memo?: string) {
     //create transfer object
     const data = {
@@ -49,10 +50,17 @@ export class TransactionPoolService {
 
   // to convert the amount for a transfer, necessary as described here 
   // https://gitlab.syncad.com/hive/hive-js/tree/master/doc#transfer
-  private static formatAmount(amount, assetSymbol) {
+  public static formatAmount(amount, assetSymbol) {
     const formattedAmount = Number(amount).toFixed(3);
     
     return `${formattedAmount} ${assetSymbol}`;
+  }
+
+  public static parseFormattedAmount(formattedAmount): {amount: number, assetSymbol: string} {
+    const [amountStr, assetSymbol] = formattedAmount.split(' ');
+    const amount = parseFloat(amountStr);
+  
+    return { amount, assetSymbol };
   }
 
   private static async createCoreTransaction(id: string, json: CoreBaseTransaction, setup: {identity, config, ipfsClient}) {
@@ -208,10 +216,11 @@ export class TransactionPoolService {
 
     const json = {
       net_id: setup.config.get('network.id'),
-      amount: args.amount
+      amount: args.amount,
+      action: CoreTransactionTypes.withdraw_request
     } as WithdrawRequest
 
-    const result = await TransactionPoolService.createCoreTransaction("vsc.create_contract", json, setup)
+    const result = await TransactionPoolService.createCoreTransaction("vsc.withdraw_request", json, setup)
     setup.logger.debug('result', result)
     return result;
   }

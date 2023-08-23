@@ -119,6 +119,9 @@ export enum TransactionDbType {
 }
 
 export interface BlockHeader {
+  hive_ref_block: number
+  hive_ref_tx: string
+  hive_ref_date: Date
   height: number
   id: string
 }

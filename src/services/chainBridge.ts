@@ -28,7 +28,7 @@ import { TransactionPoolService } from './transactionPool'
 export class ChainBridge {
   self: CoreService
   hiveKey: dhive.PrivateKey
-  blockHeaders: Collection
+  blockHeaders: Collection<BlockHeader>
   stateHeaders: Collection
   contracts: Collection
   witness: WitnessService
@@ -288,7 +288,8 @@ export class ChainBridge {
           output: null,
 
           local: false,
-          accessible: true
+          accessible: true,
+          output_actions: content.tx.chain_actions
         }
       }, {
         upsert: true
@@ -442,6 +443,7 @@ export class ChainBridge {
       // TODO, determine if the received block was proposed by the correct witness
       this.events.emit('vsc_block', {
         ...json,
+        ...txInfo,
         tx
       })
     } else if (json.action === CoreTransactionTypes.create_contract) {
@@ -960,7 +962,7 @@ export class ChainBridge {
 
   async start() {
     this.stateHeaders = this.self.db.collection('state_headers')
-    this.blockHeaders = this.self.db.collection('block_headers')
+    this.blockHeaders = this.self.db.collection<BlockHeader>('block_headers')
     this.witnessDb = this.self.db.collection('witnesses')
     this.balanceDb = this.self.db.collection('balances')
 
@@ -1004,6 +1006,7 @@ export class ChainBridge {
           id: block.block_hash,
           hive_ref_block: block.tx.block_num,
           hive_ref_tx: block.tx.transaction_id,
+          hive_ref_date: block.timestamp
           // witnessed_by: {
           //   hive_account: block.tx.posting
           // }

@@ -12,6 +12,7 @@ import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 import { BlockRef } from '@/types'
 
+
 export type HiveOps = CustomJsonOperation | TransferOperation
 
 export class OutputActions {
@@ -402,7 +403,14 @@ export class ContractEngine {
       if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
+
       
+      const includedRecord = await this.self.chainBridge.blockHeaders.findOne({
+        id: op.included_in
+      })
+
+
+
       const executeOutput = (await new Promise((resolve, reject) => {
         const vm = new NodeVM({
           sandbox: {
@@ -431,7 +439,9 @@ export class ContractEngine {
                   id: op.account_auth
                 },
                 tx_id: op.id,
-                included_in: op.included_in
+                included_in: op.included_in,
+                included_block: includedRecord.hive_ref_block,
+                included_date: includedRecord.hive_ref_date
               },
               transferFunds: this.transferFunds,
               withdrawFunds: this.withdrawFunds,

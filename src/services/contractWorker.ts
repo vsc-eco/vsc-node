@@ -98,11 +98,10 @@ export class ContractWorker {
                     //   })
 
                     const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
-
-                    if (nodeInfo.enabled && nodeInfo.trusted) {
-                        if (scheduleSlot?.did === this.self.identity.id) {
-                            await this.batchExecuteContracts()
-                        }
+                    const nodeReady = nodeInfo.enabled && nodeInfo.trusted;
+                    const isChoosen = scheduleSlot?.did === this.self.identity.id;
+                    if (nodeReady && isChoosen || this.self.config.get('debug.overrideSchedule')) {
+                        await this.batchExecuteContracts()
                     }
                 }
             }

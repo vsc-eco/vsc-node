@@ -8,7 +8,10 @@ import { CoreService } from './index'
 import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
+import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
+import { BlockRef } from '@/types'
+
 
 export type HiveOps = CustomJsonOperation | TransferOperation
 
@@ -101,6 +104,15 @@ export class ContractEngine {
     this.self = self
 
     this.contractCache = {}
+  }
+
+  private async transferFunds(to: DID, amount: number) {
+    // to be implemented
+  }
+
+  private async withdrawFunds(amount: number) {
+    // to be implemented
+    // uses transferFunds under the hood
   }
 
   private async contractStateExecutor(id: string) {
@@ -430,6 +442,13 @@ export class ContractEngine {
                 included_in: op.included_in,
                 included_block: includedRecord.hive_ref_block,
                 included_date: includedRecord.hive_ref_date
+              },
+              transferFunds: this.transferFunds,
+              withdrawFunds: this.withdrawFunds,
+              getBalance: (accountId: string) => {
+                return this.self.chainBridge.calculateBalanceSum(accountId, {
+                  // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
+                } as BlockRef, id)
               }
             },
             done: () => {

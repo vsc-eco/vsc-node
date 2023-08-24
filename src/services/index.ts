@@ -23,6 +23,7 @@ import { MultisigCore } from "./witness/multisig";
 import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
 import networks from "./networks";
+import { DiscordBot } from "./discordbot";
 interface CoreOptions {
     pathSuffix?: string
     dbSuffix?: string
@@ -52,6 +53,7 @@ export class CoreService {
     witness: WitnessService;
     networkId: any;
     multisig: MultisigCore;
+    discordBot: DiscordBot;
 
     constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
         this.options = options || {};
@@ -82,7 +84,6 @@ export class CoreService {
                 } catch {
     
                 }
-                Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix)
             }
         } catch {
             noBackup = true
@@ -170,6 +171,9 @@ export class CoreService {
 
             this.multisig = new MultisigCore(this, this.witness)
             await this.multisig.start()
+
+            this.discordBot = new DiscordBot(this)
+            await this.discordBot.start() 
         }
         catch (err) {
             console.trace(err)

@@ -852,7 +852,7 @@ export class ChainBridge {
           }           
         }
 
-        if (this.self.config.get('debug.debugNodeAddresses').includes(this.self.config.get('identity.nodePublic'))) {
+        if (this.self.config.get('debug.debugNodeAddresses')?.includes(this.self.config.get('identity.nodePublic'))) {
           this.self.logger.debug(`current block_head height ${block_height}`)
         }
         await this.stateHeaders.findOneAndUpdate(

@@ -21,7 +21,8 @@ export interface Contract {
   code: string
   state_merkle?: string //V0 of contract state
   creation_tx?: string
-  created_at?: Date
+  created_at?: Date,
+  balanceTransactions?: string[] //List of transaction ids that have affected the balance of the contract
 }
 
 export interface ContractCommitment {

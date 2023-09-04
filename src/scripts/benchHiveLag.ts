@@ -3,6 +3,7 @@ import 'dotenv/config'
 
  
 const HIVE_APIS = [
+    'api.shmoogleosukami.co.uk',
     "hive-api.3speak.tv",
     "api.hive.blog",
     "api.openhive.network",

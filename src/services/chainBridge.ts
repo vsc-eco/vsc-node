@@ -461,6 +461,18 @@ export class ChainBridge {
       } catch (err) {
         this.self.logger.error('not able to inject contract into the local database', tx.transaction_id)
       }
+
+      // pla: pin contract code for explorer nodes
+      if (this.self.config.get('ipfs.pinEverything')) {
+        for await (const chunk of this.self.ipfs.cat(json.code)) {}
+
+        try {
+          await this.self.ipfs.pin.add(json.code);
+          console.log(`VSC smart contract with the following hash ${json.code} pinned successfully.`);
+        } catch (error) {
+          console.error('Error pinning VSC smart contract code:', error);
+        }
+      }
     } else if (json.action === CoreTransactionTypes.join_contract) {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
         contract_id: json.contract_id,
@@ -1045,15 +1057,26 @@ export class ChainBridge {
       setInterval(() => {
         this.streamCheck()
       }, 5000)
-      const network_id = this.self.config.get('network.id')
       await this.streamStart()
+
+      const network_id = this.self.config.get('network.id')
 
       void (async () => {
         for await (let block of this.streamOut) {
           console.log('vsc block', block)
   
           const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
-          console.log(blockContent)
+  
+          if (this.self.config.get('ipfs.pinEverything')) {
+            try {
+              await this.self.ipfs.pin.add(block.block_hash);
+              console.log(`VSC block with the following hash ${block.block_hash} pinned successfully.`);
+            } catch (error) {
+              console.error('Error pinning vsc block:', error);
+            }
+          }
+
+        console.log(blockContent)
           await this.blockHeaders.insertOne({
             height: await this.countHeight(block.block_hash),
             id: block.block_hash,
@@ -1066,7 +1089,23 @@ export class ChainBridge {
           })
   
           for (let tx of blockContent.txs) {
-            this.processVSCBlockTransaction(tx, block.block_hash);
+  
+          if (this.self.config.get('ipfs.pinEverything')) {
+            const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+            const { payload, kid } = await this.self.identity.verifyJWS(signedTransaction)
+            const [did] = kid.split('#');
+            (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
+    
+            try {
+              await this.self.ipfs.pin.add(tx.id);
+              await this.self.ipfs.pin.add((signedTransaction as any).link as CID);
+              console.log(`Pinned VSC transaction ${tx.id}, ${(signedTransaction as any).link as CID} pinned successfully.`);
+            } catch (error) {
+              console.error('Error pinning VSC smart contract code:', error);
+            }
+          }
+
+          this.processVSCBlockTransaction(tx, block.block_hash);
           }
         }
       })()

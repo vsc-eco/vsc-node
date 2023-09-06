@@ -67,10 +67,15 @@ export const schema = `
         enabled_at: Int
         trusted: Boolean
     }
+    type ExplorerResult {
+        type: String
+        data: JSON
+    }
     type Query {
         contractState(id: String): ContractState
         findTransaction(id: String): Transaction
         findContract(id: String): FindContractResult
+        explorerEndpoint(id: String): ExplorerResult
 
         submitTransaction(id: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo

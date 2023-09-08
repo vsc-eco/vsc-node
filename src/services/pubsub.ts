@@ -130,7 +130,7 @@ export class PeerChannel {
                 this.connectionAlive = true;
                 this.events.emit('connection_established')
             }
-            this.logger.debug('received message', json_payload)
+            // this.logger.debug('received message', json_payload)
             if(json_payload.flags && json_payload.flags.includes('init')) {
                 if(this._handles[json_payload.type]) {
                     let drain = pushable()
@@ -400,7 +400,7 @@ export class P2PService {
                 return;
             }
             if(json_payload.type === MESSAGE_TYPES.announceNode) {
-                this.self.logger.debug('multicast payload', json_payload)
+                // this.self.logger.debug('multicast payload', json_payload)
 
                 const did_proof = await verifyMultiJWS(json_payload.payload.did_proof, this.self.identity)
                 

@@ -79,7 +79,7 @@ export class PeerChannel {
     connectionAlive: boolean;
     target: string;
     events: EventEmitter;
-    private interval: NodeJS.Timer;
+    private interval: NodeJS.Timer | number;
     private _peers: string[];
     private _handles: Record<string, {
         id: string
@@ -228,7 +228,7 @@ export class PeerChannel {
 
     async end() {
         await this.goodNight()
-        clearInterval(this.interval)
+        clearInterval(this.interval as any)
     }
 
     public async onMessage(type: string, handler: Function) {

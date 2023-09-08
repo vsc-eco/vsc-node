@@ -8,6 +8,7 @@ import { CoreService } from "../";
 import { HiveClient } from "../../utils";
 import moment from "moment";
 import { createSafeDivision } from "./multisig";
+import { DelayMonitor } from "./delayMonitor";
 
 
 
@@ -21,6 +22,7 @@ export class WitnessService {
     in_past: boolean
     did: string
   }>
+  delayMonitor: DelayMonitor;
   constructor(self: CoreService) {
     this.self = self
   }
@@ -201,5 +203,8 @@ export class WitnessService {
       }
     }, 15 * 1000)
     // await this.weightedSchedule(60)
+
+    this.delayMonitor = new DelayMonitor(this.self, this)
+    await this.delayMonitor.start()
   }
 }

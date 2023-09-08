@@ -53,12 +53,11 @@ services:
     environment: 
       IPFS_PATH: /etc/ipfs
     volumes:
-      - ipfs:/etc/ipfs
+      - ./data/ipfs:/etc/ipfs
 
 volumes:
   node-modules-store: {}
   mongodb: {}
-  ipfs: {}
       
 networks:
   vsc-node:

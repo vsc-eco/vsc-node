@@ -40,7 +40,7 @@ export class NodeInfoService {
         const hiveAccount = process.env.HIVE_ACCOUNT
 
         if(!hiveAccount || !process.env.HIVE_ACCOUNT_ACTIVE) {
-            console.warn('Cannot register node due to lack of hive account name or postingkey')
+            // console.warn('Cannot register node due to lack of hive account name or postingkey')
             return;
         }
         const [accountDetails] = await HiveClient.database.getAccounts([hiveAccount])

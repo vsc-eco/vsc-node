@@ -7,9 +7,12 @@ import { DagJWS, DID } from 'dids'
 import PQueue from 'p-queue'
 import { IPFSHTTPClient } from 'ipfs-http-client'
 import winston from 'winston'
+import Axios from 'axios'
 import { getLogger } from './logger'
 
-export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.hive.blog/')
+const HIVE_API = process.env.HIVE_HOST || 'https://api.hive.blog'
+
+export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.hive.blog')
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
@@ -42,7 +45,7 @@ export class fastStream {
     this.streamOut = Pushable()
     this.currentBlock = streamOpts.startBlock || 1
     this.parser_height = streamOpts.startBlock || 0
-    this.setSize = 20;
+    this.setSize = 150;
     this.endSet = (streamOpts.endBlock - streamOpts.startBlock) / this.setSize
 
     this.blockMap = {}
@@ -94,56 +97,27 @@ export class fastStream {
 
     let activeLength = 0
     let finalBlock;
-    for (let x = 1; x <= this.endSet; x++) {
-      activeLength = activeLength + 1
-      const streamOptsInput:BlockchainStreamOptions = {
-        from: this.currentBlock,
-        to: this.currentBlock + this.setSize - 1,
-        mode: BlockchainMode.Latest
-      }
-      this.currentBlock = this.currentBlock + this.setSize
-
-      finalBlock = streamOptsInput.to;
-      this.queue.add(() => {
-        const stream = HiveClient.blockchain.getBlockStream(streamOptsInput)
-        return new Promise((resolve) => {
-          stream
-            .on('data', (async function (block) {
-              const block_height = parseInt(block.block_id.slice(0, 8), 16)    
-              if (this.parser_height === block_height) {
-                this.parser_height = block_height + 1;
-                this.events.emit('block', block_height, block)
-              } else if(block_height > this.parser_height) {
-                this.blockMap[block_height] = block
-              }
-            }).bind(this))
-            .on('error', ((error) => {
-              clearInterval(this.eventQueue)
-              this.logger.error('error is', error)
-              this.streamOut.end(error)
-            }).bind(this))
-            .on('end', (function (e) {
-              
-              // done
-              activeLength = activeLength - 1
-              if (activeLength === 0) {
-                //events.emit('end')
-              }
-              ;(stream as any).end();
-              stream.removeAllListeners()
-              return resolve(null)
-            }).bind(this))
-        })
+    for (let x = 0; x <= this.endSet; x++) {
+      // console.log('101', x)
+      // console.log('this.endSet', this.endSet)
+      const blocks = await streamHiveBlocks(HIVE_API, {
+        count: this.setSize,
+        start_block: this.currentBlock
       })
-      await this.queue.onSizeLessThan(50)
-      if(this.streamPaused === true) {
-        this.queue.pause()
-        await new Promise(async (resolve) => {
-          this.events.once("unpause", () => {
-            resolve(null)
-            this.queue.start()
-          })
-        })
+      console.log('this.currentBlock', this.currentBlock)
+      // this.currentBlock = this.currentBlock + this.setSize
+      
+      for(let block of blocks) {
+        // console.log(block)
+        const block_height = parseInt(block.block_id.slice(0, 8), 16)
+        // console.log(this.parser_height, block_height)
+        if (this.parser_height === block_height) {
+          this.parser_height = block_height + 1;
+          this.currentBlock = block_height;
+          this.events.emit('block', block_height, block)
+        } else if(block_height > this.parser_height) {
+          this.blockMap[block_height] = block
+        }
       }
     }
     await this.queue.onIdle();
@@ -168,7 +142,7 @@ export class fastStream {
           }
         }).bind(this))
         .on('error', ((error) => {
-          clearInterval(this.eventQueue)
+          clearInterval(this.eventQueue as any)
           this.streamOut.end(error)
         }).bind(this))
         .on('end', (function () {
@@ -193,7 +167,7 @@ export class fastStream {
   }
 
   async killStream() {
-    clearInterval(this.eventQueue)
+    clearInterval(this.eventQueue as any)
     this.streamOut.end()
     this.queue.clear()
 
@@ -217,6 +191,57 @@ export class fastStream {
     }
     
     return new fastStream(queue, streamOpts)
+  }
+}
+
+export async function streamHiveBlocks(API, opts) {
+  const {data} = await Axios.post(API, {
+    "jsonrpc":"2.0", 
+    "method":"block_api.get_block_range", 
+    "params":{
+      "starting_block_num": opts.start_block, 
+      "count": opts.count
+    }, 
+    "id":1
+  })
+
+  const blocks = data.result.blocks.map(block => {
+    block.transactions = block.transactions.map(tx => {
+      tx.operations = tx.operations.map(op => {
+        const typeS = op.type.split('_')
+        return [typeS.splice(0, typeS.length - 1).join('_'), op.value]
+      })
+      return tx;
+    })
+    return block
+  })
+  return blocks
+}
+
+/**
+ * New block streaming utiziling batch requests (if available)
+ * Improves stability and speed of block streaming
+ */
+export class fastStreamV2 {
+  constructor() {
+
+  }
+
+  private async testAPIs() {
+    const API_LIST = [
+      'https://techcoderx.com',
+      'https://api.openhive.network',
+    ]
+
+    const testedAPIs = []
+    for(let api of API_LIST) {
+
+      
+    }
+  }
+
+  async start() {
+
   }
 }
   

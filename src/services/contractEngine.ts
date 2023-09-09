@@ -11,6 +11,8 @@ import { ContractOutput } from '../types/vscTransactions'
 import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 import { BlockRef } from '@/types'
+import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
+import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 
 
 export type HiveOps = CustomJsonOperation | TransferOperation
@@ -189,6 +191,18 @@ export class ContractEngine {
 
     return {
       client: {
+        /**
+         * 
+         * @param id Contract ID
+         */
+        remoteState: async(id: string) => {
+          const state = await this.contractStateRaw(id)
+
+          return {
+            pull: state.client.pull,
+            ls: state.client.ls,
+          }
+        },
         pull: async (key: string) => {
           try {
             console.log(stateCid)
@@ -424,6 +438,14 @@ export class ContractEngine {
     
                 return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
               },
+              bitcoin: {
+                ValidateSPV,
+                ser: ser,
+                parseTxHex: parseTxHex,
+                reverseBytes: reverse,
+                BTCUtils,
+                SPVUtils: utils
+              }
             },
             output: {
               setChainActions: (actions) => {

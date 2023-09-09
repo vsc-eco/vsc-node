@@ -10,9 +10,9 @@ import winston from 'winston'
 import Axios from 'axios'
 import { getLogger } from './logger'
 
-const HIVE_API = process.env.HIVE_HOST || 'https://api.hive.blog'
+const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.3speak.tv'
 
-export const HiveClient = new Client(process.env.HIVE_HOST || 'https://api.hive.blog')
+export const HiveClient = new Client(process.env.HIVE_HOST || ['https://api.deathwing.me', 'https://anyx.io', 'https://api.openhive.network', 'https://rpc.ausbit.dev'])
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 

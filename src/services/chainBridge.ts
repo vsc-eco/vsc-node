@@ -24,6 +24,7 @@ import { YogaServer } from 'graphql-yoga'
 import { WithdrawFinalization } from '../types/coreTransactions'
 import { TransactionPoolService } from './transactionPool'
 
+
 export class ChainBridge {
   self: CoreService
   hiveKey: dhive.PrivateKey
@@ -507,7 +508,7 @@ export class ChainBridge {
         this.self.logger.warn('not able to leave contract commitment', tx.transaction_id)
       }
     } else if (json.action === CoreTransactionTypes.deposit) {
-      if (txInfo.to === process.env.MULTISIG_ACCOUNT) {   
+      if (txInfo.to === networks[this.self.config.get('network.id')].multisigAccount) {   
         const balanceController = { type: 'HIVE', authority: json.to ?? txInfo.account, conditions: []} as BalanceController
 
         const transferedCurrency = TransactionPoolService.parseFormattedAmount(txInfo.amount);
@@ -568,7 +569,7 @@ export class ChainBridge {
 
         const multisigBalanceController = { 
           type: 'HIVE', 
-          authority: process.env.MULTISIG_ACCOUNT, 
+          authority: networks[this.self.config.get('network.id')].multisigAccount, 
           conditions: [
             {
               type: 'WITHDRAW',
@@ -599,7 +600,7 @@ export class ChainBridge {
         this.multiSigWithdrawBuffer.push(deposit);
       }
     } else if (json.action === CoreTransactionTypes.withdraw_finalization) {
-      if (tx.from === process.env.MULTISIG_ACCOUNT) {
+      if (tx.from === networks[this.self.config.get('network.id')].multisigAccount) {
         const transferedCurrency = TransactionPoolService.parseFormattedAmount(txInfo.amount);
 
         const deposit = await this.balanceDb.findOne({ id: json.deposit_id })
@@ -879,8 +880,9 @@ export class ChainBridge {
                   })   
                 }
               } else if (op_id === "transfer") {
+                // console.log(payload)
                 // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
-                if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
+                if ([payload.to, payload.from].includes(networks[this.self.config.get('network.id')].multisigAccount)) {
                   if (payload.memo) {
                     const json = JSON.parse(payload.memo)
                     await this.processCoreTransaction(tx, json, {
@@ -920,7 +922,7 @@ export class ChainBridge {
             // ensure that there is a safe distance between the receival of the withdraw request and the current block
             const SAFE_BLOCK_DISTANCE = 5
             if (withdraw.create_block.included_block + SAFE_BLOCK_DISTANCE < block_height) {
-              const multisigBalanceController = withdraw.controllers.find(c => c.authority === process.env.MULTISIG_ACCOUNT)
+              const multisigBalanceController = withdraw.controllers.find(c => c.authority === networks[this.self.config.get('network.id')].multisigAccount)
   
               if (multisigBalanceController) {
                 const withdrawLock = <WithdrawLock>multisigBalanceController.conditions.find(c => c.type === 'WITHDRAW')

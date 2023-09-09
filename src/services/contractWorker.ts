@@ -3,7 +3,7 @@ import { CoreService } from "./index"
 import { CommitmentStatus } from "../types/contracts";
 import { TransactionDbStatus, TransactionRaw, TransactionDbType } from '../types';
 import { BenchmarkContainer } from '../utils';
-import { CID } from 'ipfs-http-client';
+import { CID } from 'kubo-rpc-client';
 import { ContractOutput, VSCTransactionTypes } from '../types/vscTransactions';
 
 export class ContractWorker {

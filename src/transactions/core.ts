@@ -1,6 +1,6 @@
 import 'dotenv/config'
-import * as IPFS from "ipfs-http-client";
-import { IPFSHTTPClient } from "ipfs-http-client";
+import * as IPFS from "kubo-rpc-client";
+import { IPFSHTTPClient } from "kubo-rpc-client";
 import Path from 'path'
 import os from 'os'
 import Crypto from 'crypto'

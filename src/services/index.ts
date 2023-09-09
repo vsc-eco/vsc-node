@@ -1,5 +1,5 @@
-import { CID, IPFSHTTPClient } from "ipfs-http-client";
-import * as IPFSHTTP from "ipfs-http-client";
+import { CID, IPFSHTTPClient } from "kubo-rpc-client";
+import * as IPFSHTTP from "kubo-rpc-client";
 import Path from 'path'
 import Crypto from 'crypto'
 import { Ed25519Provider } from "key-did-provider-ed25519";

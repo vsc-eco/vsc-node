@@ -1,5 +1,5 @@
 import NodeSchedule from 'node-schedule'
-import { CID, IPFSHTTPClient } from "ipfs-http-client";
+import { CID, IPFSHTTPClient } from "kubo-rpc-client";
 import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'

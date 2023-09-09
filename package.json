@@ -19,6 +19,7 @@
     "bson": "^4.7.0",
     "cli-progress": "^3.11.2",
     "concurrently": "^7.6.0",
+    "crypto-js": "^4.1.1",
     "datastore-fs": "^7.0.0",
     "dids": "^2.4.3",
     "discord.js": "^14.11.0",

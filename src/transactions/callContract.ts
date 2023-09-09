@@ -11,7 +11,7 @@ void (async () => {
     const action = process.argv[3]
     const payload = process.argv[4]
 
-    const core = new CoreService({}, {
+    const core = new CoreService({
         prefix: 'manual tx core',
         printMetadata: true,
         level: 'debug',

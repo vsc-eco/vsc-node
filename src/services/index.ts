@@ -151,30 +151,31 @@ export class CoreService {
         try 
         {
             this.transactionPool = new TransactionPoolService(this)
+            this.chainBridge = new ChainBridge(this)
+            this.contractEngine = new ContractEngine(this)
+            this.contractWorker = new ContractWorker(this)
+            this.p2pService = new P2PService(this)
+            this.nodeInfo = new NodeInfoService(this)
+            this.witness = new WitnessService(this)
+            this.multisig = new MultisigCore(this, this.witness)
+            this.discordBot = new DiscordBot(this)
+            
             await this.transactionPool.start()
             
-            this.chainBridge = new ChainBridge(this)
             await this.chainBridge.start();
     
-            this.contractEngine = new ContractEngine(this)
             await this.contractEngine.start()
             
-            this.contractWorker = new ContractWorker(this)
             await this.contractWorker.start()
 
-            this.p2pService = new P2PService(this)
             await this.p2pService.start()
 
-            this.nodeInfo = new NodeInfoService(this)
             await this.nodeInfo.start()
 
-            this.witness = new WitnessService(this)
             await this.witness.start()
 
-            this.multisig = new MultisigCore(this, this.witness)
             await this.multisig.start()
 
-            this.discordBot = new DiscordBot(this)
             await this.discordBot.start() 
         }
         catch (err) {

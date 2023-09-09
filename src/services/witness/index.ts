@@ -25,6 +25,8 @@ export class WitnessService {
   delayMonitor: DelayMonitor;
   constructor(self: CoreService) {
     this.self = self
+
+    this.delayMonitor = new DelayMonitor(this.self, this)
   }
 
   async weightedSchedule(totalRounds) {
@@ -204,7 +206,7 @@ export class WitnessService {
     }, 15 * 1000)
     // await this.weightedSchedule(60)
 
-    this.delayMonitor = new DelayMonitor(this.self, this)
+    
     await this.delayMonitor.start()
   }
 }

@@ -262,7 +262,6 @@ export class ChainBridge {
         this.self.logger.error("not able to receive contract from local ipfs node ", tx.id)
       }
 
-      console.log('bockhash', blockHash)
       // }
     } else if (tx.op === VSCTransactionTypes.contract_output) {
       const transactionRaw: ContractOutput = (await this.self.ipfs.dag.get(tx.id as any)).value
@@ -340,6 +339,7 @@ export class ChainBridge {
     timestamp: Date,
     amount?: string,
     to?: string
+    memo?: string
   }) {
     if (json.net_id !== this.self.config.get('network.id')) {
       this.self.logger.warn('received transaction from a different network id! - will not process')
@@ -842,7 +842,8 @@ export class ChainBridge {
                     block_height,
                     timestamp: new Date(block.timestamp + "Z"),
                     amount : payload.amount,
-                    to: payload.to
+                    to: payload.to,
+                    memo: payload.memo
                   })
                 } else {
                   this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)

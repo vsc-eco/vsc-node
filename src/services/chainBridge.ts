@@ -794,14 +794,13 @@ export class ChainBridge {
                     }) || {} as any
   
                     const opts = {}
-                    if(proof.witness.enabled && witnessRecord.enabled !== true) {
-                        opts['enabled_at'] = block_height
-                        opts['disabled_at'] = null
-                        opts['disabled_reason'] = null
-                    } else if(proof.witness.enabled === false && typeof witnessRecord.disabled_at === 'number') {
-                      // opts['enabled_at'] = null
+                    if(witnessRecord.enabled !== true) {
                       opts['disabled_at'] = block_height
                       opts["disabled_reason"] = proof.witness.disabled_reason
+                    } else if(proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') {
+                      opts['enabled_at'] = block_height
+                      opts['disabled_at'] = null
+                      opts['disabled_reason'] = null
                     }
   
                     if(json_metadata.did_auths) {

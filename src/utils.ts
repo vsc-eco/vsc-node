@@ -93,41 +93,45 @@ export class fastStream {
     
     this.headTracker = setInterval(async() => {
       const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      if(currentBlock) {
+        this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      }
 
     }, 3000)
 
     let activeLength = 0
     let finalBlock;
-    for (let x = 0; x <= this.endSet; x++) {
-      // console.log('101', x)
-      // console.log('this.endSet', this.endSet)
-      this.queue.add(async () => {
-        const blocks = await streamHiveBlocks(HIVE_API, {
-          count: this.setSize,
-          start_block: this.startBlock + x * this.setSize
-        })
-        console.log('this.currentBlock', this.currentBlock, {
-          count: this.setSize,
-          start_block: this.startBlock + x * this.setSize,
-          blockMapSize: Object.keys(this.blockMap).length
-        })
-        // this.currentBlock = this.currentBlock + this.setSize
-        
-        for(let block of blocks) {
-          // console.log(block)
-          const block_height = parseInt(block.block_id.slice(0, 8), 16)
-          // console.log(this.parser_height, block_height)
-          if (this.parser_height === block_height) {
-            this.parser_height = block_height + 1;
-            this.currentBlock = block_height;
-            this.events.emit('block', block_height, block)
-          } else if(block_height > this.parser_height) {
-            this.blockMap[block_height] = block
+    if(this.endSet > 1) {
+      for (let x = 0; x <= this.endSet; x++) {
+        // console.log('101', x)
+        // console.log('this.endSet', this.endSet)
+        this.queue.add(async () => {
+          const blocks = await streamHiveBlocks(HIVE_API, {
+            count: this.setSize,
+            start_block: this.startBlock + x * this.setSize
+          })
+          console.log('this.currentBlock', this.currentBlock, {
+            count: this.setSize,
+            start_block: this.startBlock + x * this.setSize,
+            blockMapSize: Object.keys(this.blockMap).length
+          })
+          // this.currentBlock = this.currentBlock + this.setSize
+          
+          for(let block of blocks) {
+            // console.log(block)
+            const block_height = parseInt(block.block_id.slice(0, 8), 16)
+            // console.log(this.parser_height, block_height)
+            if (this.parser_height === block_height) {
+              this.parser_height = block_height + 1;
+              this.currentBlock = block_height;
+              this.events.emit('block', block_height, block)
+            } else if(block_height > this.parser_height) {
+              this.blockMap[block_height] = block
+            }
           }
-        }
-      })
-      await this.queue.onSizeLessThan(5)
+        })
+        await this.queue.onSizeLessThan(5)
+      }
     }
     await this.queue.onIdle();
     this.logger.debug("ITS IDLE", {

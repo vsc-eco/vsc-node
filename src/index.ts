@@ -13,5 +13,5 @@ async function startup(): Promise<void> {
 void startup()
 
 process.on('unhandledRejection', (error: Error) => {
-  console.log('unhandledRejection', error.message)
+  console.log('unhandledRejection', error)
 })

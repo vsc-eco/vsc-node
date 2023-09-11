@@ -60,8 +60,8 @@ export class DelayMonitor {
             }
         }).toArray()
 
-        //16 hours at 5 minute gather intervals
-        if(markers.length < 200) {
+        //8 hours at 5 minute gather intervals
+        if(markers.length < 100) {
             //Not enough data default to lowest consensus interval.
             return ALLOWED_NOTCHES[ALLOWED_NOTCHES.length - 1];
         } else {
@@ -83,8 +83,8 @@ export class DelayMonitor {
         console.log('delay monitor is running!')
         NodeSchedule.scheduleJob('*/5 * * * *', this.runMark)
 
-        // setInterval(async() => {
-        //     console.log('delay notch', await this.gatherAverages())
-        // }, 4000)
+        setInterval(async() => {
+            console.log('delay notch', await this.gatherAverages())
+        }, 4000)
     }
 }

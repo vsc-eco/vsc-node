@@ -154,10 +154,23 @@ export interface LoggerConfig {
   printMetadata: boolean
 }
 
+enum authType {
+  "posting" = 'posting',
+  "active" = 'posting'
+}
+
+//Onchain link giving DID X authority
+export interface DidAuth {
+  [did: string]: {
+    ats: authType[]
+    memo?: string
+  }
+}
 
 export interface DidAuthRecord {
   account: string
-  authority_type: "posting" | "active"
+  did: string
+  authority_type: authType[]
   valid_from: number
   valid_to: number | null
   tx_ref

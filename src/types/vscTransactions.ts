@@ -1,4 +1,4 @@
-import { CID } from "ipfs-http-client"
+import { CID } from "kubo-rpc-client"
 import { JsonPatchOp } from "./contracts"
 
 export interface CoreVSCTransaction {

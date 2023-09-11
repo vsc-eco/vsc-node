@@ -5,7 +5,7 @@ import { BlockchainMode, BlockchainStreamOptions, Client } from '@hiveio/dhive'
 import Pushable from 'it-pushable'
 import { DagJWS, DID } from 'dids'
 import PQueue from 'p-queue'
-import { IPFSHTTPClient } from 'ipfs-http-client'
+import { IPFSHTTPClient } from 'kubo-rpc-client'
 import winston from 'winston'
 import Axios from 'axios'
 import { getLogger } from './logger'
@@ -26,6 +26,7 @@ export class fastStream {
   streamPaused: boolean
   streamOut: Pushable.Pushable<any>
   currentBlock: number
+  startBlock: number
   parser_height: number
   endSet: number
   setSize: number
@@ -44,8 +45,9 @@ export class fastStream {
     this.events = new EventEmitter()    
     this.streamOut = Pushable()
     this.currentBlock = streamOpts.startBlock || 1
+    this.startBlock = streamOpts.startBlock || 1
     this.parser_height = streamOpts.startBlock || 0
-    this.setSize = 150;
+    this.setSize = 50;
     this.endSet = (streamOpts.endBlock - streamOpts.startBlock) / this.setSize
 
     this.blockMap = {}
@@ -91,7 +93,9 @@ export class fastStream {
     
     this.headTracker = setInterval(async() => {
       const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      if(currentBlock) {
+        this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      }
 
     }, 3000)
 
@@ -101,25 +105,32 @@ export class fastStream {
       for (let x = 0; x <= this.endSet; x++) {
         // console.log('101', x)
         // console.log('this.endSet', this.endSet)
-        const blocks = await streamHiveBlocks(HIVE_API, {
-          count: this.setSize,
-          start_block: this.currentBlock
-        })
-        console.log('this.currentBlock', this.currentBlock)
-        // this.currentBlock = this.currentBlock + this.setSize
-        
-        for(let block of blocks) {
-          // console.log(block)
-          const block_height = parseInt(block.block_id.slice(0, 8), 16)
-          // console.log(this.parser_height, block_height)
-          if (this.parser_height === block_height) {
-            this.parser_height = block_height + 1;
-            this.currentBlock = block_height;
-            this.events.emit('block', block_height, block)
-          } else if(block_height > this.parser_height) {
-            this.blockMap[block_height] = block
+        this.queue.add(async () => {
+          const blocks = await streamHiveBlocks(HIVE_API, {
+            count: this.setSize,
+            start_block: this.startBlock + x * this.setSize
+          })
+          console.log('this.currentBlock', this.currentBlock, {
+            count: this.setSize,
+            start_block: this.startBlock + x * this.setSize,
+            blockMapSize: Object.keys(this.blockMap).length
+          })
+          // this.currentBlock = this.currentBlock + this.setSize
+          
+          for(let block of blocks) {
+            // console.log(block)
+            const block_height = parseInt(block.block_id.slice(0, 8), 16)
+            // console.log(this.parser_height, block_height)
+            if (this.parser_height === block_height) {
+              this.parser_height = block_height + 1;
+              this.currentBlock = block_height;
+              this.events.emit('block', block_height, block)
+            } else if(block_height > this.parser_height) {
+              this.blockMap[block_height] = block
+            }
           }
-        }
+        })
+        await this.queue.onSizeLessThan(5)
       }
       await this.queue.onIdle();
     }
@@ -185,7 +196,7 @@ export class fastStream {
 
   static async create(streamOpts: {startBlock: number, endBlock?: number, trackHead?: boolean}) {
     const PQueue = (await import('p-queue')).default
-    const queue = new PQueue({ concurrency: 35 })
+    const queue = new PQueue({ concurrency: 2 })
     if(!streamOpts.endBlock) {
       const currentBlock = await HiveClient.blockchain.getCurrentBlock()
       const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16)
@@ -197,27 +208,44 @@ export class fastStream {
 }
 
 export async function streamHiveBlocks(API, opts) {
-  const {data} = await Axios.post(API, {
-    "jsonrpc":"2.0", 
-    "method":"block_api.get_block_range", 
-    "params":{
-      "starting_block_num": opts.start_block, 
-      "count": opts.count
-    }, 
-    "id":1
-  })
-
-  const blocks = data.result.blocks.map(block => {
-    block.transactions = block.transactions.map(tx => {
-      tx.operations = tx.operations.map(op => {
-        const typeS = op.type.split('_')
-        return [typeS.splice(0, typeS.length - 1).join('_'), op.value]
+  for(let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const {data} = await Axios.post(API, {
+        "jsonrpc":"2.0", 
+        "method":"block_api.get_block_range", 
+        "params":{
+          "starting_block_num": opts.start_block, 
+          "count": opts.count
+        }, 
+        "id":1
       })
-      return tx;
-    })
-    return block
-  })
-  return blocks
+      
+      const blocks = data.result.blocks.map(block => {
+        block.transactions = block.transactions.map((tx, index) => {
+          tx.operations = tx.operations.map(op => {
+            const typeS = op.type.split('_')
+            return [typeS.splice(0, typeS.length - 1).join('_'), op.value]
+          })
+          tx.transaction_id = block.transaction_ids[index]
+          tx.block_num = parseInt(block.block_id.slice(0, 8), 16)
+          tx.timestamp = block.timestamp
+          return tx;
+        })
+        return block
+      })
+      return blocks
+    } catch (ex) {
+      console.log(ex)
+      if(attempt === 0) {
+        await sleep(5_000)
+      } else {
+        await sleep(20_000 * attempt)
+      }
+      continue;
+    }
+
+  }
+  throw new Error('Block stream failed after 5 requests')
 }
 
 /**

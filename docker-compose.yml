@@ -30,7 +30,7 @@ services:
     image: mongo:4.4.18
     restart: always
     ports:
-      - 27021:27017
+      - 127.0.0.1:27021:27017
     networks:
       - vsc-node
     volumes:
@@ -49,7 +49,7 @@ services:
       - vsc-node
     ports:
       - "4001:4001"
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     environment: 
       IPFS_PATH: /etc/ipfs
     volumes:

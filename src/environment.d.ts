@@ -1,4 +1,5 @@
 import {CustomJsonOperation, TransferOperation} from '@hiveio/dhive/lib/chain/operation'
+import type {ValidateSPV} from '@summa-tx/bitcoin-spv-js'
 
 declare global {
   namespace NodeJS {
@@ -21,7 +22,12 @@ declare global {
   }
 }
 
+interface StateInterfaceRemote {
+  pull<T>(key: string): Promise<T>
+  ls(key: string): Promise<Array<string>>
+}
 interface StateInterface {
+  remoteState(id: string): Promise<StateInterfaceRemote> 
   pull<T>(key: string): Promise<T>
   update<T>(key: string, value: T): Promise<void>
   ls(key: string): Promise<Array<string>>
@@ -47,6 +53,13 @@ interface OuputInterface {
 
 interface UtilsInterface {
   SHA256: (input: string) => string
+  bitcoin: {
+    ValidateSPV
+    BTCUtils
+    SPVUtils
+    reverseBytes
+    ser
+  }
 }
 
 

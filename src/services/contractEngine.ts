@@ -374,6 +374,7 @@ export class ContractEngine {
    */
   async contractExecuteRaw(id, operations, options: {
     benchmark: Benchmark
+    codeOverride?: string
   }): Promise<ContractOutput> {
     const benchmark = options.benchmark
     if(operations.length === 0) {
@@ -383,6 +384,13 @@ export class ContractEngine {
       id,
     })
     if(!contractInfo) {
+      await this.contractDb.findOneAndUpdate({
+        id
+      }, {
+        $set: {
+          status: 'FAILED'
+        }
+      })
       throw new Error('Smart contract not registered with node')
     }
     let codeRaw = ''
@@ -395,7 +403,7 @@ export class ContractEngine {
       codeRaw = this.contractCache[id]
     }
     
-    let code = codeTemplate.replace('###ACTIONS###', codeRaw)
+    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
     
     const script = new VMScript(code).compile()
 
@@ -492,9 +500,7 @@ export class ContractEngine {
       startMerkle = CID.parse(startMerkle);
     }
     
-    if(!(stateMerkle instanceof CID)) {
-      stateMerkle = CID.parse(stateMerkle);
-    }
+    stateMerkle = CID.asCID(stateMerkle);
 
     let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
     startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {

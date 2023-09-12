@@ -9,6 +9,7 @@ import { HiveClient } from "../../utils";
 import moment from "moment";
 import { createSafeDivision } from "./multisig";
 import { DelayMonitor } from "./delayMonitor";
+import networks from "../networks";
 
 
 
@@ -117,14 +118,14 @@ export class WitnessService {
       //     ],
       //   }, null, 2)*/
       // )
-    const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
+    // const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
     
 
-    const data = createSafeDivision({
-      factorMin: 6,
-      factorMax: 11,
-      map: witnessNodes
-    })
+    // const data = createSafeDivision({
+    //   factorMin: 6,
+    //   factorMax: 11,
+    //   map: witnessNodes
+    // })
     let outSchedule = []
     for (let x = 0; x < totalRounds; x++) {
       if (witnessNodes[x % witnessNodes.length]) {
@@ -172,13 +173,14 @@ export class WitnessService {
    */
   async applyBNSchedule(schedule: any[]) {
     const consensusRound = await this.calculateConsensusRound()
+    const roundLength = networks[this.self.config.get('network.id')].roundLength;
 
     return schedule.map((e, index) => {
       return {
         ...e,
-        bn: consensusRound.pastRoundHash + index * 20,
-        bn_works: (consensusRound.pastRoundHash + index * 20) % 20 === 0,
-        in_past: consensusRound.pastRoundHash + index * 20 < consensusRound.currentBlockNumber,
+        bn: consensusRound.pastRoundHash + index * roundLength,
+        bn_works: (consensusRound.pastRoundHash + index * roundLength) % roundLength === 0,
+        in_past: consensusRound.pastRoundHash + index * roundLength < consensusRound.currentBlockNumber,
       }
     })
   }

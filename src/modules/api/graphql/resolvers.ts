@@ -86,5 +86,23 @@ export const Resolvers = {
     return {
       peer_id: idInfo.id
     }
+  },
+  witnessNodes: async () => {
+    return await appContainer.self.witness.witnessNodes()
+  },
+  nextWitnessSlot: async (_, args) => {
+    let node_id
+    if(args.local) {
+      node_id = appContainer.self.identity.id;
+    } 
+
+    const nextSlot = appContainer.self.witness.witnessSchedule.find(e => {
+      if(node_id) {
+        return e.in_past === false && e.did === node_id;
+      } else {
+        return e.in_past === false;
+      }
+    })
+    return nextSlot;
   }
 }

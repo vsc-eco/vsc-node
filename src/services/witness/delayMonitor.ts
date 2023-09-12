@@ -3,6 +3,7 @@ import Moment from 'moment'
 import NodeSchedule from 'node-schedule'
 import { WitnessService } from ".";
 import { CoreService } from "..";
+import { median } from "../..//utils";
 
 /**
  * List of allowed interval notches for hive anchor record creation
@@ -65,12 +66,12 @@ export class DelayMonitor {
             //Not enough data default to lowest consensus interval.
             return ALLOWED_NOTCHES[ALLOWED_NOTCHES.length - 1];
         } else {
-            let totalDelay = markers.map(e => e.value).reduce((e, r) => {
+            let avgDelay = median(markers.map(e => e.value)) /*.reduce((e, r) => {
                 return e + r;
             })
-            let avgDelay = totalDelay / markers.length;
+            
+            let avgDelay = totalDelay / markers.length;*/
 
-            console.log(avgDelay)
             const allowedNotch = ALLOWED_NOTCHES.find((n) => {
                 //Requires delay to leave enough room for P2P, and processing of the next block.
                 return n > (avgDelay * 1.5)

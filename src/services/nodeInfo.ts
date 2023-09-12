@@ -85,7 +85,7 @@ export class NodeInfoService {
                 json_metadata.vsc_node.unsigned_proof.witness.disabled_reason === disableReason,
                 json_metadata.vsc_node.unsigned_proof.witness.plugins?.includes('multisig')
             ) {
-                if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
+                if(moment().subtract('1', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
                     //Node registration not required
                     return
                 }

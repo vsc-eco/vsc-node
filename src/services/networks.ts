@@ -11,7 +11,7 @@ export default {
     //TESTNET v2
     "testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c": {
         genesisDay: 74869131,
-        roundLength: 20,
+        roundLength: 10, //30 seconds
         //10 Rounds per every consensus period. 
         //Thus 20 blocks per round * 3 seconds = 60 * 10 = 600 seconds = 10 minutes
         consensusRoundLength: 10, 

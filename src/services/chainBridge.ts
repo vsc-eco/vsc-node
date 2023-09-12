@@ -794,7 +794,7 @@ export class ChainBridge {
                     }) || {} as any
   
                     const opts = {}
-                    if(witnessRecord.enabled !== true) {
+                    if(witnessRecord.enabled === true && proof.witness.enabled === false) {
                       opts['disabled_at'] = block_height
                       opts["disabled_reason"] = proof.witness.disabled_reason
                     } else if(proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') {

@@ -25,7 +25,7 @@ import networks from "./networks";
 import { DiscordBot } from "./discordbot";
 interface CoreOptions {
     dbSuffix?: string
-
+    mode?: 'lite'
 }
 
 export class CoreService {
@@ -47,8 +47,11 @@ export class CoreService {
     networkId: any;
     multisig: MultisigCore;
     discordBot: DiscordBot;
+    mode: string;
 
-    constructor(loggerSettings?: LoggerConfig) {}
+    constructor(coreSettings?: LoggerConfig & CoreOptions) {
+        this.mode = coreSettings?.mode
+    }
 
     private async setupKeys() {
         let keyBackup = {}

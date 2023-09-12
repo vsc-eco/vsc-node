@@ -32,7 +32,6 @@ export class TransactionPoolService {
 
   constructor(self: CoreService) {
     this.self = self
-    HiveClient.broadcast.transfer
   }
 
   // pla: TODO make parametrizable so the multisig account can also be used as sender

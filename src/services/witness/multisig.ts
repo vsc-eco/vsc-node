@@ -475,73 +475,76 @@ export class MultisigCore {
 
         // }, 6000)
 
-        setInterval(async() => {
-            if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
-                // console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)
-        
-                const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
-                  did: this.self.identity.id,
-                })
-                if (nodeInfo) {
-                    //   const scheduleSlot = this.self.witness.witnessSchedule?.find((e) => {
-                    //     return e.bn === offsetBlock
-                    //   })
+        if(this.self.mode !== 'lite') {
 
-                    const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
-                    
-                    
-                    const calc = calcBlockInterval({
-                        currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
-                        intervalLength: this.multisigOptions.rotationIntervalHive,
-                        marginLength: 5
+            setInterval(async() => {
+                if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
+                    // console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)
+            
+                    const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
+                      did: this.self.identity.id,
                     })
-                    
-                    // console.log(calc)
-                    const scheduleSlotActual = this.self.witness.witnessSchedule.find(e => e.bn === calc.last)
-
-                    // console.log('scheduleSlotActual', scheduleSlotActual)
-
-                    // console.log(this.self.chainBridge.hiveStream.currentBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.currentBlock)
-                    if (nodeInfo.enabled && nodeInfo.trusted && calc.isMarginActive) {
-                        if (!this._rotationRunning && calc.last !== this.lastRotateBlock) {
-                            console.log('time to rotate mulitisig keys')
-                            this._rotationRunning = true;
-                            try {
-                                await this.triggerKeyrotation()
-                            } catch(ex) {
-                                console.log(ex)
+                    if (nodeInfo) {
+                        //   const scheduleSlot = this.self.witness.witnessSchedule?.find((e) => {
+                        //     return e.bn === offsetBlock
+                        //   })
+    
+                        const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
+                        
+                        
+                        const calc = calcBlockInterval({
+                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            intervalLength: this.multisigOptions.rotationIntervalHive,
+                            marginLength: 5
+                        })
+                        
+                        // console.log(calc)
+                        const scheduleSlotActual = this.self.witness.witnessSchedule.find(e => e.bn === calc.last)
+    
+                        // console.log('scheduleSlotActual', scheduleSlotActual)
+    
+                        // console.log(this.self.chainBridge.hiveStream.currentBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.currentBlock)
+                        if (nodeInfo.enabled && nodeInfo.trusted && calc.isMarginActive) {
+                            if (!this._rotationRunning && calc.last !== this.lastRotateBlock) {
+                                console.log('time to rotate mulitisig keys')
+                                this._rotationRunning = true;
+                                try {
+                                    await this.triggerKeyrotation()
+                                } catch(ex) {
+                                    console.log(ex)
+                                }
+                                this.lastRotateBlock = calc.last
+                                this._rotationRunning = false
                             }
-                            this.lastRotateBlock = calc.last
-                            this._rotationRunning = false
+                        }
+                        const procOutCalc = calcBlockInterval({
+                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            intervalLength: 20,
+                            marginLength: 5
+                        })
+                        // console.log(this.runnerTags, this.isTagged('process_outputs'), procOutCalc.last,  this.runnerTags['process_outputs']?.v)
+                        // console.log(nodeInfo, this.self.witness.witnessSchedule.find(e => e.bn === procOutCalc.last), this.self.witness.witnessSchedule.find(e => e.bn === procOutCalc.last).account === nodeInfo.account)
+                        if (
+                          scheduleSlot &&
+                          procOutCalc.isMarginActive &&
+                          !this.isTagged('process_outputs') &&
+                          procOutCalc.last !== this.runnerTags['process_outputs']?.v &&
+                          this.self.witness.witnessSchedule.find((e) => e.bn === procOutCalc.last)
+                            .account === nodeInfo.account 
+                        ) {
+                          // console.log('Processed on chain interactions', scheduleSlot)
+                          try {
+                            this.tagRunner('process_outputs')
+                            this.tagValue('process_outputs', procOutCalc.last)
+                            await this.processOutputs()
+                            this.untagRunner('process_outputs')
+                          } catch (ex) {
+                            console.log(ex)
+                          }
                         }
                     }
-                    const procOutCalc = calcBlockInterval({
-                        currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
-                        intervalLength: 20,
-                        marginLength: 5
-                    })
-                    // console.log(this.runnerTags, this.isTagged('process_outputs'), procOutCalc.last,  this.runnerTags['process_outputs']?.v)
-                    // console.log(nodeInfo, this.self.witness.witnessSchedule.find(e => e.bn === procOutCalc.last), this.self.witness.witnessSchedule.find(e => e.bn === procOutCalc.last).account === nodeInfo.account)
-                    if (
-                      scheduleSlot &&
-                      procOutCalc.isMarginActive &&
-                      !this.isTagged('process_outputs') &&
-                      procOutCalc.last !== this.runnerTags['process_outputs']?.v &&
-                      this.self.witness.witnessSchedule.find((e) => e.bn === procOutCalc.last)
-                        .account === nodeInfo.account 
-                    ) {
-                      // console.log('Processed on chain interactions', scheduleSlot)
-                      try {
-                        this.tagRunner('process_outputs')
-                        this.tagValue('process_outputs', procOutCalc.last)
-                        await this.processOutputs()
-                        this.untagRunner('process_outputs')
-                      } catch (ex) {
-                        console.log(ex)
-                      }
-                    }
                 }
-            }
-        }, 1.5 * 1000)
+            }, 1.5 * 1000)
+        }
     }
 }

@@ -1028,97 +1028,88 @@ export class ChainBridge {
     this.witness = new WitnessService(this.self)
 
     this.streamOut = Pushable()
-
-    this.events.on('vsc_block', (block) => {
-      this.streamOut.push(block)
-    })
-
-    NodeSchedule.scheduleJob('* * * * *', async () => {
-      await this.verifyMempool()
-    })
-
-    // NodeSchedule.scheduleJob('* * * * *', async () => {
-    //   await this.streamCheck()
-    // })
-
-    setInterval(() => {
-      this.streamCheck()
-    }, 5000)
-
-
-    // const date = new Date()
-    // const blist = await streamHiveBlocks('https://api.hive.blog', {
-    //   start_block: 100,
-    //   count: 1000
-    // })
     
-    // console.log(new Date().getTime() - date.getTime(), blist.length)
-
-    await this.streamStart()
-
-    const network_id = this.self.config.get('network.id')
-
-    void (async () => {
-      for await (let block of this.streamOut) {
-        console.log('vsc block', block)
-
-        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
-        console.log(blockContent)
-        await this.blockHeaders.insertOne({
-          height: await this.countHeight(block.block_hash),
-          id: block.block_hash,
-          hive_ref_block: block.tx.block_num,
-          hive_ref_tx: block.tx.transaction_id,
-          hive_ref_date: block.timestamp
-          // witnessed_by: {
-          //   hive_account: block.tx.posting
-          // }
-        })
-
-        for (let tx of blockContent.txs) {
-          this.processVSCBlockTransaction(tx, block.block_hash);
-        }
-      }
-    })()
-
-    let blkNum;
-    setInterval(() => {
-      const diff = (blkNum - this.hiveStream.blockLag) || 0
-      blkNum = this.hiveStream.blockLag
+    
+    
+    if(this.self.mode !== 'lite') {
       
-      this.self.logger.info(`current block lag ${this.hiveStream.blockLag} ${Math.round(diff / 15)}`)
-    }, 15 * 1000)
+      this.events.on('vsc_block', (block) => {
+        this.streamOut.push(block)
+      })
+      
+      NodeSchedule.scheduleJob('* * * * *', async () => {
+        await this.verifyMempool()
+      })
+          
+      // console.log(new Date().getTime() - date.getTime(), blist.length)
+      setInterval(() => {
+        this.streamCheck()
+      }, 5000)
+      const network_id = this.self.config.get('network.id')
+      await this.streamStart()
 
-    let producingBlock = false;
-    setInterval(async () => {
-      if (this.hiveStream.blockLag < 5) {
-        //Can produce a block
-        const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
-        if ((offsetBlock % networks[network_id].roundLength) === 0) {
-          if (!producingBlock) {
-            const nodeInfo = await this.witnessDb.findOne({
-              did: this.self.identity.id
-            })
-            if (nodeInfo) {
-              const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
-                return e.bn === offsetBlock
-              }))
-              // console.log('scheduleSlot', scheduleSlot)
-              if (nodeInfo.enabled && nodeInfo.trusted) {
-
-
-                if (scheduleSlot?.did === this.self.identity.id) {
-                  this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
-                  producingBlock = true;
-                  await this.createBlock()
+      void (async () => {
+        for await (let block of this.streamOut) {
+          console.log('vsc block', block)
+  
+          const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+          console.log(blockContent)
+          await this.blockHeaders.insertOne({
+            height: await this.countHeight(block.block_hash),
+            id: block.block_hash,
+            hive_ref_block: block.tx.block_num,
+            hive_ref_tx: block.tx.transaction_id,
+            hive_ref_date: block.timestamp
+            // witnessed_by: {
+            //   hive_account: block.tx.posting
+            // }
+          })
+  
+          for (let tx of blockContent.txs) {
+            this.processVSCBlockTransaction(tx, block.block_hash);
+          }
+        }
+      })()
+  
+      let blkNum;
+      setInterval(() => {
+        const diff = (blkNum - this.hiveStream.blockLag) || 0
+        blkNum = this.hiveStream.blockLag
+        
+        this.self.logger.info(`current block lag ${this.hiveStream.blockLag} ${Math.round(diff / 15)}`)
+      }, 15 * 1000)
+  
+      let producingBlock = false;
+      setInterval(async () => {
+        if (this.hiveStream.blockLag < 5) {
+          //Can produce a block
+          const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
+          if ((offsetBlock % networks[network_id].roundLength) === 0) {
+            if (!producingBlock) {
+              const nodeInfo = await this.witnessDb.findOne({
+                did: this.self.identity.id
+              })
+              if (nodeInfo) {
+                const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
+                  return e.bn === offsetBlock
+                }))
+                // console.log('scheduleSlot', scheduleSlot)
+                if (nodeInfo.enabled && nodeInfo.trusted) {
+  
+  
+                  if (scheduleSlot?.did === this.self.identity.id) {
+                    this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
+                    producingBlock = true;
+                    await this.createBlock()
+                  }
                 }
               }
             }
+          } else {
+            producingBlock = false;
           }
-        } else {
-          producingBlock = false;
         }
-      }
-    }, 300)
+      }, 300)
+    }
   }
 }

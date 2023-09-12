@@ -82,10 +82,12 @@ export class DelayMonitor {
 
     async start() {
         console.log('delay monitor is running!')
-        NodeSchedule.scheduleJob('*/5 * * * *', this.runMark)
-
-        setInterval(async() => {
-            console.log('delay notch', await this.gatherAverages())
-        }, 4000)
+        
+        if(this.self.mode !== 'lite') {
+            NodeSchedule.scheduleJob('*/5 * * * *', this.runMark)
+            NodeSchedule.scheduleJob('*/5 * * * *', async() => {
+                console.log('Delay notch', await this.gatherAverages())
+            })
+        }
     }
 }

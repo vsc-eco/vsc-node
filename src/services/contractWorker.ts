@@ -84,27 +84,27 @@ export class ContractWorker {
 
     async start() {
         this.network_id = this.self.config.get('network.id')
-        
-        setInterval(async() => {
-            if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
-                // console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)
-        
-                const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
-                  did: this.self.identity.id,
-                })
-                if (nodeInfo) {
-                    //   const scheduleSlot = this.self.witness.witnessSchedule?.find((e) => {
-                    //     return e.bn === offsetBlock
-                    //   })
-
-                    const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
-                    const nodeReady = nodeInfo.enabled && nodeInfo.trusted;
-                    const isChoosen = scheduleSlot?.did === this.self.identity.id;
-                    if (nodeReady && isChoosen || this.self.config.get('debug.overrideSchedule')) {
-                        await this.batchExecuteContracts()
+        if(this.self.mode !== 'lite') {
+            setInterval(async() => {
+                if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
+            
+                    const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
+                      did: this.self.identity.id,
+                    })
+                    if (nodeInfo) {
+                        //   const scheduleSlot = this.self.witness.witnessSchedule?.find((e) => {
+                        //     return e.bn === offsetBlock
+                        //   })
+                        
+                        const scheduleSlot = this.self.witness.witnessSchedule.find(e => e.in_past !== true)
+                        const nodeReady = nodeInfo.enabled && nodeInfo.trusted;
+                        const isChoosen = scheduleSlot?.did === this.self.identity.id;
+                        if (nodeReady && isChoosen || this.self.config.get('debug.overrideSchedule')) {
+                            await this.batchExecuteContracts()
+                        }
                     }
                 }
-            }
-        }, 15 * 1000)
+            }, 15 * 1000)
+        }
     }
 }

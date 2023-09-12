@@ -30,6 +30,42 @@ export class WitnessService {
     this.delayMonitor = new DelayMonitor(this.self, this)
   }
 
+  async witnessNodes() {
+    const consensusRound = await this.calculateConsensusRound()
+    
+    const witnessNodes = await this.witnessDb
+    .find({
+      $or: [
+        {
+          disabled_at: {
+            $gt: consensusRound.pastRoundHash,
+          },
+        },
+        {
+          disabled_at: {
+            $exists: false,
+          },
+        },
+        {
+          disabled_at: {
+            $eq: null
+          },
+        },
+      ],
+      trusted: true,
+      net_id: this.self.config.get('network.id'),
+      enabled_at: {
+        $lt: consensusRound.pastRoundHash,
+      },
+      last_signed: {
+        $gt: moment().subtract('7', 'day').toDate()
+      }
+    })
+    .toArray()
+
+    return witnessNodes;
+  }
+
   async weightedSchedule(totalRounds) {
     const consensusRound = await this.calculateConsensusRound()
     const witnessNodes = await this.witnessDb
@@ -143,6 +179,7 @@ export class WitnessService {
   }
 
   async calculateConsensusRound() {
+    const roundLength = networks[this.self.config.get('network.id')].roundLength;
     const blockNumber = await HiveClient.blockchain.getCurrentBlockNum()
 
     // const mod1 = blockNumber % 20;
@@ -151,7 +188,7 @@ export class WitnessService {
     // const mod2 = mod1 + blockNumber
     // console.log(mod2 % 20)
 
-    const modLength = 20 * 60
+    const modLength = roundLength * 120
     const mod3 = blockNumber % modLength
     const pastRoundHash = blockNumber - mod3
     // console.log(
@@ -200,7 +237,7 @@ export class WitnessService {
 
     setInterval(async () => {
       try {
-        this.witnessSchedule = await this.weightedSchedule(60)
+        this.witnessSchedule = await this.weightedSchedule(120)
         // console.log('witnessSchedule', this.witnessSchedule)
       } catch (ex) {
         console.log(ex)

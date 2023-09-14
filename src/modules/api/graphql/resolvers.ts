@@ -1,6 +1,5 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
-import { HiveClient, } from '../../../utils'
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -166,10 +165,10 @@ export const Resolvers = {
 
         return { type: type, data: content }
       } else {
-        return "CID format not supported!"
+        return { type: "error", data: "CID format not supported!" }
       }
     } else {
-      return "Current node configuration does not allow for this endpoint to be used.";
+      return { type: "error", data: "Current node configuration does not allow for this endpoint to be used." }
     }
   }
 }

@@ -9,7 +9,7 @@ import { IPFSHTTPClient } from 'kubo-rpc-client'
 import winston from 'winston'
 import Axios from 'axios'
 import { getLogger, globalLogger } from './logger'
-import * as IPFS from "ipfs-http-client";
+import * as IPFS from "kubo-rpc-client";
 import { Version } from 'multiformats'
 
 const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.3speak.tv'

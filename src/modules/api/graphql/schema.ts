@@ -67,7 +67,7 @@ export const schema = `
         enabled_at: Int
         trusted: Boolean
     }
-    type ExplorerResult {
+    type findCIDResult {
         type: String
         data: JSON
     }
@@ -75,7 +75,7 @@ export const schema = `
         contractState(id: String): ContractState
         findTransaction(id: String): Transaction
         findContract(id: String): FindContractResult
-        explorerEndpoint(id: String): ExplorerResult
+        findCID(id: String): findCIDResult
 
         submitTransaction(id: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo

@@ -152,8 +152,7 @@ export class CoreService {
         await this.setupKeys();
 
         console.log('Starting part way')
-
-        await this.ipfs.dag.get(CID.parse('bafyreietntvizm42d25qd2ppnng6mf7jkxyxpsgnsicomnqxxfowdcfsr4')); 
+        
         try 
         {
             this.transactionPool = new TransactionPoolService(this)

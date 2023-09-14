@@ -81,7 +81,8 @@
     "lint:fix": "eslint --fix \"src/**/*.{ts,tsx}\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test:report": "sensible-browser ./coverage/lcov-report/index.html",
-    "test": "jest --coverage"
+    "test": "jest --coverage",
+    "service-test": "node --experimental-specifier-resolution=node --loader src/tests/index.ts"
   },
   "author": "",
   "license": "ISC",

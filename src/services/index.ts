@@ -23,6 +23,7 @@ import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
 import networks from "./networks";
 import { DiscordBot } from "./discordbot";
+import { createIPFSClient } from "../utils";
 interface CoreOptions {
     dbSuffix?: string
     mode?: 'lite'
@@ -135,7 +136,7 @@ export class CoreService {
         console.log('Starting')
         this.config = new Config(Config.getConfigDir())
         await this.config.open()
-        this.ipfs = IPFSHTTP.create({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')});
+        this.ipfs = createIPFSClient({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')}, this.config.get('ipfs.pinEverything'));
         this.networkId = this.config.get('network.id')
         this.logger = getLogger(this.loggerSettings || {
             prefix: 'core',
@@ -151,6 +152,8 @@ export class CoreService {
         await this.setupKeys();
 
         console.log('Starting part way')
+
+        await this.ipfs.dag.get(CID.parse('bafyreietntvizm42d25qd2ppnng6mf7jkxyxpsgnsicomnqxxfowdcfsr4')); 
         try 
         {
             this.transactionPool = new TransactionPoolService(this)

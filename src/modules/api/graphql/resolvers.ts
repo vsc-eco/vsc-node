@@ -19,7 +19,7 @@ function tryJSONParse(str): string {
   }
 }
 
-export const getRelevantContentOfIpfsHash = async (ipfsHash: string) => {
+const getRelevantContentOfIpfsHash = async (ipfsHash: string) => {
   let content = await appContainer.self.ipfs.dag.get(CID.parse(ipfsHash)) as any;
 
   // determine if ipfs hash resembles a regular ipfs object and not an ipfs cbor object 
@@ -146,10 +146,8 @@ export const Resolvers = {
     return nextSlot;
   },
 
-
-  // tries to match the received id to either a hive block/ tx, vsc block/ tx or an ipfs object
-  // maybe strip away more data b4 sending it to the client
-  explorerEndpoint: async (_, args) => {
+  // finds and tags vsc-tx/ vsc-blocks via ipfs CID's, unidentifiable CID's are tagged with the type 'null'
+  findCID: async (_, args) => {
     if (appContainer.self.config.get('ipfs.pinEverything')) {
       const ipfsHash = args.id;
   
@@ -168,51 +166,7 @@ export const Resolvers = {
 
         return { type: type, data: content }
       } else {
-        const txRegex = /^[a-fA-F0-9]{40}$/
-  
-        if (!Number.isNaN(+ipfsHash)) {
-          // hive block height detected
-  
-          const block = await HiveClient.database.getBlock(+ipfsHash);
-  
-          // filter the block for vsc core transactions
-          const transactions = []
-          for (let tx of block.transactions) {
-            let isViableTx = false
-  
-            for (let [op_id, payload] of tx.operations as any) {
-              if (op_id === "custom_json") {
-                if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
-                  isViableTx = true
-                  break;
-                }
-              } else if (op_id === "transfer") {
-                // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
-                if ([payload.to, payload.from].includes(process.env.MULTISIG_ACCOUNT)) {
-                  if (payload.memo) {
-                    isViableTx = true
-                    break;
-                  }
-                }
-              }
-            }
-  
-            if (isViableTx) {
-              transactions.push(tx)
-            }
-          }
-          
-          block.transactions = transactions;
-  
-          return { type: 'hive-block', data: block }
-        } else if (txRegex.test(ipfsHash)) {
-          // hive tx detected, if is a vsc tx, return
-  
-          const tx = await HiveClient.database.getTransaction(ipfsHash);
-  
-          return { type: 'hive-tx', data: tx }
-        }
-      
+        return "CID format not supported!"
       }
     } else {
       return "Current node configuration does not allow for this endpoint to be used.";

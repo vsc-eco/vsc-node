@@ -10,40 +10,20 @@ export const DebugResolvers = {
   }
 }
 
-function tryJSONParse(str): string {
-  try {
-      return JSON.parse(str);
-  } catch (e) {
-      return str;
-  }
-}
+// called recursively, as the object might consist of a nested JWS structure 
+const getDagCborIpfsHashContent = async (cid: CID) => {
+  let content = await appContainer.self.ipfs.dag.get(cid) as any;
 
-const getRelevantContentOfIpfsHash = async (ipfsHash: string) => {
-  let content = await appContainer.self.ipfs.dag.get(CID.parse(ipfsHash)) as any;
-
-  // determine if ipfs hash resembles a regular ipfs object and not an ipfs cbor object 
-  if ('Links' in content.value && 'Data' in content.value) {
-
-    const stream = appContainer.self.ipfs.cat(CID.parse(ipfsHash));
-    const chunks = [];
-
-    for await (const chunk of stream) {
-      chunks.push(chunk);
-    }
-
-    const buffer = Buffer.concat(chunks);
-    let dataRaw = buffer.toString(); 
-
-    content = tryJSONParse(dataRaw);
-  } else {
-    content = content.value
-  }
-
-  if (typeof content === 'object') {
+  if (typeof content === 'object' && content) {
     // check if ipfs object is in JWS format, if so we need to go one layer below
-    if ('payload' in content && 'signatures' in content) {
-      content = getRelevantContentOfIpfsHash(((content as any).link as CID).toString())
-      content = tryJSONParse(content);
+    const data = content.value;
+    if ('payload' in data && 'signatures' in data) {
+      const nestedCid: CID = (data as any).link as CID;
+      if (nestedCid.toString() === cid.toString()) {
+        return 'the ipfs object is in JWS format, but the link points to itself, this is not allowed!';
+      }
+
+      content = await getDagCborIpfsHashContent(nestedCid);
     }
   }
 
@@ -150,23 +130,44 @@ export const Resolvers = {
     if (appContainer.self.config.get('ipfs.pinEverything')) {
       const ipfsHash = args.id;
   
-      if (!ipfsHash) {
-        return null;
+      let cid = null;
+      try {
+        cid = CID.parse(ipfsHash)
+      } catch {
+        return { type: "error", data: "CID format not supported!"}
       }
-  
-      if (ipfsHash.startsWith('Qm') || ipfsHash.startsWith('bafy')) {
-        const content = await getRelevantContentOfIpfsHash(ipfsHash);
-        let type = null;
-        
-        // detects vsc-tx/ blocks
-        if (typeof content === 'object' && '__t' in content && ['vsc-tx', 'vsc-block'].includes(content.__t)) {
-          type = content.__t
+
+      // get ipfs content for cid
+      let content = null;
+      if (cid.code === 0x70) {
+        // dag-pd
+        const stream = appContainer.self.ipfs.cat(cid);
+        const chunks = [];
+
+        for await (const chunk of stream) {
+          chunks.push(chunk);
         }
 
-        return { type: type, data: content }
-      } else {
-        return { type: "error", data: "CID format not supported!" }
+        const buffer = Buffer.concat(chunks);
+        let dataRaw = buffer.toString(); 
+
+        try {
+          content = JSON.parse(dataRaw);
+        } catch (e) {
+          content = dataRaw;
+        }
+      } else if (cid.code === 0x71) {
+        // dag-cbor
+        content = await getDagCborIpfsHashContent(cid);
       }
+  
+      // determine the type of vsc data structure that was found e.g.: vsc-tx/ blocks
+      let type = null;
+      if (typeof content === 'object' && '__t' in content && ['vsc-tx', 'vsc-block'].includes(content.__t)) {
+        type = content.__t
+      }
+
+      return { type: type, data: content }
     } else {
       return { type: "error", data: "Current node configuration does not allow for this endpoint to be used." }
     }

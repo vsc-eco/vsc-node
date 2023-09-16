@@ -1,7 +1,8 @@
 import {init} from './core'
 import { TransactionPoolService } from '../services/transactionPool';
+import { isExecutedDirectly } from '../utils';
 
-void (async () => {
+export async function deposit() {
     // sample usage
     // <amount>
     // <amount> [<contractId>]
@@ -29,12 +30,15 @@ void (async () => {
         to = toArg.split('=')[1]
     }
 
-    await TransactionPoolService.deposit({
+    return await TransactionPoolService.deposit({
         contractId: contractId,
-        amount: +process.argv[2],
+        amount: +process.argv[process.argv.length - 1],
         to: to
     },
     setup);
+}
 
+if (isExecutedDirectly()) {
+    deposit();
     process.exit(0)
-})()
+}

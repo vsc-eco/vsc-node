@@ -1,6 +1,6 @@
-async function serviceTests(): Promise<void> {
+import { depositWithdrawWorkflowTest } from "./depositWithdrawWorkflowTest"
+
+void (async () => {
   
-    
-}
-  
-void serviceTests()
+    depositWithdrawWorkflowTest()
+})()

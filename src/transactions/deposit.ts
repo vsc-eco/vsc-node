@@ -2,7 +2,7 @@ import {init} from './core'
 import { TransactionPoolService } from '../services/transactionPool';
 import { isExecutedDirectly } from '../utils';
 
-export async function deposit() {
+export async function deposit(setup? : {identity, config, ipfsClient, logger}) {
     // sample usage
     // <amount>
     // <amount> [<contractId>]
@@ -16,7 +16,9 @@ export async function deposit() {
     // when no 'to' parameter is supplied, the funds are deposited to the account that publishes the transaction
     // node --experimental-specifier-resolution=node --loader ts-node/esm src/transactions/deposit.ts 1
 
-    const setup: {identity, config, ipfsClient, logger} = await init()
+    if (setup === undefined) {
+        setup = await init()
+    }
         
     let contractId;
     let contractIdArg  = process.argv.find(arg => arg.startsWith('--contract_id='))
@@ -38,7 +40,6 @@ export async function deposit() {
     setup);
 }
 
-if (isExecutedDirectly()) {
-    deposit();
-    process.exit(0)
+if (isExecutedDirectly(import.meta.url)) {
+    deposit().then(() => process.exit(0));
 }

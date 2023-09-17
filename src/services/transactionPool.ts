@@ -21,6 +21,7 @@ import Axios from 'axios'
 import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawFinalization, WithdrawRequest } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
+import networks from './networks'
 const {BloomFilter} = BloomFilters
 
 const INDEX_RULES = {}
@@ -204,7 +205,7 @@ export class TransactionPoolService {
       memo['contract_id'] = args.contractId
     }
 
-    const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, JSON.stringify(memo))
+    const result = await TransactionPoolService.createCoreTransferTransaction(networks[setup.config.get('network.id')].multisigAccount, TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, JSON.stringify(memo))
 
     setup.logger.debug('result', result)
     return result;

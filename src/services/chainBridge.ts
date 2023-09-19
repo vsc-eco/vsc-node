@@ -761,143 +761,147 @@ export class ChainBridge {
         for await (let [block_height, block] of this.hiveStream.streamOut) {
           this.block_height = block_height;
           for(let tx of block.transactions) {
-            const headerOp = tx.operations[tx.operations.length - 1]
-            if(headerOp[0] === "custom_json") {
-              if (headerOp[1].required_posting_auths.includes(networks[this.self.config.get('network.id')].multisigAccount)) {
-                try {
-                  const json = JSON.parse(headerOp[1].json)
-                  
-                  await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                    id: json.ref_id
-                  }, {
-                    $set: {
-                      'output_actions.$.ref_id': tx.id
-                    }
-                  })
-                } catch {
-  
-                }
-              }
-            }
-            for(let [op_id, payload] of tx.operations) {
-              if(op_id === "account_update") {
-                try {
-                  const json_metadata = JSON.parse(payload.json_metadata)
-                  if (json_metadata.vsc_node) {
-                    const { payload: proof, kid } = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
-                    const [did] = kid.split('#')
-                    console.log(proof)
-  
-  
-                    const witnessRecord = await this.witnessDb.findOne({
-                      did
-                    }) || {} as any
-  
-                    const opts = {}
-                    if(witnessRecord.enabled === true && proof.witness.enabled === false) {
-                      opts['disabled_at'] = block_height
-                      opts["disabled_reason"] = proof.witness.disabled_reason
-                    } else if(proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') {
-                      opts['enabled_at'] = block_height
-                      opts['disabled_at'] = null
-                      opts['disabled_reason'] = null
-                    }
-  
-                    if(json_metadata.did_auths) {
-                      const did_auths = json_metadata.did_auths as DidAuth
-  
-                      const currentDidAuths = (await this.didAuths.find({
-                        account: payload.account,
-                        did: {$in: Object.keys(did_auths)}
-                      }).toArray())
-  
-                      await this.didAuths.updateMany({
-                        _id: {
-                          $nin: currentDidAuths.map(e => e._id)
-                        }
-                      }, {
-                        $set: {
-                          valid_to: payload.account
-                        }
-                      })
-  
-                      const unindexdDids = did_auths
-                      for(let cta of currentDidAuths) {
-                        if(unindexdDids[cta.did] && unindexdDids[cta.did].ats === cta.authority_type) {
-                          delete unindexdDids[cta.did];
-                        }
-                      }
-  
-                      for(let [did, val] of Object.entries(unindexdDids)) {
-                        await this.didAuths.findOneAndUpdate({
-                          did: did,
-                          account: payload.account,
-                          // valid_to: {
-                          //   $ne: null
-                          // }
-                        }, {
-                          $set: {
-                            authority_type: val.ats,
-                            valid_from: block_height,
-                            valid_to: null
-                          }
-                        }, {
-                          upsert: true
-                        })
-                      }
-                    }
-  
-                    await this.witnessDb.findOneAndUpdate({
-                      account: payload.account,
+            try {
+              const headerOp = tx.operations[tx.operations.length - 1]
+              if(headerOp[0] === "custom_json") {
+                if (headerOp[1].required_posting_auths.includes(networks[this.self.config.get('network.id')].multisigAccount)) {
+                  try {
+                    const json = JSON.parse(headerOp[1].json)
+                    
+                    await this.self.transactionPool.transactionPool.findOneAndUpdate({
+                      id: json.ref_id
                     }, {
                       $set: {
-                        did,
-                        peer_id: proof.ipfs_peer_id,
-                        signing_keys: proof.witness.signing_keys,
-                        enabled: proof.witness.enabled,
-                        last_signed: new Date(proof.ts),
-                        net_id: proof.net_id,
-                        git_commit: proof.git_commit,
-                        plugins: proof.witness.plugins || [],
-                        ...opts
+                        'output_actions.$.ref_id': tx.id
                       }
-                    }, {
-                      upsert: true
                     })
+                  } catch {
+    
                   }
-                } catch {
-  
                 }
               }
-              if (op_id === "custom_json") {
-                if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
-                  const json = JSON.parse(payload.json)
-                  await this.processCoreTransaction(tx, json, {
-                    account: payload.required_posting_auths[0],
-                    block_height,
-                    timestamp: new Date(block.timestamp + "Z")
-                  })   
+              for(let [op_id, payload] of tx.operations) {
+                if(op_id === "account_update") {
+                  try {
+                    const json_metadata = JSON.parse(payload.json_metadata)
+                    if (json_metadata.vsc_node) {
+                      const { payload: proof, kid } = await this.self.identity.verifyJWS(json_metadata.vsc_node.signed_proof)
+                      const [did] = kid.split('#')
+                      console.log(proof)
+    
+    
+                      const witnessRecord = await this.witnessDb.findOne({
+                        did
+                      }) || {} as any
+    
+                      const opts = {}
+                      if(witnessRecord.enabled === true && proof.witness.enabled === false) {
+                        opts['disabled_at'] = block_height
+                        opts["disabled_reason"] = proof.witness.disabled_reason
+                      } else if(proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') {
+                        opts['enabled_at'] = block_height
+                        opts['disabled_at'] = null
+                        opts['disabled_reason'] = null
+                      }
+    
+                      if(json_metadata.did_auths) {
+                        const did_auths = json_metadata.did_auths as DidAuth
+    
+                        const currentDidAuths = (await this.didAuths.find({
+                          account: payload.account,
+                          did: {$in: Object.keys(did_auths)}
+                        }).toArray())
+    
+                        await this.didAuths.updateMany({
+                          _id: {
+                            $nin: currentDidAuths.map(e => e._id)
+                          }
+                        }, {
+                          $set: {
+                            valid_to: payload.account
+                          }
+                        })
+    
+                        const unindexdDids = did_auths
+                        for(let cta of currentDidAuths) {
+                          if(unindexdDids[cta.did] && unindexdDids[cta.did].ats === cta.authority_type) {
+                            delete unindexdDids[cta.did];
+                          }
+                        }
+    
+                        for(let [did, val] of Object.entries(unindexdDids)) {
+                          await this.didAuths.findOneAndUpdate({
+                            did: did,
+                            account: payload.account,
+                            // valid_to: {
+                            //   $ne: null
+                            // }
+                          }, {
+                            $set: {
+                              authority_type: val.ats,
+                              valid_from: block_height,
+                              valid_to: null
+                            }
+                          }, {
+                            upsert: true
+                          })
+                        }
+                      }
+    
+                      await this.witnessDb.findOneAndUpdate({
+                        account: payload.account,
+                      }, {
+                        $set: {
+                          did,
+                          peer_id: proof.ipfs_peer_id,
+                          signing_keys: proof.witness.signing_keys,
+                          enabled: proof.witness.enabled,
+                          last_signed: new Date(proof.ts),
+                          net_id: proof.net_id,
+                          git_commit: proof.git_commit,
+                          plugins: proof.witness.plugins || [],
+                          ...opts
+                        }
+                      }, {
+                        upsert: true
+                      })
+                    }
+                  } catch {
+    
+                  }
                 }
-              } else if (op_id === "transfer") {
-                // console.log(payload)
-                // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
-                if ([payload.to, payload.from].includes(networks[this.self.config.get('network.id')].multisigAccount)) {
-                  if (payload.memo) {
-                    const json = JSON.parse(payload.memo)
+                if (op_id === "custom_json") {
+                  if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
+                    const json = JSON.parse(payload.json)
                     await this.processCoreTransaction(tx, json, {
-                      account: payload.from, // from or payload.required_posting_auths[0]?
+                      account: payload.required_posting_auths[0],
                       block_height,
-                      timestamp: new Date(block.timestamp + "Z"),
-                      amount : payload.amount,
-                      to: payload.to,
-                      memo: payload.memo
-                    })
-                  } else {
-                    this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
-                  }     
-                }         
-              }  
-            }           
+                      timestamp: new Date(block.timestamp + "Z")
+                    })   
+                  }
+                } else if (op_id === "transfer") {
+                  // console.log(payload)
+                  // checking for to and from tx to be the multisig account, because all other transfers are not related to vsc
+                  if ([payload.to, payload.from].includes(networks[this.self.config.get('network.id')].multisigAccount)) {
+                    if (payload.memo) {
+                      const json = JSON.parse(payload.memo)
+                        await this.processCoreTransaction(tx, json, {
+                          account: payload.from, // from or payload.required_posting_auths[0]?
+                          block_height,
+                          timestamp: new Date(block.timestamp + "Z"),
+                          amount : payload.amount,
+                          to: payload.to,
+                          memo: payload.memo
+                        })
+                    } else {
+                      this.self.logger.warn('received transfer without memo, considering this a donation as we cant assign it to a specific network', payload)
+                    }     
+                  }         
+                }  
+              }           
+            } catch(ex) {
+              console.log(ex)
+            }
           }
   
           if (this.self.config.get('debug.debugNodeAddresses')?.includes(this.self.config.get('identity.nodePublic'))) {
@@ -1072,11 +1076,17 @@ export class ChainBridge {
       })()
   
       let blkNum;
-      setInterval(() => {
+      setInterval(async() => {
         const diff = (blkNum - this.hiveStream.blockLag) || 0
         blkNum = this.hiveStream.blockLag
         
         this.self.logger.info(`current block lag ${this.hiveStream.blockLag} ${Math.round(diff / 15)}`)
+        const stateHeader = await this.stateHeaders.findOne({
+          id: 'hive_head'
+        })
+        if(stateHeader) {
+          this.self.logger.info(`current parse lag ${this.hiveStream.headHeight - stateHeader.block_num}`, stateHeader)
+        }
       }, 15 * 1000)
   
       let producingBlock = false;

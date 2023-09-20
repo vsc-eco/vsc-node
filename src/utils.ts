@@ -299,12 +299,14 @@ export async function* liveHiveBlocks(API, opts: {
     }
     if(bh === last_block + 1) {
       const lstBlock = await HiveClient.database.getBlock(bh)
-      last_block = parseInt(lstBlock.block_id.slice(0, 8), 16)
-      // console.log('300', last_block, parseInt(lstBlock.block_id.slice(0, 8), 16), bh)
-      // console.log(lstBlock)
-      // console.log(new Date().getTime() - new Date(lstBlock.timestamp + "Z").getTime())
-      count = bh - last_block
-      yield lstBlock
+      if(lstBlock) {
+        last_block = parseInt(lstBlock.block_id.slice(0, 8), 16)
+        console.log('300', last_block, parseInt(lstBlock.block_id.slice(0, 8), 16), bh)
+        // console.log(lstBlock)
+        // console.log(new Date().getTime() - new Date(lstBlock.timestamp + "Z").getTime())
+        count = bh - last_block
+        yield lstBlock
+      }
     }
   }
 

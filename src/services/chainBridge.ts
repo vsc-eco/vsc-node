@@ -781,6 +781,10 @@ export class ChainBridge {
                 }
               }
               for(let [op_id, payload] of tx.operations) {
+                if(payload.json_metadata && payload.memo_key) {
+                  console.log(op_id, payload)
+                }
+                
                 if(op_id === "account_update") {
                   try {
                     const json_metadata = JSON.parse(payload.json_metadata)
@@ -860,15 +864,16 @@ export class ChainBridge {
                           net_id: proof.net_id,
                           git_commit: proof.git_commit,
                           plugins: proof.witness.plugins || [],
+                          last_tx: tx.transaction_id,
                           ...opts
                         }
                       }, {
                         upsert: true
                       })
                     }
-                  } catch {
                   } catch(ex) {
                     console.log(ex)
+                  }
                 }
                 if (op_id === "custom_json") {
                   if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {
@@ -972,7 +977,6 @@ export class ChainBridge {
         expires: moment().add('1', 'day').toDate()
       })
 
-      await this.self.nodeInfo.announceNode()
     }
 
     if (this.syncedAt !== null) {
@@ -988,7 +992,6 @@ export class ChainBridge {
           expires: moment().add('1', 'day').toDate()
         })
 
-        await this.self.nodeInfo.announceNode()
 
         this.hiveStream.killStream()
         this.streamStart()

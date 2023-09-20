@@ -791,7 +791,7 @@ export class ChainBridge {
     
     
                       const witnessRecord = await this.witnessDb.findOne({
-                        did
+                        account: payload.account
                       }) || {} as any
     
                       const opts = {}
@@ -867,8 +867,8 @@ export class ChainBridge {
                       })
                     }
                   } catch {
-    
-                  }
+                  } catch(ex) {
+                    console.log(ex)
                 }
                 if (op_id === "custom_json") {
                   if (payload.id === 'vsc-testnet-hive' || payload.id.startsWith('vsc.')) {

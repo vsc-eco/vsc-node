@@ -799,10 +799,10 @@ export class ChainBridge {
                       }) || {} as any
     
                       const opts = {}
-                      if(witnessRecord.enabled === true && proof.witness.enabled === false) {
+                      if((witnessRecord.enabled === true && proof.witness.enabled === false) || typeof witnessRecord.disabled_at === 'undefined') {
                         opts['disabled_at'] = block_height
                         opts["disabled_reason"] = proof.witness.disabled_reason
-                      } else if(proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') {
+                      } else if((proof.witness.enabled === true && typeof witnessRecord.disabled_at === 'number') || typeof witnessRecord.enabled_at === 'undefined' ) {
                         opts['enabled_at'] = block_height
                         opts['disabled_at'] = null
                         opts['disabled_reason'] = null
@@ -1107,7 +1107,7 @@ export class ChainBridge {
                   return e.bn === offsetBlock
                 }))
                 // console.log('scheduleSlot', scheduleSlot)
-                if (nodeInfo.enabled && nodeInfo.trusted) {
+                if (nodeInfo.enabled) {
   
   
                   if (scheduleSlot?.did === this.self.identity.id) {

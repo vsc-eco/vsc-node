@@ -285,7 +285,7 @@ export async function* liveHiveBlocks(API, opts: {
         "method":"block_api.get_block_range", 
         "params":{
           "starting_block_num": last_block, 
-          "count": count
+          "count": count > 100 ? 100 : count
         }, 
         "id":1
       })

@@ -306,8 +306,11 @@ export async function* liveHiveBlocks(API, opts: {
         // console.log(new Date().getTime() - new Date(lstBlock.timestamp + "Z").getTime())
         count = bh - last_block
         yield lstBlock
+      } else {
+        await sleep(500)
       }
     }
+    await sleep(1)
   }
 
 }

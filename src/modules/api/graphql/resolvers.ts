@@ -163,11 +163,11 @@ export const Resolvers = {
   
       // determine the type of vsc data structure that was found e.g.: vsc-tx/ blocks
       let type = null;
-      if (typeof content === 'object' && '__t' in content && ['vsc-tx', 'vsc-block'].includes(content.__t)) {
-        type = content.__t
+      if (content && typeof content.value === 'object' && content.value.__t && ['vsc-tx', 'vsc-block'].includes(content.value.__t)) {
+        type = content.value.__t
       }
 
-      return { type: type, data: content }
+      return { type: type, data: content.value }
     } else {
       return { type: "error", data: "Current node configuration does not allow for this endpoint to be used." }
     }

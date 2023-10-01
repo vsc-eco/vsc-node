@@ -52,7 +52,7 @@ export class WitnessService {
           },
         },
       ],
-      trusted: true,
+      // trusted: true,
       net_id: this.self.config.get('network.id'),
       enabled_at: {
         $lt: consensusRound.pastRoundHash,
@@ -87,7 +87,7 @@ export class WitnessService {
             },
           },
         ],
-        trusted: true,
+        // trusted: true,
         net_id: this.self.config.get('network.id'),
         enabled_at: {
           $lt: consensusRound.pastRoundHash,

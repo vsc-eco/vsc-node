@@ -498,7 +498,7 @@ export class MultisigCore {
                         
                         
                         const calc = calcBlockInterval({
-                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            currentBlock: this.self.chainBridge.hiveStream.lastBlock, 
                             intervalLength: this.multisigOptions.rotationIntervalHive,
                             marginLength: 5
                         })
@@ -508,7 +508,7 @@ export class MultisigCore {
     
                         // console.log('scheduleSlotActual', scheduleSlotActual)
     
-                        // console.log(this.self.chainBridge.hiveStream.currentBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.currentBlock)
+                        // console.log(this.self.chainBridge.hiveStream.lastBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.lastBlock)
                         if (nodeInfo.enabled && nodeInfo.trusted && calc.isMarginActive) {
                             if (!this._rotationRunning && calc.last !== this.lastRotateBlock) {
                                 console.log('time to rotate mulitisig keys')
@@ -523,7 +523,7 @@ export class MultisigCore {
                             }
                         }
                         const procOutCalc = calcBlockInterval({
-                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            currentBlock: this.self.chainBridge.hiveStream.lastBlock, 
                             intervalLength: 20,
                             marginLength: 5
                         })

@@ -93,6 +93,17 @@ export class fastStream {
 
   }
   
+  get calcHeight() {
+    if(this.lastBlock && this.lastBlockTs) {
+      const ts = new Date().getTime()
+
+      const diff = Math.floor((ts - this.lastBlockTs.getTime()) / 3_000)
+
+      return this.lastBlock + diff;
+    } else {
+      return null;
+    }
+  }
 
   get blockLag() {
     //Simulated blockLag

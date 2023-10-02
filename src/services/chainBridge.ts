@@ -1089,7 +1089,7 @@ export class ChainBridge {
           id: 'hive_head'
         })
         if(stateHeader) {
-          this.self.logger.info(`current parse lag ${this.hiveStream.headHeight - stateHeader.block_num}`, stateHeader)
+          this.self.logger.info(`current parse lag ${this.hiveStream.calcHeight - stateHeader.block_num}`, stateHeader)
         }
       }, 15 * 1000)
   
@@ -1097,7 +1097,7 @@ export class ChainBridge {
       setInterval(async () => {
         if (this.hiveStream.blockLag < 5) {
           //Can produce a block
-          const offsetBlock = this.hiveStream.currentBlock //- networks[network_id].genesisDay
+          const offsetBlock = this.hiveStream.lastBlock //- networks[network_id].genesisDay
           if ((offsetBlock % networks[network_id].roundLength) === 0) {
             if (!producingBlock) {
               const nodeInfo = await this.witnessDb.findOne({
@@ -1107,12 +1107,12 @@ export class ChainBridge {
                 const scheduleSlot = this.self.witness.witnessSchedule?.find((e => {
                   return e.bn === offsetBlock
                 }))
-                // console.log('scheduleSlot', scheduleSlot)
+                //console.log('scheduleSlot', scheduleSlot, offsetBlock)
                 if (nodeInfo.enabled) {
   
   
                   if (scheduleSlot?.did === this.self.identity.id) {
-                    this.self.logger.info('Can produce block!! at', this.hiveStream.currentBlock)
+                    this.self.logger.info('Can produce block!! at', this.hiveStream.lastBlock)
                     producingBlock = true;
                     await this.createBlock()
                   }

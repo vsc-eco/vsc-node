@@ -1010,7 +1010,7 @@ export class ChainBridge {
         return
       }
     }
-    if (this.syncedAt === null && this.hiveStream.blockLag < 5) {
+    if (this.syncedAt === null && typeof this.hiveStream.blockLag === 'number' && this.hiveStream.blockLag < 5) {
       console.log('[streamCheck] System synced!')
       this.syncedAt = new Date();
       await this.self.nodeInfo.nodeStatus.deleteMany({

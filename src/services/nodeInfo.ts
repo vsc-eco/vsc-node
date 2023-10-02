@@ -1,7 +1,7 @@
 import { PrivateKey } from "@hiveio/dhive";
 import NodeSchedule from 'node-schedule'
-import { getCommitHash, HiveClient } from "../utils";
-import { CoreService } from "./index";
+import { getCommitHash, HiveClient, ModuleContainer } from "../utils";
+import { CoreService, } from "./index";
 import moment from "moment";
 import { Collection } from "mongodb";
 
@@ -15,11 +15,13 @@ export class NodeInfoService {
         expries: Date
     }>;
     lastUpdate: Date;
+    earlyUpdate: boolean;
 
     constructor(self: CoreService) {
         this.self = self
 
         this.announceNode = this.announceNode.bind(this)
+        this.runEarlyUpdate = this.runEarlyUpdate.bind(this)
     }
     async announceNode() {
         /**
@@ -158,11 +160,22 @@ export class NodeInfoService {
         })
     }
 
+    triggerEarlyUpdate() {
+        this.earlyUpdate = true;
+    }
+
+    async runEarlyUpdate() {
+        if(this.earlyUpdate === true) {
+            await this.announceNode()
+        }
+    }
+
     async start() {
         this.nodeStatus = this.self.db.collection('node_status')
 
         this.gitCommit = await getCommitHash()
         NodeSchedule.scheduleJob('0 * * * *', this.announceNode)
-        await this.announceNode()
+        NodeSchedule.scheduleJob('* * * * *', this.runEarlyUpdate)
+        this.announceNode()
     }
 }

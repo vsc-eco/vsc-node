@@ -58,7 +58,11 @@ export class WitnessService {
         $lt: consensusRound.pastRoundHash,
       },
       last_signed: {
-        $gt: moment().subtract('7', 'day').toDate()
+        $gt: moment().subtract('3', 'day').toDate()
+      }
+    }, {
+      sort: {
+        account: -1
       }
     })
     .toArray()
@@ -93,12 +97,16 @@ export class WitnessService {
           $lt: consensusRound.pastRoundHash,
         },
         last_signed: {
-          $gt: moment().subtract('7', 'day').toDate()
+          $gt: moment().subtract('3', 'day').toDate()
+        }
+      }, {
+        sort: {
+          account: -1
         }
       })
       .toArray()
 
-      console.log('witnessNodes', witnessNodes.map(e => e.account), witnessNodes.map(e => e.account).length)
+      //console.log('witnessNodes', witnessNodes.map(e => e.account), witnessNodes.map(e => e.account).length)
 
       // console.log(JSON.stringify({
       //   $or: [
@@ -179,7 +187,7 @@ export class WitnessService {
   }
 
   async calculateConsensusRound() {
-    const roundLength = networks[this.self.config.get('network.id')].roundLength;
+    const {roundLength, totalRounds} = networks[this.self.config.get('network.id')];
     const blockNumber = await HiveClient.blockchain.getCurrentBlockNum()
 
     // const mod1 = blockNumber % 20;
@@ -188,7 +196,7 @@ export class WitnessService {
     // const mod2 = mod1 + blockNumber
     // console.log(mod2 % 20)
 
-    const modLength = roundLength * 120
+    const modLength = roundLength * totalRounds
     const mod3 = blockNumber % modLength
     const pastRoundHash = blockNumber - mod3
     // console.log(
@@ -237,7 +245,8 @@ export class WitnessService {
 
     setInterval(async () => {
       try {
-        this.witnessSchedule = await this.weightedSchedule(120)
+        
+        this.witnessSchedule = await this.weightedSchedule(networks[this.self.config.get('network.id')].totalRounds)
         // console.log('witnessSchedule', this.witnessSchedule)
       } catch (ex) {
         console.log(ex)

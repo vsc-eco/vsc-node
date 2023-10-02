@@ -129,9 +129,13 @@ export class MultisigCore {
               $lt: consensusRound.pastRoundHash,
             },
             last_signed: {
-              $gt: moment().subtract('7', 'day').toDate()
+              $gt: moment().subtract('3', 'day').toDate()
             },
             plugins: 'multisig'
+          }, {
+            sort: {
+              account: -1
+            }
           }).toArray()
 
         const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
@@ -291,7 +295,8 @@ export class MultisigCore {
     async processOutputs() {
         const outputsWithActions = await this.self.transactionPool.transactionPool.find({
             output_actions: {$ne: null},
-            'output_actions.tx_id': {$exists: false}
+            'output_actions.tx_id': {$exists: false},
+            'headers.contract_id': {$exists: true}
         }).toArray()
         console.log('outputsWithActions', outputsWithActions)
        

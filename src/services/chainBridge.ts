@@ -781,9 +781,9 @@ export class ChainBridge {
                 }
               }
               for(let [op_id, payload] of tx.operations) {
-                if(payload.json_metadata && payload.memo_key) {
-                  console.log(op_id, payload)
-                }
+                // if(payload.json_metadata && payload.memo_key) {
+                //   console.log(op_id, payload)
+                // }
                 
                 if(op_id === "account_update") {
                   try {
@@ -976,7 +976,6 @@ export class ChainBridge {
         action: "disable_witness",
         expires: moment().add('1', 'day').toDate()
       })
-
     }
 
     if (this.syncedAt !== null) {
@@ -1000,10 +999,12 @@ export class ChainBridge {
 
         return;
       }
-      if (this.hiveStream.blockLag > 100) {
+      if (moment.isDate(this.hiveStream.lastBlockTs) && moment().subtract('1', 'minute').toDate().getTime() > this.hiveStream.lastBlockTs.getTime()) {
         console.log('KILLING STREAM', this.hiveStream.blockLag)
+
         this.hiveStream.killStream()
         this.streamStart()
+
         this.syncedAt = null
 
         return

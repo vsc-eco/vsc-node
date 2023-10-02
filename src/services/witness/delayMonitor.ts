@@ -28,7 +28,7 @@ export class DelayMonitor {
         this.self = self;
         this.witness = witness
 
-        this.delayMarks = self.db.collection('delay_marks')
+        
 
         this.runMark = this.runMark.bind(this)
     }
@@ -81,6 +81,7 @@ export class DelayMonitor {
     }
 
     async start() {
+        this.delayMarks = this.self.db.collection('delay_marks')
         console.log('delay monitor is running!')
         
         if(this.self.mode !== 'lite') {

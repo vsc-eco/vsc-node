@@ -12,9 +12,9 @@ import { getLogger, globalLogger } from './logger'
 import * as IPFS from "kubo-rpc-client";
 import { Version } from 'multiformats'
 
-const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.3speak.tv'
+const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.web3telekom.xyz'
 
-export const HiveClient = new Client(process.env.HIVE_HOST || ['https://api.deathwing.me', 'https://anyx.io', 'https://api.openhive.network', 'https://rpc.ausbit.dev'])
+export const HiveClient = new Client(process.env.HIVE_HOST || [HIVE_API, 'https://api.deathwing.me', 'https://anyx.io', 'https://api.openhive.network', 'https://rpc.ausbit.dev'])
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
@@ -37,6 +37,10 @@ export class fastStream {
   headTracker: NodeJS.Timer
   logger: winston.Logger
   finalStream: NodeJS.ReadableStream
+  lastBlockAt: Date
+  lastBlock: number
+  lastBlockTs: Date
+  aborts: Array<AbortController>
   
   constructor(queue: PQueue, streamOpts: {
     startBlock: number,
@@ -46,14 +50,15 @@ export class fastStream {
     this.queue = queue
     this.events = new EventEmitter()    
     this.streamOut = Pushable()
-    this.currentBlock = streamOpts.startBlock || 1
+    this.lastBlock = streamOpts.startBlock || 1
     this.startBlock = streamOpts.startBlock || 1
     this.parser_height = streamOpts.startBlock || 0
     this.setSize = 50;
     this.endSet = (streamOpts.endBlock - streamOpts.startBlock) / this.setSize
-
+    
     this.blockMap = {}
-
+    this.aborts = []
+    
     this.logger = getLogger({
       prefix: 'faststream',
       printMetadata: true,
@@ -76,6 +81,9 @@ export class fastStream {
         
         this.parser_height = block_height + 1;
         this.events.emit('block', block_height, this.blockMap[block_height])
+        this.lastBlockAt = new Date()
+        this.lastBlock = block_height;
+        this.lastBlockTs = new Date(this.blockMap[block_height].timestamp + "Z")
         delete this.blockMap[block_height]
       }
       for(let key of Object.keys(this.blockMap)) {
@@ -84,17 +92,40 @@ export class fastStream {
         }
       }
     }, 1)
+
   }
   
+  get calcHeight() {
+    if(this.lastBlock && this.lastBlockTs) {
+      const ts = new Date().getTime()
+
+      const diff = Math.floor((ts - this.lastBlockTs.getTime()) / 3_000)
+
+      return this.lastBlock + diff;
+    } else {
+      return null;
+    }
+  }
 
   get blockLag() {
-    return this.headHeight - this.currentBlock
+    //Simulated blockLag
+
+    if(this.lastBlock && this.lastBlockTs) {
+      const ts = new Date().getTime()
+
+      const diff = Math.floor((ts - this.lastBlockTs.getTime()) / 3_000)
+
+      return diff
+    } else {
+      return null;
+    }
   }
 
   async startStream() {
     
     this.headTracker = setInterval(async() => {
       const currentBlock = await HiveClient.blockchain.getCurrentBlock()
+      console.log(`headTracker: currentBlock=${typeof currentBlock === 'object' ? parseInt(currentBlock.block_id.slice(0, 8), 16) : currentBlock}`)
       if(currentBlock) {
         this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
       }
@@ -112,7 +143,7 @@ export class fastStream {
             count: this.setSize,
             start_block: this.startBlock + x * this.setSize
           })
-          console.log('this.currentBlock', this.currentBlock, {
+          console.log('this.lastBlock', this.lastBlock, {
             count: this.setSize,
             start_block: this.startBlock + x * this.setSize,
             blockMapSize: Object.keys(this.blockMap).length
@@ -125,8 +156,11 @@ export class fastStream {
             // console.log(this.parser_height, block_height)
             if (this.parser_height === block_height) {
               this.parser_height = block_height + 1;
-              this.currentBlock = block_height;
+
               this.events.emit('block', block_height, block)
+              this.lastBlockAt = new Date()
+              this.lastBlock = block_height;
+              this.lastBlockTs = new Date(block.timestamp + "Z")
             } else if(block_height > this.parser_height) {
               this.blockMap[block_height] = block
             }
@@ -140,16 +174,23 @@ export class fastStream {
       finalBlock
     })
 
+    const controller = new AbortController();
+    const signal = controller.signal;
+    
+    this.aborts.push(controller)
     try {
       for await(let block of liveHiveBlocks(HIVE_API, {
         start_block: this.parser_height,
-        stop: () => {}
+        signal
       })) {
         const block_height = parseInt(block.block_id.slice(0, 8), 16)
         if (this.parser_height === block_height) {
           this.parser_height = block_height + 1;
-          this.currentBlock = block_height;
+
           this.events.emit('block', block_height, block)
+          this.lastBlockAt = new Date()
+          this.lastBlock = block_height;
+          this.lastBlockTs = new Date(block.timestamp + "Z")
         } else if(block_height > this.parser_height) {
           this.blockMap[block_height] = block
         }
@@ -158,28 +199,6 @@ export class fastStream {
       clearInterval(this.eventQueue as any)
       this.streamOut.end(error)
     }
-
-    
-    // this.finalStream = HiveClient.blockchain.getBlockStream({
-    //     from: this.parser_height,
-    //     mode: BlockchainMode.Latest
-    // })
-    // await new Promise((resolve) => {
-    //   this.finalStream
-    //     .on('data', (async function (block) {
-    //     }).bind(this))
-    //     .on('error', ((error) => {
-    //     }).bind(this))
-    //     .on('end', (function () {
-    //       // done
-    //       activeLength = activeLength - 1
-    //       if (activeLength === 0) {
-    //         //events.emit('end')
-    //       }
-    //       this.finalStream.removeAllListeners()
-    //       return resolve(null)
-    //     }).bind(this))
-    // })
   }
 
   async resumeStream() {
@@ -193,13 +212,14 @@ export class fastStream {
 
   async killStream() {
     clearInterval(this.eventQueue as any)
+    clearInterval(this.headTracker as any)
     this.streamOut.end()
     this.queue.clear()
-
-    if(this.finalStream) {
-      this.finalStream.removeAllListeners()
-      this.finalStream.pause()
-    }
+    this.aborts.forEach((e) => {
+      e.abort()
+    })
+    delete this.blockMap
+    
   }
 
   async onDone() {
@@ -248,13 +268,14 @@ function parseHiveBlocks(blocksInput) {
 
 export async function* liveHiveBlocks(API, opts: {
   start_block: number,
-  stop: Function
+  signal: AbortSignal
 }) {
+  
 
   let last_block = opts.start_block
   let count = 0;
   let bh = 0;
-  setInterval(async() => {
+  const headUpdater = setInterval(async() => {
     const hive = new Client(HIVE_API)
     bh = await hive.blockchain.getCurrentBlockNum()
     const dynProps = await hive.database.getDynamicGlobalProperties()
@@ -267,54 +288,67 @@ export async function* liveHiveBlocks(API, opts: {
     // console.log('count', count)
   }, 500)
 
+  opts.signal.addEventListener('abort', () => {
+    clearInterval(headUpdater)
+  })
+
 
   for( ; ; ) {
     if(count < 1 ) {
       await sleep(50)
       continue;
     }
-    const requestTime = new Date();
+   
+    if(opts.signal.aborted) {
+      return []
+    }
     
-    // console.log(parseHiveBlocks(data.result.blocks).map(e => {
-      //   console.log(e)
-      //   return parseInt(e.block_id.slice(0, 8), 16)
-      // }), bh)
-      if(bh > last_block + 1) {
-      const {data} = await Axios.post(API, {
-        "jsonrpc":"2.0", 
-        "method":"block_api.get_block_range", 
-        "params":{
-          "starting_block_num": last_block, 
-          "count": count > 100 ? 100 : count
-        }, 
-        "id":1
-      })
-      
-      for(let block of parseHiveBlocks(data.result.blocks)) {
-        console.log('281', last_block, parseInt(block.block_id.slice(0, 8), 16), bh)
-        last_block = parseInt(block.block_id.slice(0, 8), 16)
-        count = bh - last_block
-        console.log(new Date().getTime() - new Date(block.timestamp + "Z").getTime())
-        // console.log(block.timestamp, new Date().toISOString(), new Date().getTime() - new Date(block.timestamp + "Z").getTime(), new Date().getTime() - requestTime.getTime())
-        yield block
+    if(bh > last_block + 1) {
+      try {
+        const {data} = await Axios.post(API, {
+          "jsonrpc":"2.0", 
+          "method":"block_api.get_block_range", 
+          "params":{
+            "starting_block_num": last_block, 
+            "count": count > 100 ? 100 : count
+          }, 
+          "id":1
+        })
+          
+        for(let block of parseHiveBlocks(data.result.blocks)) {
+          console.log('281', last_block, parseInt(block.block_id.slice(0, 8), 16), bh)
+
+          last_block = parseInt(block.block_id.slice(0, 8), 16)
+          count = bh - last_block
+          // console.log(new Date().getTime() - new Date(block.timestamp + "Z").getTime())
+
+
+          // console.log(block.timestamp, new Date().toISOString(), new Date().getTime() - new Date(block.timestamp + "Z").getTime(), new Date().getTime() - requestTime.getTime())
+          yield block
+        }
+        
+      } catch (ex) {
+        console.log(ex)
+        await sleep(5_000)
       }
     }
     if(bh === last_block + 1) {
-      const lstBlock = await HiveClient.database.getBlock(bh)
-      if(lstBlock) {
-        last_block = parseInt(lstBlock.block_id.slice(0, 8), 16)
-        console.log('300', last_block, parseInt(lstBlock.block_id.slice(0, 8), 16), bh)
-        // console.log(lstBlock)
-        // console.log(new Date().getTime() - new Date(lstBlock.timestamp + "Z").getTime())
-        count = bh - last_block
-        yield lstBlock
-      } else {
-        await sleep(500)
+      try {
+        const lstBlock = await HiveClient.database.getBlock(bh)
+        if(lstBlock) {
+          last_block = parseInt(lstBlock.block_id.slice(0, 8), 16)
+          // console.log(lstBlock)
+          // console.log(new Date().getTime() - new Date(lstBlock.timestamp + "Z").getTime())
+          yield lstBlock
+        } else {
+          await sleep(500)
+        }
+      } catch(ex) {
+        await sleep(5_000)
       }
     }
     await sleep(1)
   }
-
 }
 
 export async function streamHiveBlocks(API, opts) {
@@ -330,6 +364,9 @@ export async function streamHiveBlocks(API, opts) {
         "id":1
       })
       
+      if(!data.result) {
+        console.log(data)
+      }
       return parseHiveBlocks(data.result.blocks)
     } catch (ex) {
       console.log(ex)
@@ -615,4 +652,120 @@ export function createIPFSClient(options?: IPFS.Options, pinEverything: boolean 
   }
 
   return instance;
+}
+
+  
+export class ModuleContainer {
+  modules: Array<any>;
+  moduleList: Array<string>
+  moduleName: string;
+  parentRegFunc: Function
+  constructor(name) {
+    this.moduleName = name;
+    // this.moduleName = moduleName
+    this.modules = []
+    this.moduleList = []
+  }
+
+  regNames() {
+    for(let [key, regClass] of this.modules) {
+      this.moduleList.push(`${regClass.moduleName}`);
+      this.moduleList.push(...(regClass?.moduleList || []).map(e => {
+        return `${key}.${e}`
+      }))
+    }
+  }
+
+  regModule(name, regClass) {
+    regClass.moduleName = `${this.moduleName}.${name}`
+    this.modules.push([name, regClass])
+  }
+
+
+  async startModules() {
+      let startStack = [ ]
+      for(let [key, regClass] of this.modules) {
+          if(regClass.start) {
+              try {
+                  console.log('starting', regClass.moduleName)
+                  await regClass.start()
+              } catch (ex) {
+                  startStack.push(key, ex)
+              }
+          }
+      }
+      return startStack;
+  }
+
+  async stopModules() {
+      let stopStack = [ ]
+      for(let [key, regClass] of this.modules) {
+          if(regClass.stop) {
+              try {
+                  await regClass.stop()
+              } catch (ex) {
+                  stopStack.push(key, ex)
+              }
+          }
+      }
+      return stopStack;
+  }
+  lsModules(prefix: string, recursive: true) {
+    
+    if(recursive) {
+      return this.modules.map(([key,e]) => {
+        return [[key,e], e.lsModules()]
+      });
+    } else {
+      return this.modules.map(([key,e]) => {
+        
+        return [key]
+      });
+    }
+
+    // if(recursive) {
+    //   return this.modules.map(([,e]) => {
+    //     let obj
+    //     if(e.lsModules) {
+    //       console.log('running')
+    //       obj = e.lsModules(prefix)
+    //     }
+    //     console.log('obj is', obj)
+    //     return obj
+    //   });
+    // } else {
+    //   return this.modules.map(([,e]) => {
+    //     return [`${prefix}.${e.moduleName}`, [], e.lsModules]
+    //   });
+    // }
+
+    //   const modules = this.modules.map(e => {
+    //       if(prefix) {
+    //           return [`${prefix}.${e[0]}`, e[1]]
+    //       } else {
+    //           return [e[0], e[1]];
+    //       }
+    //   });
+      
+    //   if(recursive) {
+    //     const mods = modules.map(([key, reg])=> {
+    //       let key2 = `${prefix}.${key}`
+    //         if(reg.lsModules) {
+    //           return [key2, reg.lsModules(key2, true, true)]
+    //         } else {
+    //           return [key2, []]
+    //         }
+    //     })
+    //     if(inR) {
+    //       return modules.map(e => e)
+    //     } else {
+    //       return modules.map(e => e[0])[0]
+    //     }
+    //   }
+    // if(inR) {
+    //   return modules.map(e => e)
+    // } else {
+    //   return modules.map(e => e[0])
+    // }
+  }
 }

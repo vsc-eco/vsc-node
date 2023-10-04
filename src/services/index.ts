@@ -23,13 +23,13 @@ import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
 import networks from "./networks";
 import { DiscordBot } from "./discordbot";
-import { createIPFSClient } from "../utils";
+import { createIPFSClient, ModuleContainer } from "../utils";
 interface CoreOptions {
     dbSuffix?: string
     mode?: 'lite'
 }
 
-export class CoreService {
+export class CoreService extends ModuleContainer {
     ipfs: IPFSHTTPClient;
     config: Config;
     identity: DID;
@@ -49,9 +49,36 @@ export class CoreService {
     multisig: MultisigCore;
     discordBot: DiscordBot;
     mode: string;
+    modules: any[];
 
     constructor(coreSettings?: LoggerConfig & CoreOptions) {
+        super('core')
         this.mode = coreSettings?.mode
+
+
+
+        this.transactionPool = new TransactionPoolService(this)
+        this.chainBridge = new ChainBridge(this)
+        this.contractEngine = new ContractEngine(this)
+        this.contractWorker = new ContractWorker(this)
+        this.p2pService = new P2PService(this)
+        this.nodeInfo = new NodeInfoService(this)
+        this.witness = new WitnessService(this)
+        this.multisig = new MultisigCore(this, this.witness)
+        this.discordBot = new DiscordBot(this)
+
+
+        this.regModule('TransactionPoolService', this.transactionPool)
+        this.regModule('ChainBridge', this.chainBridge)
+        this.regModule('ContractEngine', this.contractEngine)
+        this.regModule('ContractWorker', this.contractWorker)
+        this.regModule('P2PService', this.p2pService)
+        this.regModule('NodeInfoService', this.nodeInfo)
+        this.regModule('WitnessService', this.witness)
+        this.regModule('MultisigCore', this.multisig)
+        this.regModule('DiscordBot', this.discordBot)
+
+        this.regNames()
     }
 
     private async setupKeys() {
@@ -144,6 +171,8 @@ export class CoreService {
             level: this.config.get('logger.level'),
         })
         this.db = this.config.get('setupIdentification.dbSuffix') !== undefined && this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
+
+
         await mongo.connect()
         if (this.config.get('debug.dropTablesOnStartup')) {
             await this.dropTables();
@@ -152,39 +181,16 @@ export class CoreService {
         await this.setupKeys();
 
         console.log('Starting part way')
+
         
-        try 
-        {
-            this.transactionPool = new TransactionPoolService(this)
-            this.chainBridge = new ChainBridge(this)
-            this.contractEngine = new ContractEngine(this)
-            this.contractWorker = new ContractWorker(this)
-            this.p2pService = new P2PService(this)
-            this.nodeInfo = new NodeInfoService(this)
-            this.witness = new WitnessService(this)
-            this.multisig = new MultisigCore(this, this.witness)
-            this.discordBot = new DiscordBot(this)
-            
-            await this.transactionPool.start()
-            
-            await this.chainBridge.start();
-    
-            await this.contractEngine.start()
-            
-            await this.contractWorker.start()
+        
 
-            await this.p2pService.start()
+        const startStack = await this.startModules()
+        console.log(`Startup complete with ${startStack.length} exceptions`)
 
-            await this.nodeInfo.start()
+    }
 
-            await this.witness.start()
+    async stop() {
 
-            await this.multisig.start()
-
-            await this.discordBot.start() 
-        }
-        catch (err) {
-            console.trace(err)
-        }
     }
 }

@@ -129,9 +129,13 @@ export class MultisigCore {
               $lt: consensusRound.pastRoundHash,
             },
             last_signed: {
-              $gt: moment().subtract('7', 'day').toDate()
+              $gt: moment().subtract('3', 'day').toDate()
             },
             plugins: 'multisig'
+          }, {
+            sort: {
+              account: -1
+            }
           }).toArray()
 
         const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
@@ -291,7 +295,8 @@ export class MultisigCore {
     async processOutputs() {
         const outputsWithActions = await this.self.transactionPool.transactionPool.find({
             output_actions: {$ne: null},
-            'output_actions.tx_id': {$exists: false}
+            'output_actions.tx_id': {$exists: false},
+            'headers.contract_id': {$exists: true}
         }).toArray()
         console.log('outputsWithActions', outputsWithActions)
        
@@ -493,7 +498,7 @@ export class MultisigCore {
                         
                         
                         const calc = calcBlockInterval({
-                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            currentBlock: this.self.chainBridge.hiveStream.lastBlock, 
                             intervalLength: this.multisigOptions.rotationIntervalHive,
                             marginLength: 5
                         })
@@ -503,7 +508,7 @@ export class MultisigCore {
     
                         // console.log('scheduleSlotActual', scheduleSlotActual)
     
-                        // console.log(this.self.chainBridge.hiveStream.currentBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.currentBlock)
+                        // console.log(this.self.chainBridge.hiveStream.lastBlock % this.multisigOptions.rotationIntervalHive, this.self.chainBridge.hiveStream.lastBlock)
                         if (nodeInfo.enabled && nodeInfo.trusted && calc.isMarginActive) {
                             if (!this._rotationRunning && calc.last !== this.lastRotateBlock) {
                                 console.log('time to rotate mulitisig keys')
@@ -518,7 +523,7 @@ export class MultisigCore {
                             }
                         }
                         const procOutCalc = calcBlockInterval({
-                            currentBlock: this.self.chainBridge.hiveStream.currentBlock, 
+                            currentBlock: this.self.chainBridge.hiveStream.lastBlock, 
                             intervalLength: 20,
                             marginLength: 5
                         })

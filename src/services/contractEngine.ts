@@ -74,6 +74,67 @@ function wrapper () {
   }
 
   Date = MockDate;
+  let utils = {
+    SHA256: sha256,
+    bitcoin: {
+      ValidateSPV: {
+        validateHeaderChain: btc_validate_spv_header_chain,
+        validateProof: btc_validate_spv_proof
+      }
+      ser: {
+        deserializeSPVProof: btc_ser_deserialize_spv_proof
+      },
+      parseTxHex: btc_parse_tx_hex,
+      reverseBytes: btc_reverse_bytes,
+      BTCUtils: {
+        extractPrevBlockLE: btc_utils_extract_prev_block_le
+        extractTimestamp: btc_utils_extract_ts
+        extractTimestampLE: btc_utils_extract_ts_le
+        extractMerkleRootLE: btc_utils_extract_merkleroot_le
+        hash256: btc_utils_hash256
+        extractOutputAtIndex: btc_utils_extract_output_at_idx
+        extractValue: btc_utils_extract_value
+      },
+      SPVUtils: {
+        deserializeHex: btc_spv_utils_deserialize_hex
+      }
+    }
+  }
+  let output = {
+    setChainActions: set_chain_actions
+  }
+  api = api.copy();
+  api.transferFunds = async (to, amount) => {
+    return await (await transfer_funds.applySyncPromise(undefined, [to, amount])).copy()
+  }
+  api.withdrawFunds = async (amount) => {
+    return await (await withdraw_funds.applySyncPromise(undefined, [amount])).copy()
+  }
+  let state = {
+    remoteState: async (id) => {
+      let result = await (await state_remote.applySyncPromise(undefined, [id])).copy()
+      return {
+        pull: async (key) => {
+          return await (await result.pull.applySyncPromise(undefined, [key])).copy()
+        },
+        ls: async (key) => {
+          return await (await result.ls.applySyncPromise(undefined, [key])).copy()
+        }
+      }
+    },
+    pull: async (key) => {
+      return await (await state_pull.applySyncPromise(undefined, [key])).copy()
+    },
+    update: async (key, value) => {
+      await state_update.applySyncPromise(undefined, [key, value])
+    },
+    ls: async (key) => {
+      return await (await state_ls.applySyncPromise(undefined, [key])).copy()
+    },
+    del: async (key) => {
+      await state_del.applySyncPromise(undefined, [key])
+    }
+  }
 
   let actions = {};
 
@@ -441,29 +502,34 @@ export class ContractEngine {
       const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
       context.global.setSync('global', context.global.derefInto())
-      context.global.setSync('utils', {
-        SHA256: (payloadToHash) => {
-          if (typeof payloadToHash === 'string') {
-            return SHA256(payloadToHash).toString(enchex);
-          }
+      context.global.setSync('sha256', (payloadToHash: string | object) => {
+        if (typeof payloadToHash === 'string') {
+          return SHA256(payloadToHash).toString(enchex);
+        }
 
-          return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
-        },
-        bitcoin: {
-          ValidateSPV,
-          ser: ser,
-          parseTxHex: parseTxHex,
-          reverseBytes: reverse,
-          BTCUtils,
-          SPVUtils: utils
-        }
+        return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
       })
-      context.global.setSync('output', {
-        setChainActions: (actions) => {
-          chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
-        }
+
+      // btc functions
+      context.global.setSync('btc_validate_spv_header_chain', ValidateSPV.validateHeaderChain)
+      context.global.setSync('btc_validate_spv_proof', ValidateSPV.validateProof)
+      context.global.setSync('btc_ser_deserialize_spv_proof', ser.deserializeSPVProof)
+      context.global.setSync('btc_parse_tx_hex', parseTxHex)
+      context.global.setSync('btc_reverse_bytes', reverse)
+      context.global.setSync('btc_utils_extract_prev_block_le', BTCUtils.extractPrevBlockLE)
+      context.global.setSync('btc_utils_extract_ts', BTCUtils.extractTimestamp)
+      context.global.setSync('btc_utils_extract_ts_le', BTCUtils.extractTimestampLE)
+      context.global.setSync('btc_utils_extract_merkleroot_le', BTCUtils.extractMerkleRootLE)
+      context.global.setSync('btc_utils_hash256', BTCUtils.hash256)
+      context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
+      context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)
+      context.global.setSync('btc_spv_utils_deserialize_hex', utils.deserializeHex)
+
+      // apis
+      context.global.setSync('set_chain_actions', (actions: OutputActions) => {
+        chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
       })
-      context.global.setSync('api', {
+      context.global.setSync('api', new ivm.ExternalCopy({
         action: opData.action,
         payload: opData.payload,
         input: {
@@ -475,16 +541,45 @@ export class ContractEngine {
           included_in: op.included_in,
           included_block: includedRecord.hive_ref_block,
           included_date: includedRecord.hive_ref_date
-        },
-        transferFunds: this.transferFunds,
-        withdrawFunds: this.withdrawFunds,
-        getBalance: (accountId: string) => {
-          return this.self.chainBridge.calculateBalanceSum(accountId, {
-            // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
-          } as BlockRef, id)
         }
-      })
-      context.global.setSync('state', state.client)
+      }))
+      context.global.setSync('transfer_funds', new ivm.Reference(async (to: DID, amount: number) => {
+        let result = await this.transferFunds(to, amount)
+        return new ivm.ExternalCopy(result)
+      }))
+      context.global.setSync('withdraw_funds', new ivm.Reference(async (amount: number) => {
+        let result = await this.withdrawFunds(amount)
+        return new ivm.ExternalCopy(result)
+      }))
+      context.global.setSync('get_balance', new ivm.Reference(async (accountId: string) => {
+        let result = await this.self.chainBridge.calculateBalanceSum(accountId, {
+          // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
+        } as BlockRef, id)
+        return new ivm.ExternalCopy(result)
+      }))
+
+      // state
+      context.global.setSync('state_remote', new ivm.Reference(async (id: string) => {
+        let result = await state.client.remoteState(id)
+        return new ivm.ExternalCopy({
+          pull: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.pull(key))),
+          ls: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.ls(key))),
+        })
+      }))
+      context.global.setSync('state_pull', new ivm.Reference(async (key: string) => {
+        let result = await state.client.pull(key)
+        return new ivm.ExternalCopy(result)
+      }))
+      context.global.setSync('state_update', new ivm.Reference(async (key: string, value: any) => {
+        await state.client.update(key, value)
+      }))
+      context.global.setSync('state_ls', new ivm.Reference(async (key: string) => {
+        let result = await state.client.ls(key)
+        return new ivm.ExternalCopy(result)
+      }))
+      context.global.setSync('state_del', new ivm.Reference(async (key: string) => {
+        await state.client.del(key)
+      }))
       context.global.setSync('done', state.finish)
       const compiled = await isolate.compileScript(code)
       const executeOutput = await compiled.run(context) as { stateMerkle: string }

@@ -580,10 +580,11 @@ export class ContractEngine {
       context.global.setSync('state_del', new ivm.Reference(async (key: string) => {
         await state.client.del(key)
       }))
-      context.global.setSync('done', state.finish)
+      context.global.setSync('done', () => {
+        stateMerkle = state.finish().stateMerkle
+      })
       const compiled = await isolate.compileScript(code)
-      const executeOutput = await compiled.run(context) as { stateMerkle: string }
-      stateMerkle = executeOutput.stateMerkle
+      await compiled.run(context)
     }
 
     this.self.logger.info('new state merkle of executed contract', stateMerkle)

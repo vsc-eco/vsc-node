@@ -28,71 +28,79 @@ export class OutputActions {
     return this.opStack.push(input)
   }
 }
-class MockDate extends Date {
-
-  constructor(val) {
-      if(val) {
-          if(typeof val === 'string') {
-              if(val.endsWith('Z')) {
-                  super(val)
-              } else {
-                  super(val + "Z")
-              }
-          } else {
-              super(val)
-          }
-      } else {
-          super(0);
-      }
-      // console.log(this)
-      // this = new Date(0)
-  }
-
-  getTimezoneOffset() {
-      return 0;
-  }
-
-  toLocaleString() {
-      return this.toUTCString()
-  }
-
-  static now() {
-      return 0;
-  }
-}
 let codeTemplate = `
 function wrapper () {
-    RegExp.prototype.constructor = function () { };
-    RegExp.prototype.exec = function () {  };
-    RegExp.prototype.test = function () {  };
-    Math.random = function () {  };
-
-    let actions = {};
-
-    ###ACTIONS###
-
-    const execute = async function () {
-      try {
-        if (api.action && typeof api.action === 'string' && typeof actions[api.action] === 'function') {
-          if (api.action !== 'init') {
-            actions.init = null;
+  RegExp.prototype.constructor = function () { };
+  RegExp.prototype.exec = function () {  };
+  RegExp.prototype.test = function () {  };
+  Math.random = function () {  };
+  class MockDate extends Date {
+    constructor(val) {
+      if(val) {
+        if(typeof val === 'string') {
+          if(val.endsWith('Z')) {
+            super(val)
+          } else {
+            super(val + "Z")
           }
-          await actions[api.action](api.payload);
-          if(api.payload) {
-            done(api.payload)
-          }
-          done(null);
         } else {
-          done('invalid action');
+          super(val)
         }
-      } catch (error) {
-        done(error);
+      } else {
+        super(0);
       }
     }
 
-    execute();
+    getTimezoneOffset() {
+      return 0;
+    }
+
+    toLocaleString() {
+      return this.toUTCString()
+    }
+
+    static now() {
+      return 0;
+    }
   }
-  wrapper();
+  class OutputActions {
+    constructor() {
+      this.opStack = []
+    }
+
+    addHiveOp(input) {
+      return this.opStack.push(input)
+    }
+  }
+
+  Date = MockDate;
+
+  let actions = {};
+
+  ###ACTIONS###
+
+  const execute = async function () {
+    try {
+      if (api.action && typeof api.action === 'string' && typeof actions[api.action] === 'function') {
+        if (api.action !== 'init') {
+          actions.init = null;
+        }
+        await actions[api.action](api.payload);
+        if(api.payload) {
+          done(api.payload)
+        }
+        done(null);
+      } else {
+        done('invalid action');
+      }
+    } catch (error) {
+      done(error);
+    }
+  }
+
+  execute();
+}
+wrapper();
 `
 
 export class ContractEngine {
@@ -433,8 +441,6 @@ export class ContractEngine {
       const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
       context.global.setSync('global', context.global.derefInto())
-      context.global.setSync('Date', MockDate)
-      context.global.setSync('OutputActions', OutputActions)
       context.global.setSync('utils', {
         SHA256: (payloadToHash) => {
           if (typeof payloadToHash === 'string') {

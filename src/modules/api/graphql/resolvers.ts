@@ -1,5 +1,6 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
+import { GraphQLError } from 'graphql';
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -134,7 +135,7 @@ export const Resolvers = {
       try {
         cid = CID.parse(ipfsHash)
       } catch {
-        return { type: "error", data: "CID format not supported!"}
+        throw new GraphQLError('Invalid CID format!')
       }
 
       // get ipfs content for cid
@@ -169,7 +170,7 @@ export const Resolvers = {
 
       return { type: type, data: content.value }
     } else {
-      return { type: "error", data: "Current node configuration does not allow for this endpoint to be used." }
+      throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
     }
   }
 }

@@ -1,5 +1,5 @@
 import NodeSchedule from 'node-schedule'
-import { CID, IPFSHTTPClient } from "ipfs-http-client";
+import { CID, IPFSHTTPClient } from "kubo-rpc-client";
 import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'
@@ -79,7 +79,7 @@ export class PeerChannel {
     connectionAlive: boolean;
     target: string;
     events: EventEmitter;
-    private interval: NodeJS.Timer;
+    private interval: NodeJS.Timer | number;
     private _peers: string[];
     private _handles: Record<string, {
         id: string
@@ -130,7 +130,7 @@ export class PeerChannel {
                 this.connectionAlive = true;
                 this.events.emit('connection_established')
             }
-            this.logger.debug('received message', json_payload)
+            // this.logger.debug('received message', json_payload)
             if(json_payload.flags && json_payload.flags.includes('init')) {
                 if(this._handles[json_payload.type]) {
                     let drain = pushable()
@@ -228,7 +228,7 @@ export class PeerChannel {
 
     async end() {
         await this.goodNight()
-        clearInterval(this.interval)
+        clearInterval(this.interval as any)
     }
 
     public async onMessage(type: string, handler: Function) {
@@ -265,7 +265,8 @@ export class PeerChannel {
         payload: any,
         // stream: Pushable<any>,c
         mode?: "stream" | "basic",
-        streamTimeout?: number
+        streamTimeout?: number,
+        responseOrigin?: "single" | "many"
     }): Promise<{
         drain: Pushable<any>
         req_id: string
@@ -279,8 +280,12 @@ export class PeerChannel {
             }, options.streamTimeout)
         }
         this.events.on('message', (msg) => {
+
             if(req_id === msg.req_id) {
                 if(msg.flags && msg.flags.includes('end')) {
+                    if(options.responseOrigin === 'many') {
+                        return;
+                    }
                     drain.end()
                 } else {
                     drain.push(msg)
@@ -395,7 +400,7 @@ export class P2PService {
                 return;
             }
             if(json_payload.type === MESSAGE_TYPES.announceNode) {
-                this.self.logger.debug('multicast payload', json_payload)
+                // this.self.logger.debug('multicast payload', json_payload)
 
                 const did_proof = await verifyMultiJWS(json_payload.payload.did_proof, this.self.identity)
                 

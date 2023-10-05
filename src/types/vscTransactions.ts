@@ -1,4 +1,4 @@
-import { CID } from "ipfs-http-client"
+import { CID } from "kubo-rpc-client"
 import { JsonPatchOp } from "./contracts"
 
 export interface CoreVSCTransaction {
@@ -33,6 +33,7 @@ export interface ContractOutput extends CoreVSCTransaction {
         log: JsonPatchOp[]
       }
     >
+    chain_actions: any | null
 }
 
 export interface TransactionContractLogMatrix {
@@ -43,4 +44,5 @@ export enum VSCTransactionTypes {
     call_contract = "call_contract",
     contract_output = "contract_output",
     update_contract = "update_contract",
+    transferFunds = "transfer_funds",
 }

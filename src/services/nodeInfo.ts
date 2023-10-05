@@ -1,7 +1,7 @@
 import { PrivateKey } from "@hiveio/dhive";
 import NodeSchedule from 'node-schedule'
-import { getCommitHash, HiveClient } from "../utils";
-import { CoreService } from "./index";
+import { getCommitHash, HiveClient, ModuleContainer } from "../utils";
+import { CoreService, } from "./index";
 import moment from "moment";
 import { Collection } from "mongodb";
 
@@ -15,11 +15,13 @@ export class NodeInfoService {
         expries: Date
     }>;
     lastUpdate: Date;
+    earlyUpdate: boolean;
 
     constructor(self: CoreService) {
         this.self = self
 
         this.announceNode = this.announceNode.bind(this)
+        this.runEarlyUpdate = this.runEarlyUpdate.bind(this)
     }
     async announceNode() {
         /**
@@ -40,7 +42,7 @@ export class NodeInfoService {
         const hiveAccount = process.env.HIVE_ACCOUNT
 
         if(!hiveAccount || !process.env.HIVE_ACCOUNT_ACTIVE) {
-            console.warn('Cannot register node due to lack of hive account name or postingkey')
+            // console.warn('Cannot register node due to lack of hive account name or postingkey')
             return;
         }
         const [accountDetails] = await HiveClient.database.getAccounts([hiveAccount])
@@ -80,12 +82,12 @@ export class NodeInfoService {
             if(
                 json_metadata.vsc_node.unsigned_proof.witness.enabled === witnessEnabled && 
                 json_metadata.vsc_node.unsigned_proof.net_id === this.self.config.get('network.id') && 
-                json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id,
-                json_metadata.vsc_node.unsigned_proof.git_commit === this.gitCommit,
-                json_metadata.vsc_node.unsigned_proof.witness.disabled_reason === disableReason,
+                json_metadata.vsc_node.unsigned_proof.ipfs_peer_id === ipfs_peer_id &&
+                (typeof this.gitCommit === 'string' ? json_metadata.vsc_node.unsigned_proof.git_commit === this.gitCommit : true) &&
+                json_metadata.vsc_node.unsigned_proof.witness.disabled_reason === disableReason &&
                 json_metadata.vsc_node.unsigned_proof.witness.plugins?.includes('multisig')
             ) {
-                if(moment().subtract('3', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
+                if(moment().subtract('1', 'day').toDate() < new Date(json_metadata.vsc_node.unsigned_proof.ts)) {
                     //Node registration not required
                     return
                 }
@@ -104,6 +106,7 @@ export class NodeInfoService {
                 enabled: witnessEnabled,
                 disabled_reason: disableReason,
                 plugins: ['multisig'],
+                delay_notch: await this.self.witness.delayMonitor.gatherAverages(),
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
@@ -157,11 +160,22 @@ export class NodeInfoService {
         })
     }
 
+    triggerEarlyUpdate() {
+        this.earlyUpdate = true;
+    }
+
+    async runEarlyUpdate() {
+        if(this.earlyUpdate === true) {
+            await this.announceNode()
+        }
+    }
+
     async start() {
         this.nodeStatus = this.self.db.collection('node_status')
 
         this.gitCommit = await getCommitHash()
         NodeSchedule.scheduleJob('0 * * * *', this.announceNode)
-        await this.announceNode()
+        NodeSchedule.scheduleJob('* * * * *', this.runEarlyUpdate)
+        this.announceNode()
     }
 }

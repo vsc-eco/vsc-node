@@ -1,6 +1,6 @@
 import 'dotenv/config'
-import * as IPFS from "ipfs-http-client";
-import { IPFSHTTPClient } from "ipfs-http-client";
+import * as IPFS from "kubo-rpc-client";
+import { IPFSHTTPClient } from "kubo-rpc-client";
 import Path from 'path'
 import os from 'os'
 import Crypto from 'crypto'
@@ -11,13 +11,11 @@ import KeyResolver from 'key-did-resolver'
 import { Config } from "../services/nodeConfig";
 import { getLogger } from '../logger';
 
-const homeDir = Path.join(os.homedir(), '.vsc-node')
-
 let identity = null;
 
 export async function init() {
     
-    const config = new Config(homeDir)
+    const config = new Config(Config.getConfigDir())
     await config.open()
 
     const logger = getLogger({
@@ -26,7 +24,7 @@ export async function init() {
         level: config.get('logger.level'),
     })
     
-    const ipfsClient = IPFS.create(process.env.IPFS_HOST || config.get('ipfs.apiAddr'));
+    const ipfsClient = IPFS.create({ url: process.env.IPFS_HOST || config.get('ipfs.apiAddr')});
 
     const privateKey = config.get('identity.walletPrivate');
     if(!privateKey) {

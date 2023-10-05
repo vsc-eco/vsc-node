@@ -7,6 +7,9 @@ import shuffleSeed from 'shuffle-seed'
 import { CoreService } from "../";
 import { HiveClient } from "../../utils";
 import moment from "moment";
+import { createSafeDivision } from "./multisig";
+import { DelayMonitor } from "./delayMonitor";
+import networks from "../networks";
 
 
 
@@ -20,8 +23,51 @@ export class WitnessService {
     in_past: boolean
     did: string
   }>
+  delayMonitor: DelayMonitor;
   constructor(self: CoreService) {
     this.self = self
+
+    this.delayMonitor = new DelayMonitor(this.self, this)
+  }
+
+  async witnessNodes() {
+    const consensusRound = await this.calculateConsensusRound()
+    
+    const witnessNodes = await this.witnessDb
+    .find({
+      $or: [
+        {
+          disabled_at: {
+            $gt: consensusRound.pastRoundHash,
+          },
+        },
+        {
+          disabled_at: {
+            $exists: false,
+          },
+        },
+        {
+          disabled_at: {
+            $eq: null
+          },
+        },
+      ],
+      // trusted: true,
+      net_id: this.self.config.get('network.id'),
+      enabled_at: {
+        $lt: consensusRound.pastRoundHash,
+      },
+      last_signed: {
+        $gt: moment().subtract('3', 'day').toDate()
+      }
+    }, {
+      sort: {
+        account: -1
+      }
+    })
+    .toArray()
+
+    return witnessNodes;
   }
 
   async weightedSchedule(totalRounds) {
@@ -45,21 +91,55 @@ export class WitnessService {
             },
           },
         ],
-        trusted: true,
+        // trusted: true,
         net_id: this.self.config.get('network.id'),
         enabled_at: {
           $lt: consensusRound.pastRoundHash,
         },
         last_signed: {
-          $gt: moment().subtract('7', 'day').toDate()
+          $gt: moment().subtract('3', 'day').toDate()
+        }
+      }, {
+        sort: {
+          account: -1
         }
       })
       .toArray()
 
+      //console.log('witnessNodes', witnessNodes.map(e => e.account), witnessNodes.map(e => e.account).length)
+
+      // console.log(JSON.stringify({
+      //   $or: [
+      //     {
+      //       disabled_at: {
+      //         $gt: consensusRound.pastRoundHash,
+      //       },
+      //     },
+      //     {
+      //       disabled_at: {
+      //         $exists: false,
+      //       },
+      //     },
+      //     {
+      //       disabled_at: {
+      //         $eq: null
+      //       },
+      //     },
+      //   ],
+      //   trusted: true,
+      //   net_id: this.self.config.get('network.id'),
+      //   enabled_at: {
+      //     $lt: consensusRound.pastRoundHash,
+      //   },
+      //   // last_signed: {
+      //   //   $gt: moment().subtract('5', 'day').toDate()
+      //   // }
+      // }))
+
       // console.log(
       //   witnessNodes.map((e) => e.account),
       //   witnessNodes.map((e) => e.account).length,
-      //   JSON.stringify({
+      //   /*JSON.stringify({
       //     enabled_at: {
       //       $lt: consensusRound.pastRoundHash,
       //     },
@@ -80,11 +160,16 @@ export class WitnessService {
       //         },
       //       },
       //     ],
-      //   }, null, 2)
+      //   }, null, 2)*/
       // )
-    const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
-    const blockHash = block.transaction_merkle_root
+    // const block = await HiveClient.database.getBlockHeader(consensusRound.pastRoundHash - 20 * 60)
+    
 
+    // const data = createSafeDivision({
+    //   factorMin: 6,
+    //   factorMax: 11,
+    //   map: witnessNodes
+    // })
     let outSchedule = []
     for (let x = 0; x < totalRounds; x++) {
       if (witnessNodes[x % witnessNodes.length]) {
@@ -102,6 +187,7 @@ export class WitnessService {
   }
 
   async calculateConsensusRound() {
+    const {roundLength, totalRounds} = networks[this.self.config.get('network.id')];
     const blockNumber = await HiveClient.blockchain.getCurrentBlockNum()
 
     // const mod1 = blockNumber % 20;
@@ -110,7 +196,7 @@ export class WitnessService {
     // const mod2 = mod1 + blockNumber
     // console.log(mod2 % 20)
 
-    const modLength = 20 * 60
+    const modLength = roundLength * totalRounds
     const mod3 = blockNumber % modLength
     const pastRoundHash = blockNumber - mod3
     // console.log(
@@ -132,13 +218,14 @@ export class WitnessService {
    */
   async applyBNSchedule(schedule: any[]) {
     const consensusRound = await this.calculateConsensusRound()
+    const roundLength = networks[this.self.config.get('network.id')].roundLength;
 
     return schedule.map((e, index) => {
       return {
         ...e,
-        bn: consensusRound.pastRoundHash + index * 20,
-        bn_works: (consensusRound.pastRoundHash + index * 20) % 20 === 0,
-        in_past: consensusRound.pastRoundHash + index * 20 < consensusRound.currentBlockNumber,
+        bn: consensusRound.pastRoundHash + index * roundLength,
+        bn_works: (consensusRound.pastRoundHash + index * roundLength) % roundLength === 0,
+        in_past: consensusRound.pastRoundHash + index * roundLength < consensusRound.currentBlockNumber,
       }
     })
   }
@@ -158,11 +245,16 @@ export class WitnessService {
 
     setInterval(async () => {
       try {
-        this.witnessSchedule = await this.weightedSchedule(60)
+        
+        this.witnessSchedule = await this.weightedSchedule(networks[this.self.config.get('network.id')].totalRounds)
+        // console.log('witnessSchedule', this.witnessSchedule)
       } catch (ex) {
         console.log(ex)
       }
     }, 15 * 1000)
     // await this.weightedSchedule(60)
+
+    
+    await this.delayMonitor.start()
   }
 }

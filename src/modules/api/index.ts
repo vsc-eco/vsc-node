@@ -2,7 +2,7 @@
 import { Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { createSchema, createYoga } from 'graphql-yoga'
-import { IPFSHTTPClient } from 'ipfs-http-client'
+import { IPFSHTTPClient } from 'kubo-rpc-client'
 import { CoreService } from '../../services/index'
 import { ApiController } from './api.controller'
 import { Resolvers } from './graphql/resolvers'

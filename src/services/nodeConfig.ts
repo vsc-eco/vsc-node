@@ -4,6 +4,8 @@ import mergeOptions from 'merge-options'
 import { Key } from 'interface-datastore'
 import { FsDatastore } from 'datastore-fs'
 import fs from 'fs'
+import Path from 'path'
+import os from 'os'
 
 function obj_set(obj, props, value) {
   if (typeof props == 'string') {
@@ -52,6 +54,7 @@ class ChildConfig {
     return this.parentConfig.set(`${this.rootKey}.${key}`, value)
   }
 }
+
 export class Config {
   config: any
   datastore: any
@@ -81,6 +84,11 @@ export class Config {
   save() {
     const buf = Buffer.from(JSON.stringify(this.config, null, 2))
     this.datastore.put(new Key('config'), buf)
+  }
+  static getConfigDir(): string {
+    return process.env.CONFIG_SUFFIX !== undefined && process.env.CONFIG_SUFFIX !== '' ? 
+        Path.join(os.homedir(), '.vsc-node-' + process.env.CONFIG_SUFFIX) 
+        : Path.join(os.homedir(), '.vsc-node')
   }
   /**
    *
@@ -124,6 +132,9 @@ export class Config {
       network: {
         id: 'testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c',
       },
+      setupIdentification: {
+        dbSuffix: ''
+      },
       identity: {
         nodePrivate: null,
         nodePublic: null,
@@ -138,10 +149,13 @@ export class Config {
       //Contract executor
       witness: {
         enabled: true,
-        batchExecutionSize: 100 // pla: max amount of tx to process in a single batch execution
+        batchExecutionSize: 100, // pla: max amount of tx to process in a single batch execution
         // is kinda a constant so it doesnt really belong here - maybe have a "version"/ "runtime params" data model
         // that houses constants for the current version of vsc which is propagated throughout the nodes,
         // so in theory you could dynamically adjust constant parameters for eg performance or something reasons (peaks/ lows in usage)
+        multisig: {
+          enabled: true
+        }
       },
       node: {
         storageType: "archive" //For now until chain state is properly replicated across many nodes.
@@ -152,6 +166,13 @@ export class Config {
       logger: {
         printMetadata: true,
         level: "debug"
+      },
+      debug: {
+        debugNodeAddresses: ["did:key:z6MkqnJ2kvpaJCdVBgXH4jkaf95Yu5iJTnuarHw41wxxL5K5", "did:key:z6Mkofo9CvXkfTEr1twKpjWYvZqZzaEu4zT8gMATP6renNJg"],
+        overrideSchedule: false,
+        startBlock: null,
+        startAtCurrentBlock: false,
+        dropTablesOnStartup: false
       }
     }
 

@@ -52,6 +52,21 @@ export const schema = `
         peer_id: String
         did: String
     }
+    type WitnessNode {
+        account: String
+        did: String
+        enabled: Boolean
+        git_commit: String
+        last_signed: String
+        net_id: String
+        peer_id: String
+        plugins: JSON
+        signing_keys: JSON
+        disabled_at: Int
+        disabled_reason: String
+        enabled_at: Int
+        trusted: Boolean
+    }
     type Query {
         contractState(id: String): ContractState
         findTransaction(id: String): Transaction
@@ -59,5 +74,7 @@ export const schema = `
 
         submitTransaction(id: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo
+        witnessNodes: [WitnessNode]
+        nextWitnessSlot(local: Boolean): JSON
     }
 `

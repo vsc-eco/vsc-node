@@ -1,7 +1,6 @@
-import { CID, IPFSHTTPClient } from "ipfs-http-client";
-import * as IPFSHTTP from "ipfs-http-client";
+import { CID, IPFSHTTPClient } from "kubo-rpc-client";
+import * as IPFSHTTP from "kubo-rpc-client";
 import Path from 'path'
-import os from 'os'
 import Crypto from 'crypto'
 import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
@@ -23,17 +22,14 @@ import { MultisigCore } from "./witness/multisig";
 import { NodeInfoService } from "./nodeInfo";
 import { WitnessService } from "./witness";
 import networks from "./networks";
+import { DiscordBot } from "./discordbot";
+import { ModuleContainer } from "../utils";
 interface CoreOptions {
-    pathSuffix?: string
     dbSuffix?: string
-    ipfsApi?: string
-    debugHelper?: {
-        nodePublicAdresses?: Array<string>,
-        serviceName?: string
-    }
+    mode?: 'lite'
 }
 
-export class CoreService {
+export class CoreService extends ModuleContainer {
     ipfs: IPFSHTTPClient;
     config: Config;
     identity: DID;
@@ -42,7 +38,6 @@ export class CoreService {
     db: Db;
     chainBridge: ChainBridge;
     contractEngine: ContractEngine;
-    options: CoreOptions;
     p2pService: P2PService;
     contractWorker: ContractWorker;
     logger: winston.Logger;
@@ -52,25 +47,44 @@ export class CoreService {
     witness: WitnessService;
     networkId: any;
     multisig: MultisigCore;
+    discordBot: DiscordBot;
+    mode: string;
+    modules: any[];
 
-    constructor(options?: CoreOptions, loggerSettings?: LoggerConfig) {
-        this.options = options || {};
+    constructor(coreSettings?: LoggerConfig & CoreOptions) {
+        super('core')
+        this.mode = coreSettings?.mode
 
-        if(!this.options.ipfsApi) {
-            this.options.ipfsApi = "/ip4/127.0.0.1/tcp/5001"
-        }
-        if(!this.options.debugHelper) {
-            this.options.debugHelper = {}
-            if (!this.options.debugHelper.nodePublicAdresses) {
-                this.options.debugHelper.nodePublicAdresses = []
-            }
-        }
+
+
+        this.transactionPool = new TransactionPoolService(this)
+        this.chainBridge = new ChainBridge(this)
+        this.contractEngine = new ContractEngine(this)
+        this.contractWorker = new ContractWorker(this)
+        this.p2pService = new P2PService(this)
+        this.nodeInfo = new NodeInfoService(this)
+        this.witness = new WitnessService(this)
+        this.multisig = new MultisigCore(this, this.witness)
+        this.discordBot = new DiscordBot(this)
+
+
+        this.regModule('TransactionPoolService', this.transactionPool)
+        this.regModule('ChainBridge', this.chainBridge)
+        this.regModule('ContractEngine', this.contractEngine)
+        this.regModule('ContractWorker', this.contractWorker)
+        this.regModule('P2PService', this.p2pService)
+        this.regModule('NodeInfoService', this.nodeInfo)
+        this.regModule('WitnessService', this.witness)
+        this.regModule('MultisigCore', this.multisig)
+        this.regModule('DiscordBot', this.discordBot)
+
+        this.regNames()
     }
 
     private async setupKeys() {
         let keyBackup = {}
         let noBackup = false;
-        let keyBackupPath = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-seed-backup-' + this.options.pathSuffix) + ".json" : Path.join(os.homedir(), '.vsc-seed-backup.json')
+        let keyBackupPath = Path.join(Config.getConfigDir(), '.vsc-seed-backup.json')
 
         //Check if identity already exists, if not load keybackup if exists
         try {
@@ -82,7 +96,6 @@ export class CoreService {
                 } catch {
     
                 }
-                Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix)
             }
         } catch {
             noBackup = true
@@ -126,53 +139,58 @@ export class CoreService {
         }
     }
 
-    
+    async dropTables() {
+        const collections = [
+            'state_headers',
+            'block_headers',
+            'witnesses',
+            'balances',
+            'contracts',
+            'contract_commitment',
+            'contract_log',
+            'node_status',
+            'peers',
+            'transaction_pool',
+            'block_headers'
+        ]
+
+        for(let collection of collections) {
+            await this.db.collection(collection).deleteMany({})
+        }
+    }
 
     async start() {
         console.log('Starting')
-        this.ipfs = IPFSHTTP.create({url: process.env.IPFS_HOST || "/ip4/127.0.0.1/tcp/5001"});
-        const homeDir = this.options.pathSuffix ? Path.join(os.homedir(), '.vsc-node-' + this.options.pathSuffix) : Path.join(os.homedir(), '.vsc-node')
-        this.config = new Config(homeDir)
+        this.config = new Config(Config.getConfigDir())
         await this.config.open()
+        this.ipfs = IPFSHTTP.create({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')});
         this.networkId = this.config.get('network.id')
         this.logger = getLogger(this.loggerSettings || {
-            prefix: 'core ' + (this.options.debugHelper.serviceName ?? ''),
+            prefix: 'core',
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
         })
-        this.db = this.options.dbSuffix ? mongo.db('vsc-' + this.options.dbSuffix) : mongo.db('vsc')
+        this.db = this.config.get('setupIdentification.dbSuffix') !== undefined && this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
+
+
         await mongo.connect()
+        if (this.config.get('debug.dropTablesOnStartup')) {
+            await this.dropTables();
+        }     
+
         await this.setupKeys();
 
         console.log('Starting part way')
-        try 
-        {
-            this.transactionPool = new TransactionPoolService(this)
-            await this.transactionPool.start()
-            
-            this.chainBridge = new ChainBridge(this)
-            await this.chainBridge.start();
-    
-            this.contractEngine = new ContractEngine(this)
-            await this.contractEngine.start()
-            
-            this.contractWorker = new ContractWorker(this)
-            await this.contractWorker.start()
 
-            this.p2pService = new P2PService(this)
-            await this.p2pService.start()
+        
+        
 
-            this.nodeInfo = new NodeInfoService(this)
-            await this.nodeInfo.start()
+        const startStack = await this.startModules()
+        console.log(`Startup complete with ${startStack.length} exceptions`)
 
-            this.witness = new WitnessService(this)
-            await this.witness.start()
+    }
 
-            this.multisig = new MultisigCore(this, this.witness)
-            await this.multisig.start()
-        }
-        catch (err) {
-            console.trace(err)
-        }
+    async stop() {
+
     }
 }

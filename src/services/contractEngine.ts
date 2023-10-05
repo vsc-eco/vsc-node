@@ -8,7 +8,26 @@ import { CoreService } from './index'
 import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
 import { ContractOutput } from '../types/vscTransactions'
+import { DID } from 'dids'
+import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
+import { BlockRef } from '@/types'
+import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
+import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 
+
+export type HiveOps = CustomJsonOperation | TransferOperation
+
+export class OutputActions {
+  opStack: Array<any>
+
+  constructor() {
+    this.opStack = []
+  }
+
+  addHiveOp(input: HiveOps) {
+    return this.opStack.push(input)
+  }
+}
 class MockDate extends Date {
 
   constructor(val) {
@@ -89,6 +108,15 @@ export class ContractEngine {
     this.contractCache = {}
   }
 
+  private async transferFunds(to: DID, amount: number) {
+    // to be implemented
+  }
+
+  private async withdrawFunds(amount: number) {
+    // to be implemented
+    // uses transferFunds under the hood
+  }
+
   private async contractStateExecutor(id: string) {
     let stateCid
     let contract = await this.contractDb.findOne({
@@ -163,6 +191,18 @@ export class ContractEngine {
 
     return {
       client: {
+        /**
+         * 
+         * @param id Contract ID
+         */
+        remoteState: async(id: string) => {
+          const state = await this.contractStateRaw(id)
+
+          return {
+            pull: state.client.pull,
+            ls: state.client.ls,
+          }
+        },
         pull: async (key: string) => {
           try {
             console.log(stateCid)
@@ -336,6 +376,7 @@ export class ContractEngine {
    */
   async contractExecuteRaw(id, operations, options: {
     benchmark: Benchmark
+    codeOverride?: string
   }): Promise<ContractOutput> {
     const benchmark = options.benchmark
     if(operations.length === 0) {
@@ -345,6 +386,13 @@ export class ContractEngine {
       id,
     })
     if(!contractInfo) {
+      await this.contractDb.findOneAndUpdate({
+        id
+      }, {
+        $set: {
+          status: 'FAILED'
+        }
+      })
       throw new Error('Smart contract not registered with node')
     }
     let codeRaw = ''
@@ -356,9 +404,10 @@ export class ContractEngine {
     } else {
       codeRaw = this.contractCache[id]
     }
-    
-    let code = codeTemplate.replace('###ACTIONS###', codeRaw)
 
+    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
+
+    let chainActions = null
     let stateMerkle
     let startMerkle
     for (let op of operations) {
@@ -377,10 +426,15 @@ export class ContractEngine {
         startMerkle = state.startMerkle.toString()
       }
 
+      const includedRecord = await this.self.chainBridge.blockHeaders.findOne({
+        id: op.included_in
+      })
+
       const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
       context.global.setSync('global', context.global.derefInto())
       context.global.setSync('Date', MockDate)
+      context.global.setSync('OutputActions', OutputActions)
       context.global.setSync('utils', {
         SHA256: (payloadToHash) => {
           if (typeof payloadToHash === 'string') {
@@ -389,6 +443,19 @@ export class ContractEngine {
 
           return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
         },
+        bitcoin: {
+          ValidateSPV,
+          ser: ser,
+          parseTxHex: parseTxHex,
+          reverseBytes: reverse,
+          BTCUtils,
+          SPVUtils: utils
+        }
+      })
+      context.global.setSync('output', {
+        setChainActions: (actions) => {
+          chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
+        }
       })
       context.global.setSync('api', {
         action: opData.action,
@@ -399,7 +466,16 @@ export class ContractEngine {
             id: op.account_auth
           },
           tx_id: op.id,
-          included_in: op.included_in
+          included_in: op.included_in,
+          included_block: includedRecord.hive_ref_block,
+          included_date: includedRecord.hive_ref_date
+        },
+        transferFunds: this.transferFunds,
+        withdrawFunds: this.withdrawFunds,
+        getBalance: (accountId: string) => {
+          return this.self.chainBridge.calculateBalanceSum(accountId, {
+            // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
+          } as BlockRef, id)
         }
       })
       context.global.setSync('state', state.client)
@@ -416,9 +492,7 @@ export class ContractEngine {
       startMerkle = CID.parse(startMerkle);
     }
     
-    if(!(stateMerkle instanceof CID)) {
-      stateMerkle = CID.parse(stateMerkle);
-    }
+    stateMerkle = CID.asCID(stateMerkle);
 
     let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
     startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
@@ -499,6 +573,7 @@ export class ContractEngine {
       }),
       state_merkle: stateMerkle.toString(),
       log_matrix,
+      chain_actions: chainActions
     } as ContractOutput
   }
 

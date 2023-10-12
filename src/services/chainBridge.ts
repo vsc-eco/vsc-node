@@ -464,7 +464,7 @@ export class ChainBridge {
 
       // pla: pin contract code on enabled nodes, note: every dag.get/ cat is a pin via an overridden base function
       if (this.self.config.get('ipfs.pinEverything')) {
-        for await (const chunk of this.self.ipfs.cat(json.code)) {}
+        this.self.ipfs.pin.add(json.code)
       }
     } else if (json.action === CoreTransactionTypes.join_contract) {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
@@ -1085,7 +1085,7 @@ export class ChainBridge {
           // pla: pin vsc tx on enabled nodes, note: every dag.get/ cat is a pin via an overridden base function
           if (this.self.config.get('ipfs.pinEverything')) {
             const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value;
-            (await this.self.ipfs.dag.get((signedTransaction as any).link as CID)).value
+            this.self.ipfs.pin.add((signedTransaction as any).link as CID)
           }
 
           this.processVSCBlockTransaction(tx, block.block_hash);

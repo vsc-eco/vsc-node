@@ -252,7 +252,7 @@ function parseHiveBlocks(blocksInput) {
           }
           op.value.amount = `${Number(op.value.amount.amount) / Math.pow(10, op.value.amount.precision)} ${unit}`;
         }
-        return [typeS.splice(0, typeS.length - 1).join('_'), op.value]
+        return [typeB, op.value]
       })
       tx.transaction_id = block.transaction_ids[index]
       tx.block_num = parseInt(block.block_id.slice(0, 8), 16)
@@ -315,7 +315,6 @@ export async function* liveHiveBlocks(API, opts: {
           
         for(let block of parseHiveBlocks(data.result.blocks)) {
           console.log('281', last_block, parseInt(block.block_id.slice(0, 8), 16), bh)
-
           last_block = parseInt(block.block_id.slice(0, 8), 16)
           count = bh - last_block
           // console.log(new Date().getTime() - new Date(block.timestamp + "Z").getTime())

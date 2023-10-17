@@ -71,11 +71,54 @@ export const schema = `
         type: String
         data: JSON
     }
+    interface BalanceController {
+        type: BalanceControllerType
+        authority: String
+        conditions: [BalanceAccessCondition]
+    }
+    enum BalanceControllerType {
+        HIVE
+        DID
+        CONTRACT
+    }
+    interface BalanceAccessCondition {
+        type: BalanceAccessConditionType
+        value: String
+    }
+    enum BalanceAccessConditionType {
+        TIME
+        HASH
+        WITHDRAW
+    }
+    interface DepositDrain {
+        deposit_id: String
+        amount: Float
+    }
+    type Deposit {
+        from: String
+        id: String
+        orig_balance: Float
+        active_balance: Float
+        created_at: String
+        last_interacted_at: String
+        outputs: [DepositDrain]
+        inputs: [DepositDrain]
+        asset_type: String
+        create_block: BlockRef
+        controllers: [BalanceController]
+        contract_id: String
+        controllers_hash: String
+    }
+    interface BlockRef {
+        block_ref: String
+        included_block: Int
+    }
     type Query {
         contractState(id: String): ContractState
         findTransaction(id: String): Transaction
         findContract(id: String): FindContractResult
         findCID(id: String): findCIDResult
+        findDeposit(id: String): Deposit
 
         submitTransaction(id: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo

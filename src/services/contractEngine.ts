@@ -80,19 +80,19 @@ function wrapper () {
       ValidateSPV: {
         validateHeaderChain: btc_validate_spv_header_chain,
         validateProof: btc_validate_spv_proof
-      }
+      },
       ser: {
         deserializeSPVProof: btc_ser_deserialize_spv_proof
       },
       parseTxHex: btc_parse_tx_hex,
       reverseBytes: btc_reverse_bytes,
       BTCUtils: {
-        extractPrevBlockLE: btc_utils_extract_prev_block_le
-        extractTimestamp: btc_utils_extract_ts
-        extractTimestampLE: btc_utils_extract_ts_le
-        extractMerkleRootLE: btc_utils_extract_merkleroot_le
-        hash256: btc_utils_hash256
-        extractOutputAtIndex: btc_utils_extract_output_at_idx
+        extractPrevBlockLE: btc_utils_extract_prev_block_le,
+        extractTimestamp: btc_utils_extract_ts,
+        extractTimestampLE: btc_utils_extract_ts_le,
+        extractMerkleRootLE: btc_utils_extract_merkleroot_le,
+        hash256: btc_utils_hash256,
+        extractOutputAtIndex: btc_utils_extract_output_at_idx,
         extractValue: btc_utils_extract_value
       },
       SPVUtils: {

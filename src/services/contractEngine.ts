@@ -126,6 +126,8 @@ function wrapper () {
       return await (await state_pull.applySyncPromise(undefined, [key])).copy()
     },
     update: async (key, value) => {
+      if (typeof value === 'object')
+        value = make_external_copy(value).copyInto()
       await state_update.applySyncPromise(undefined, [key, value])
     },
     ls: async (key) => {
@@ -502,6 +504,13 @@ export class ContractEngine {
       const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
       const context = await isolate.createContext()
       context.global.setSync('global', context.global.derefInto())
+
+      // Expose a new function to the isolate which will create ExternalCopy of the passed argument
+      context.global.setSync('make_external_copy', function(arg: any) {
+        return new ivm.ExternalCopy(arg)
+      })
+
+      // sha256
       context.global.setSync('sha256', (payloadToHash: string | object) => {
         if (typeof payloadToHash === 'string') {
           return SHA256(payloadToHash).toString(enchex);

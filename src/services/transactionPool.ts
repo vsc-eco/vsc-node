@@ -20,6 +20,7 @@ import Axios from 'axios'
 import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawFinalization, WithdrawRequest } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
+import networks from './networks'
 const {BloomFilter} = BloomFilters
 
 const INDEX_RULES = {}
@@ -192,18 +193,18 @@ export class TransactionPoolService {
   // if a user sends funds to the multi sig address without any attached data that tells us what he wants to do with his funds
   // we default to deposit it into his safe
   static async deposit(args: { amount: number, contractId?: string, to?: string }, setup: {identity, config, ipfsClient, logger}) {
-    setup.logger.info(`Depositing funds (${args.amount}) to personal safe`)
-    const memo = JSON.stringify({
+    setup.logger.info(`Depositing funds (${args.amount.toLocaleString()}) to personal safe`)
+    const memo = {
       net_id: setup.config.get('network.id'),
       action: CoreTransactionTypes.deposit,
       to: args.to
-    } as Deposit)
+    } as Deposit
 
     if (args.contractId) {
       memo['contract_id'] = args.contractId
     }
 
-    const result = await TransactionPoolService.createCoreTransferTransaction('vsc.beta', TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, memo)
+    const result = await TransactionPoolService.createCoreTransferTransaction(networks[setup.config.get('network.id')].multisigAccount, TransactionPoolService.formatAmount(args.amount, 'HIVE'), setup, JSON.stringify(memo))
 
     setup.logger.debug('result', result)
     return result;

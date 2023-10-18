@@ -24,6 +24,7 @@ import { WitnessService } from "./witness";
 import networks from "./networks";
 import { DiscordBot } from "./discordbot";
 import { ModuleContainer } from "../utils";
+import { createMongoDBClient } from "../utils";
 interface CoreOptions {
     dbSuffix?: string
     mode?: 'lite'
@@ -170,9 +171,7 @@ export class CoreService extends ModuleContainer {
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
         })
-        this.db = this.config.get('setupIdentification.dbSuffix') !== undefined && this.config.get('setupIdentification.dbSuffix') !== '' ? mongo.db('vsc-' + this.config.get('setupIdentification.dbSuffix')) : mongo.db('vsc')
-
-
+        this.db = createMongoDBClient(this.config.get('setupIdentification.dbSuffix'))
         await mongo.connect()
         if (this.config.get('debug.dropTablesOnStartup')) {
             await this.dropTables();

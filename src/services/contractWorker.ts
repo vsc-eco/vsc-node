@@ -86,8 +86,7 @@ export class ContractWorker {
         this.network_id = this.self.config.get('network.id')
         if(this.self.mode !== 'lite') {
             setInterval(async() => {
-                if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
-            
+                if(typeof this.self.witness.witnessSchedule !== 'undefined' && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && typeof this.self.chainBridge.hiveStream.blockLag !== "undefined") {
                     const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
                       did: this.self.identity.id,
                     })

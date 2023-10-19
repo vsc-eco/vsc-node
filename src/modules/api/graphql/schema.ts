@@ -70,6 +70,8 @@ export const schema = `
     type findCIDResult {
         type: String
         data: JSON
+        payload: String
+        signatures: JSON
     }
     interface BalanceController {
         type: BalanceControllerType

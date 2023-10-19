@@ -24,7 +24,19 @@ const getDagCborIpfsHashContent = async (cid: CID) => {
         return 'the ipfs object is in JWS format, but the link points to itself, this is not allowed!';
       }
 
+      let payload = data.payload
+      let signatures = data.signatures
       content = await getDagCborIpfsHashContent(nestedCid);
+      if (typeof content === 'object') {
+        content.payload = payload
+        content.signatures = signatures
+      } else {
+        content = {
+          data: content,
+          payload: payload,
+          signatures: signatures
+        }
+      }
     }
   }
 
@@ -177,7 +189,20 @@ export const Resolvers = {
         type = content.value.__t
       }
 
-      return { type: type, data: content.value }
+      let result: {
+        type: string,
+        data: any,
+        payload?: string,
+        signatures?: {
+          protected: string,
+          signature: string
+        }[]
+      } = { type: type, data: content.value }
+      if (content.payload && content.signatures) {
+        result.payload = content.payload
+        result.signatures = content.signatures
+      }
+      return result
     } else {
       throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
     }

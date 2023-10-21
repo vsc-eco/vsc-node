@@ -24,17 +24,17 @@ const getDagCborIpfsHashContent = async (cid: CID) => {
         return 'the ipfs object is in JWS format, but the link points to itself, this is not allowed!';
       }
 
-      let payload = data.payload
-      let signatures = data.signatures
       content = await getDagCborIpfsHashContent(nestedCid);
       if (typeof content === 'object') {
-        content.payload = payload
-        content.signatures = signatures
+        content.link = data.link.toString()
+        content.payload = data.payload
+        content.signatures = data.signatures
       } else {
         content = {
           data: content,
-          payload: payload,
-          signatures: signatures
+          link: data.link.toString(),
+          payload: data.payload,
+          signatures: data.signatures
         }
       }
     }
@@ -192,15 +192,17 @@ export const Resolvers = {
       let result: {
         type: string,
         data: any,
+        link?: string,
         payload?: string,
         signatures?: {
           protected: string,
           signature: string
         }[]
       } = { type: type, data: content.value }
-      if (content.payload && content.signatures) {
+      if (content.payload && content.signatures && content.link) {
         result.payload = content.payload
         result.signatures = content.signatures
+        result.link = content.link
       }
       return result
     } else {

@@ -70,6 +70,7 @@ export const schema = `
     type findCIDResult {
         type: String
         data: JSON
+        link: String
         payload: String
         signatures: JSON
     }

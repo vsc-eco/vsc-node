@@ -10,6 +10,7 @@ import { DID } from "dids";
 import KeyResolver from 'key-did-resolver'
 import { Config } from "../services/nodeConfig";
 import { getLogger } from '../logger';
+import { createIPFSClient } from '../utils';
 
 let identity = null;
 
@@ -24,7 +25,7 @@ export async function init() {
         level: config.get('logger.level'),
     })
     
-    const ipfsClient = IPFS.create({ url: process.env.IPFS_HOST || config.get('ipfs.apiAddr')});
+    const ipfsClient = createIPFSClient({ url: process.env.IPFS_HOST || config.get('ipfs.apiAddr')});
 
     const privateKey = config.get('identity.walletPrivate');
     if(!privateKey) {

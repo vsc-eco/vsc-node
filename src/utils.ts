@@ -8,7 +8,9 @@ import PQueue from 'p-queue'
 import { IPFSHTTPClient } from 'kubo-rpc-client'
 import winston from 'winston'
 import Axios from 'axios'
-import { getLogger } from './logger'
+import { getLogger, globalLogger } from './logger'
+import * as IPFS from "kubo-rpc-client";
+import { Version } from 'multiformats'
 import {pathToFileURL} from 'node:url';
 import { mongo } from './services/db'
 
@@ -613,6 +615,47 @@ export function median(arr) {
   return arr.length % 2 !== 0 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
 };
 
+export function createIPFSClient(options?: IPFS.Options, pinEverything: boolean = false) {
+  const instance = IPFS.create(options);
+
+  // pla: overriding both methods to ensure that at any place those methods are used and the "pinEverything" setting of a node is set
+  // the content is pinned and persists locally
+
+  if (pinEverything) {
+    const originalDagGet = instance.dag.get;
+    instance.dag.get = async (cid: IPFS.CID<unknown, number, number, Version>, options?: any) => {
+      try {
+        instance.pin.add(cid);
+      } catch {
+        globalLogger.error(`error pinning ${cid}`)
+      }
+      const result = await originalDagGet.call(instance.dag, cid, options);
+      return result;
+    };
+  
+    const originalCat = instance.cat;
+    instance.cat = (ipfsPath: IPFS.CID | string, options?: any) => {
+      try {
+        instance.pin.add(ipfsPath);
+      } catch {
+        globalLogger.error(`error pinning ${ipfsPath}`)
+      }
+      const originalIterable = originalCat.call(instance, ipfsPath, options);
+      const modifiedIterable = {
+        [Symbol.asyncIterator]: async function* () {
+          for await (const chunk of originalIterable) {
+            yield chunk;
+          }
+        },
+      };
+      return modifiedIterable;
+    };
+  }
+
+  return instance;
+}
+
+  
 export class ModuleContainer {
   modules: Array<any>;
   moduleList: Array<string>

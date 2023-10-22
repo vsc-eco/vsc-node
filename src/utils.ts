@@ -276,16 +276,20 @@ export async function* liveHiveBlocks(API, opts: {
   let count = 0;
   let bh = 0;
   const headUpdater = setInterval(async () => {
-    const hive = new Client(HIVE_API)
-    bh = await hive.blockchain.getCurrentBlockNum()
-    const dynProps = await hive.database.getDynamicGlobalProperties()
-    // console.log({
-    //   last_irreversible_block_num: dynProps.last_irreversible_block_num,
-    //   head_block_number: dynProps.head_block_number
-    // })
-    // console.log(bh, last_block,)
-    count = bh - last_block
-    // console.log('count', count)
+    try {
+      const hive = new Client(HIVE_API)
+      bh = await hive.blockchain.getCurrentBlockNum()
+      const dynProps = await hive.database.getDynamicGlobalProperties()
+      // console.log({
+      //   last_irreversible_block_num: dynProps.last_irreversible_block_num,
+      //   head_block_number: dynProps.head_block_number
+      // })
+      // console.log(bh, last_block,)
+      count = bh - last_block
+      // console.log('count', count)
+    } catch {
+
+    }
   }, 500)
 
   opts.signal.addEventListener('abort', () => {
@@ -316,7 +320,7 @@ export async function* liveHiveBlocks(API, opts: {
         })
 
         for (let block of parseHiveBlocks(data.result.blocks)) {
-          console.log('281', last_block, parseInt(block.block_id.slice(0, 8), 16), bh)
+          // console.log('281', last_block, parseInt(block.block_id.slice(0, 8), 16), bh)
           last_block = parseInt(block.block_id.slice(0, 8), 16)
           count = bh - last_block
           // console.log(new Date().getTime() - new Date(block.timestamp + "Z").getTime())

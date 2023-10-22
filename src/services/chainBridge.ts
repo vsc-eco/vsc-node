@@ -460,6 +460,11 @@ export class ChainBridge {
       } catch (err) {
         this.self.logger.error('not able to inject contract into the local database', tx.transaction_id)
       }
+
+      // pla: pin contract code on enabled nodes, note: every dag.get/ cat is a pin via an overridden base function
+      if (this.self.config.get('ipfs.pinEverything')) {
+        this.self.ipfs.pin.add(json.code)
+      }
     } else if (json.action === CoreTransactionTypes.join_contract) {
       const commitment = await this.self.contractEngine.contractCommitmentDb.findOne({
         contract_id: json.contract_id,
@@ -1052,28 +1057,37 @@ export class ChainBridge {
       setInterval(() => {
         this.streamCheck()
       }, 5000)
-      const network_id = this.self.config.get('network.id')
       await this.streamStart()
 
-      void (async () => {
-        for await (let block of this.streamOut) {
-          console.log('vsc block', block)
-  
-          const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
-          console.log(blockContent)
-          await this.blockHeaders.insertOne({
-            height: await this.countHeight(block.block_hash),
-            id: block.block_hash,
-            hive_ref_block: block.tx.block_num,
-            hive_ref_tx: block.tx.transaction_id,
-            hive_ref_date: block.timestamp
-            // witnessed_by: {
-            //   hive_account: block.tx.posting
-            // }
-          })
-  
-          for (let tx of blockContent.txs) {
-            this.processVSCBlockTransaction(tx, block.block_hash);
+      const network_id = this.self.config.get('network.id')
+
+    void (async () => {
+      for await (let block of this.streamOut) {
+        console.log('vsc block', block)
+
+        const blockContent = (await this.self.ipfs.dag.get(CID.parse(block.block_hash))).value
+
+        console.log(blockContent)
+        await this.blockHeaders.insertOne({
+          height: await this.countHeight(block.block_hash),
+          id: block.block_hash,
+          hive_ref_block: block.tx.block_num,
+          hive_ref_tx: block.tx.transaction_id,
+          hive_ref_date: block.timestamp
+          // witnessed_by: {
+          //   hive_account: block.tx.posting
+          // }
+        })
+
+        for (let tx of blockContent.txs) {
+
+          // pla: pin vsc tx on enabled nodes, note: every dag.get/ cat is a pin via an overridden base function
+          if (this.self.config.get('ipfs.pinEverything')) {
+            const signedTransaction: DagJWS = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value;
+            this.self.ipfs.pin.add((signedTransaction as any).link as CID)
+          }
+
+          this.processVSCBlockTransaction(tx, block.block_hash);
           }
         }
       })()

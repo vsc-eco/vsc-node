@@ -47,12 +47,14 @@ actions.processHeaders = async (args) => {
 
         let prevDiff;
         let prevHeight;
-        if(prevBlock === '0x0000000000000000000000000000000000000000000000000000000000000000') {
+        if(prevBlock === '0000000000000000000000000000000000000000000000000000000000000000') {
             prevDiff = 0n;
             prevHeight = -1;
+        } else if(typeof preheaders[prevBlock] === 'object') {
+            prevDiff = BigInt(preheaders[prevBlock].totalDiff as any) //|| 0n
+            prevHeight = preheaders[prevBlock].height //|| 0
         } else {
-            prevDiff = preheaders[prevBlock]?.totalDiff || 0n
-            prevHeight = preheaders[prevBlock]?.height || 0
+            continue;
         }
 
         const decodedHeader = {
@@ -69,9 +71,8 @@ actions.processHeaders = async (args) => {
         }
         // console.log(decodedHeader, DataUtils.serializeHex(reverseEndianness(headerHash))
     }
-    // console.log(Object.entries(preheaders))
     const mapSorted = Object.entries(preheaders).sort(([, a], [, b]) => {
-        return Number((a as any).totalDiff - (b as any).totalDiff);
+        return Number(BigInt((a as any).totalDiff) - BigInt((b as any).totalDiff));
     })
     
     const topHeader = mapSorted[mapSorted.length - 1]
@@ -81,28 +82,43 @@ actions.processHeaders = async (args) => {
     let prevBlock;
     for( ; ; ) {
         if(!prevBlock) {
-            prevBlock = topHeader[0];
+            prevBlock = topHeader[0]
+            //prevBlock = topHeader.pop()
         }
 
-        if(!preheaders[prevBlock]) {
-            break;
-        } else {
+        if(preheaders[prevBlock]) {
             if(curDepth > validity_depth) {
                 blocksToPush.push(preheaders[prevBlock])
             } else {
                 curDepth = curDepth + 1;
             }
+        } else {
+            break;
+            /**
+             * let poppedBlock = mapSorted.pop();
+            if(poppedBlock) {
+                prevBlock = poppedBlock[0]
+                continue;
+            } else {
+                break;
+            }
+             */
         }
         prevBlock = preheaders[prevBlock].prevBlock
     }
     
+    
     let highestHeight = 0;
     for(let block of blocksToPush) {
         const key = calcKey(block.height)
+        //Get headers in memory if not available
         if(!headersState[key]) {
             headersState[key] = await state.pull(`headers/${key}`) || {}
         }
-        headersState[key][block.height] = block.raw
+        //Only override if not
+        if(!headersState[key][block.height]) {
+            headersState[key][block.height] = block.raw
+        }
         if(highestHeight < block.height) {
             highestHeight = block.height
         }

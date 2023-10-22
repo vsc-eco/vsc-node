@@ -287,7 +287,7 @@ export class ContractEngine {
               if (brokenPath.wrongFormat) {
                 merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
                   Name: brokenPath.path,
-                  Hash: CID.parse('QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n'),
+                  Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
                 })
                 
                 merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
@@ -297,17 +297,19 @@ export class ContractEngine {
               } else {
                 merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
                   Name: brokenPath.path,
-                  Hash: CID.parse('QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n'),
+                  Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
                 })
               }
             }
-  
+            
             const dataCid = await this.self.ipfs.dag.put(value)
-  
+            const stat = await this.self.ipfs.block.stat(dataCid)
+            
+            
             merkleCid = (await addLink(this.self.ipfs, {
               parentCid: merkleCid,
               name: key,
-              size: 0,
+              size: stat.size,
       
               cid: dataCid,
               hashAlg: 'sha2-256',
@@ -465,9 +467,9 @@ export class ContractEngine {
         const vm = new NodeVM({
           console: 'inherit',
           sandbox: {
-            // log: (msg) => {
-            //   console.log(msg)
-            // },
+            log: (msg) => {
+              console.log(msg)
+            },
             Date: MockDate,
             OutputActions,
             utils: {

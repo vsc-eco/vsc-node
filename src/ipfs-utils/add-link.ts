@@ -40,7 +40,17 @@ export const map = new Map()
  * @param {CID} [options.parentCid]
  * @param {PBNode} [options.parent]
  */
-export async function addLink (context, options) {
+export async function addLink (context, options: {
+  cid: CID
+  name: string
+  size: number
+  shardSplitThreshold: number
+  hashAlg: string
+  cidVersion: number
+  flush: boolean
+  parentCid: CID
+  parent?: any
+}) {
   let parent = options.parent
 
   if (options.parentCid) {
@@ -83,6 +93,51 @@ export async function addLink (context, options) {
   if (!parent.Data) {
     throw errCode(new Error('Parent node with no data passed to addLink'), 'ERR_INVALID_PARENT')
   }
+
+  let listPath = options.name.split('/');
+  if(listPath.length > 1) {
+    let cid = await context.object.new({template: 'unixfs-dir'})
+    try {
+      cid = (await context.dag.resolve(options.parentCid, {
+        path: listPath[0]
+      })).cid
+    } catch {
+      cid = await context.object.new({template: 'unixfs-dir'})
+    }
+    // const stat = await context.block.stat(options.cid)
+    
+    // console.log(stat2)
+    let folder = await addLink(context, {
+      cid: options.cid,
+      cidVersion: 1,
+      parentCid: cid as any,
+      name: listPath.splice(1).join('/'),
+      size: options.size, //||  stat.size ,
+      shardSplitThreshold: options.shardSplitThreshold,
+      hashAlg: options.hashAlg,
+      flush: true
+      
+    })
+    const stat2 = await context.object.stat(folder.cid)
+    return await addLink(context, {
+      cid: folder.cid,
+      cidVersion: 1,
+      parentCid: options.parentCid,
+      name: listPath[0],
+      size: folder.size,
+      shardSplitThreshold: options.shardSplitThreshold,
+      hashAlg: options.hashAlg,
+      flush: true
+    })
+
+    
+  } {
+    options.name = listPath[0]
+  }
+
+  console.log('options', options)
+  
+  
 
   const meta = UnixFS.unmarshal(parent.Data)
 
@@ -161,6 +216,7 @@ const addToDirectory = async (context, options) => {
   const parentLinks = options.parent.Links.filter((link) => {
     return link.Name !== options.name
   })
+  console.log('addToDirectory', options)
   parentLinks.push({
     Name: options.name,
     Tsize: options.size,
@@ -200,7 +256,6 @@ const addToDirectory = async (context, options) => {
   const cid = CID.create(options.cidVersion, dagPB.code, hash)
 
   if (options.flush) {
-    map.set(cid.toString(), buf)
     await context.block.put(buf, {
       pin: false
     })
@@ -209,7 +264,7 @@ const addToDirectory = async (context, options) => {
   return {
     node: options.parent,
     cid,
-    size: buf.length
+    size: buf.length + options.size
   }
 }
 

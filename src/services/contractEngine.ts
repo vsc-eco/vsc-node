@@ -11,8 +11,10 @@ import { ContractOutput } from '../types/vscTransactions'
 import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 import { BlockRef } from '@/types'
-import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
+import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
+import { addLink } from '../ipfs-utils/add-link'
+import { removeLink } from '../ipfs-utils/rm-link'
 
 
 export type HiveOps = CustomJsonOperation | TransferOperation
@@ -149,13 +151,12 @@ export class ContractEngine {
           Hash: outCid,
         })
 
-        this.self.logger.verbose(`[Smart Contract Execution] Updated  Merkle Root to ${merkleCid}`)
         //TODO make this happen after contract call has been completely executed
-        await this.contractDb.findOneAndUpdate(contract, {
-          $set: {
-            stateMerkle: merkleCid.toString(),
-          },
-        })
+        // await this.contractDb.findOneAndUpdate(contract, {
+        //   $set: {
+        //     stateMerkle: merkleCid.toString(),
+        //   },
+        // })
         //stateCid = obj;
       },
     }
@@ -211,11 +212,16 @@ export class ContractEngine {
             })
 
             const data = await this.self.ipfs.dag.get(out.cid)
-
+            
             console.log(data)
             if (out.cid.code === 0x70) {
-              //PD Dag
-              return JSON.parse(Buffer.from(data.value.Data).toString())
+              //If accidentally requesting PD-dag
+              const out = await this.self.ipfs.dag.resolve(stateCid, {
+                path: `${key}/.self`,
+              })
+  
+              const data = await this.self.ipfs.dag.get(out.cid)
+              return data.value;
             } else if (out.cid.code === 0x71) {
               //CBOR dag
               return data.value
@@ -279,14 +285,14 @@ export class ContractEngine {
   
             for (let brokenPath of brokenPaths.reverse()) {
               if (brokenPath.wrongFormat) {
-                const data = await this.self.ipfs.dag.get(brokenPath.cid)
-                const linkCid = await this.self.ipfs.object.put({
-                  Data: Buffer.from(JSON.stringify(data.value)),
-                  Links: [],
-                })
                 merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
                   Name: brokenPath.path,
-                  Hash: linkCid,
+                  Hash: CID.parse('QmdfTbBqBPQ7VNxZEYEj14VmRuZBkqFbiwReogJgS1zR1n'),
+                })
+                
+                merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
+                  Name: `${brokenPath.path}/.self`,
+                  Hash: brokenPath.cid,
                 })
               } else {
                 merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
@@ -298,11 +304,18 @@ export class ContractEngine {
   
             const dataCid = await this.self.ipfs.dag.put(value)
   
-            merkleCid = await this.self.ipfs.object.patch.addLink(merkleCid, {
-              Name: key,
-              Hash: dataCid,
-            })
-  
+            merkleCid = (await addLink(this.self.ipfs, {
+              parentCid: merkleCid,
+              name: key,
+              size: 0,
+      
+              cid: dataCid,
+              hashAlg: 'sha2-256',
+              cidVersion: 1,
+              flush: true,
+              shardSplitThreshold: 2_000
+            })).cid
+
             stateCid = merkleCid
           } catch (ex) {
             console.log(ex)
@@ -325,7 +338,22 @@ export class ContractEngine {
           }
         },
         del: async (key) => {
+          if(!key) {
+            return;
+          }
+          let merkleCid = stateCid
           //To be implemented!
+          merkleCid = await removeLink(this.self.ipfs, {
+              parentCid: merkleCid,
+              name: key,
+              size: 0,
+      
+              hashAlg: 'sha2-256',
+              cidVersion: 1,
+              flush: true,
+              shardSplitThreshold: 2_000
+          })
+          stateCid = merkleCid
         },
       },
       finish: () => {
@@ -403,7 +431,7 @@ export class ContractEngine {
       codeRaw = this.contractCache[id]
     }
     
-    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
+    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride)
     
     const script = new VMScript(code).compile()
 
@@ -435,7 +463,11 @@ export class ContractEngine {
 
       const executeOutput = (await new Promise((resolve, reject) => {
         const vm = new NodeVM({
+          console: 'inherit',
           sandbox: {
+            // log: (msg) => {
+            //   console.log(msg)
+            // },
             Date: MockDate,
             OutputActions,
             utils: {

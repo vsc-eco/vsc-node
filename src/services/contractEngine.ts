@@ -433,7 +433,7 @@ export class ContractEngine {
       codeRaw = this.contractCache[id]
     }
     
-    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride)
+    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
     
     const script = new VMScript(code).compile()
 

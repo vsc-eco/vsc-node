@@ -122,7 +122,8 @@ export class BitcoinWrapper {
             const topHeader = await this.blockHeaders.findOne({}, {sort: {height:-1}})
             console.log('topHeader.height', topHeader.height)
             let totalDiff = 0n
-            for await(let [rawBH, blockHeader] of BTCBlockStream(topHeader?.height || 0)) {
+            const abortController = new AbortController()
+            for await(let [rawBH, blockHeader] of BTCBlockStream(topHeader?.height || 0, abortController.signal)) {
                 // console.log(blockHeader)
                 console.log(blockHeader.height)
                 const header = await this.blockHeaders.findOne({

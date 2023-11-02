@@ -20,7 +20,7 @@ async function waitTxConfirm(id: string, self: CoreService, func) {
                 }
               }`
         })
-        console.log(data.data)
+        // console.log(data.data)
         await self.p2pService.memoryPoolChannel.call('announce_tx', {
             payload: {
               id: id.toString()
@@ -54,61 +54,99 @@ void (async () => {
 
     await transactionPool.start()
 
-    
-    
-    let x = 0;
-    let topBlock = 0;
-    while (topBlock < 800_000) {
-        const {state_merkle} = await core.contractEngine.contractDb.findOne({
-            id: contract_id
-        })
+    for( ; ; ) {
         try {
-            const dag = (await core.ipfs.dag.resolve(CID.parse(state_merkle), {
-                path: 'pre-headers/main'
-            }))
-            console.log((await core.ipfs.dag.get(dag.cid)).value,  Object.entries((await core.ipfs.dag.get(dag.cid)).value).map((e) => {
-                return (e[1] as any).height 
-            }))
-            topBlock = Object.entries((await core.ipfs.dag.get(dag.cid)).value).map((e) => {
-                return (e[1] as any).height 
-            }).sort((a, b) => {
-                return a - b;
-            })[0] || 0
-            console.log('topBlock', topBlock)
-        } catch (ex) {
-            console.log(ex)
-            topBlock = 0;
-        }
-        // console.log(state_merkle, topBlock)
-        const abortController = new AbortController()
-        let headerBulk = [] as any
-        for await(let [header] of BTCBlockStream(topBlock, abortController.signal)) {
-            headerBulk.push(header)
-            const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
-            // const prevBlock = reverse(BTCUtils.extractPrevBlockLE(decodeHex));
-            x = x + 1;
-            if(x >= 1500) {
-                const result = await transactionPool.callContract(contract_id, {
-                    action: 'processHeaders',
-                    payload: {
-                        headers: headerBulk
-                    }
-                });
-                core.logger.debug('result of contract invokation' , result)
-                const date = new Date();
-                await waitTxConfirm(result.id, core, (state) => {
-                    if(state === "INCLUDED") {
-                        console.log('Included after', new Date().getTime() - date.getTime(), 's')
-    
-                    }
+            let x = 0;
+            let topBlock = 0;
+            while (topBlock < 840_000) {
+                const {state_merkle} = await core.contractEngine.contractDb.findOne({
+                    id: contract_id
                 })
-                console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
-                await sleep(30_000)
-                headerBulk = []
-                x = 0;
-                break;
+                // console.log('state merkle', state_merkle)
+                try {
+                    const dag = (await core.ipfs.dag.resolve(CID.parse(state_merkle), {
+                        path: 'pre-headers/main'
+                    }))
+                   
+                    topBlock = Object.entries((await core.ipfs.dag.get(dag.cid)).value).map((e) => {
+                        return (e[1] as any).height 
+                    }).sort((a, b) => {
+                        return b - a;
+                    })[0] || 0
+                    console.log('topBlock', topBlock)
+                } catch (ex) {
+                    console.log(ex)
+                    topBlock = 0;
+                }
+                // console.log(state_merkle, topBlock)
+                const abortController = new AbortController()
+                let headerBulk = [] as any
+
+
+
+                
+                let busyPromise;
+
+                async function processHeadersTx() {
+                    const localCopy = headerBulk
+                    headerBulk = []
+                    if(localCopy.length < 1) {
+                        return;
+                    }
+                    const result = await transactionPool.callContract(contract_id, {
+                        action: 'processHeaders',
+                        payload: {
+                            headers: localCopy
+                        }
+                    });
+                    await sleep(5_000)
+                    core.logger.debug('result of contract invokation' , result)
+                    const date = new Date();
+                    await waitTxConfirm(result.id, core, (state) => {
+                        if(state === "INCLUDED") {
+                            console.log('Included after', new Date().getTime() - date.getTime(), 's')
+        
+                        }
+                    })
+                    console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
+                    await sleep(30_000)
+                    
+                }
+
+                setInterval(() => {
+                    busyPromise = processHeadersTx()
+                }, 30_000)
+                setInterval(() => {
+                    console.log(headerBulk)
+                }, 15_000)
+
+
+
+                for await(let header of BTCBlockStream({
+                    height:topBlock, 
+                    signal: abortController.signal,
+                    continueHead: true
+                })) {
+                    // break;
+                    // console.log(header)
+                    headerBulk.push(header.rawData)
+                    // const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
+                    // const prevBlock = reverse(BTCUtils.extractPrevBlockLE(decodeHex));
+                    if(headerBulk.length > 144) {
+                        busyPromise = processHeadersTx()
+                    }
+                    if(busyPromise) {
+                        await busyPromise;
+                        busyPromise = null;
+                    }
+                }
+                
             }
+
+        } catch(ex) {
+            console.log(ex)
+
         }
-        abortController.abort()
     }
+    
 })()

@@ -33,7 +33,7 @@ export async function rpcBitcoinCall(name: string, params) {
   return data.data;
 }
 
-export async function* BTCBlockStream(height, signal: AbortSignal) {
+export async function* BTCBlockStream(options: {continueHead: boolean, height:number, signal: AbortSignal, }) {
   const bestBlock = await rpcBitcoinCall('getbestblockhash', null)
 
   const bestBlockHeader = (await rpcBitcoinCall('getblockheader', [bestBlock.result])).result
@@ -41,14 +41,16 @@ export async function* BTCBlockStream(height, signal: AbortSignal) {
 
   let promises = []
   let batchSize = 10
-  for (let x = height; x < Infinity; x++) {
-    if (signal.aborted === true) {
+  let lastBlock = bestBlockHeader.height;
+  for (let x = options.height; x <  bestBlockHeader.height; x++) {
+    if (options.signal.aborted === true) {
       return;
     }
     if (promises.length > batchSize) {
-      for (let data of (await Promise.all(promises)).sort(([, , a], [, , b]) => {
-        return a - b;
+      for (let data of (await Promise.all(promises)).filter(e => !!e).sort(({x:a}, {x:b}) => {
+        return b - a;
       })) {
+        lastBlock = data.x
         yield data;
       }
       promises = []
@@ -60,23 +62,129 @@ export async function* BTCBlockStream(height, signal: AbortSignal) {
           const blockData = (await rpcBitcoinCall('getblockheader', [blockHash])).result
           const blockDataRaw = (await rpcBitcoinCall('getblockheader', [blockHash, false])).result
 
-          console.log('yielding', x, 'bestBlockHeader.height', bestBlockHeader.height)
-          return [blockDataRaw, blockData, x];
+          return {
+            data: blockData,
+            rawData: blockDataRaw,
+            x,
+          }
 
         } catch (ex) {
-          console.log(ex)
-          if (ex.response?.data?.error?.code === -8) {
+          if (ex.response?.data?.error?.code === -8 ) {
+            // if(options.stop === true) {
+            //   return null
+            // }
 
-            await sleep(60 * 1000)
-            continue;
+            return null;
+            // await sleep(60 * 1000)
+            // continue;
           } else {
-            throw ex
+            // throw ex
+            return null;
           }
         }
       }
     })())
   }
 
+  console.log('89.lastBlock', lastBlock, bestBlockHeader.height)
+
+  //Clear all remaining promises
+  for (let data of (await Promise.all(promises)).filter(e => !!e).sort(({x:a}, {x:b}) => {
+    return a - b;
+  })) {
+    lastBlock = data.x
+    yield data;
+  }
+  promises = []
+
+  if(options.continueHead) {
+    console.log('options.continueHead', options.continueHead, 'lastBlock', lastBlock)
+    try {
+      for (let x = lastBlock + 1; x < Infinity; x++) {
+        yield await getBtcBlock(x, options.signal)
+  
+        console.log('options.signal.aborted', options.signal.aborted)
+        if (options.signal.aborted === true) {
+          break
+        }
+      }
+
+    } catch (ex) {
+      console.log(ex)
+    }
+  }
+}
+
+async function getBtcBlock(x: number, signal: AbortSignal) {
+  for (;;) {
+    try {
+      const blockHash = (await rpcBitcoinCall('getblockhash', [x])).result
+      const blockData = (await rpcBitcoinCall('getblockheader', [blockHash])).result
+      const blockDataRaw = (await rpcBitcoinCall('getblockheader', [blockHash, false])).result
+
+      return {
+        data: blockData,
+        rawData: blockDataRaw,
+        x,
+      }
+    } catch (ex) {
+      if (ex.response?.data?.error?.code === -8) {
+        if (signal.aborted === true) {
+          break
+        }
+
+        // return null;
+        console.log('for sure sleeping', x)
+        await sleep(60 * 1000)
+        continue
+      } else {
+        console.log(ex)
+        // throw ex
+        return null
+      }
+    }
+  }
+}
+
+
+
+/**
+ * Infinite BTC block stream. It will continue to stream blocks as the btc mainnet produces them
+ * @param options 
+ */
+export async function* liveBTCBlocks(options: { height: number; signal: AbortSignal }) {
+  for (let x = options.height; x < Infinity; x++) {
+    for (;;) {
+      try {
+        const blockHash = (await rpcBitcoinCall('getblockhash', [x])).result
+        const blockData = (await rpcBitcoinCall('getblockheader', [blockHash])).result
+        const blockDataRaw = (await rpcBitcoinCall('getblockheader', [blockHash, false])).result
+
+        yield {
+          data: blockData,
+          rawData: blockDataRaw,
+          x,
+        }
+        break
+      } catch (ex) {
+        if (ex.response?.data?.error?.code === -8) {
+          if (options.signal.aborted === true) {
+            break
+          }
+
+          // return null;
+          await sleep(60 * 1000)
+          continue
+        } else {
+          // throw ex
+          return null
+        }
+      }
+    }
+    if (options.signal.aborted === true) {
+      break
+    }
+  }
 }
 
 export function parseTxHex(hex) {

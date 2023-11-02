@@ -8,7 +8,6 @@ import { Collection } from 'mongodb'
 import networks from './networks'
 import { WitnessService } from './witness'
 import type PQueue from 'p-queue'
-import { VMScript } from 'vm2'
 import * as vm from 'vm';
 import Pushable from 'it-pushable'
 import { CommitmentStatus, Contract, ContractCommitment } from '../types/contracts'

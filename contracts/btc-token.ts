@@ -25,7 +25,7 @@ class BigDecimal {
 BigDecimal.decimals = 10; // Configuration of the number of decimals you want to have.
 
 
-const BTCCR_CONTRACT = 'd03a60d82f820bd2fc3bdaf9882a4cbf70eaafe0'
+const BTCCR_CONTRACT = '42fe0195bb2fe0afe7e015871d8c5749d07177cc'
 
 interface Transfer {
     
@@ -81,9 +81,9 @@ interface LedgerOutput {
         type?: 'MINT' | 'REDEEM'
     }>
 
-    created_lock: {
-        block_ref: string
-    }
+    // created_lock: {
+    //     block_ref: string
+    // }
 }
 
 interface HtlcTransfer {
@@ -182,9 +182,9 @@ actions.applyHtlc = async (tx: HtlcTransfer) => {
         outputs: [],
         inputs: tx.inputs,
 
-        created_lock: {
-            block_ref: api.input.included_in
-        }
+        // created_lock: {
+        //     block_ref: api.input.included_in
+        // }
     }
 
     const outputId = utils.SHA256(JSON.stringify(output))
@@ -203,8 +203,6 @@ actions.applyHtlc = async (tx: HtlcTransfer) => {
 }
 
 actions.applyTx = async (tx: Transfer) => {
-
-
     const supposedController = [
         {
             type: 'DID',
@@ -262,9 +260,9 @@ actions.applyTx = async (tx: Transfer) => {
         outputs: [],
         inputs: tx.inputs,
 
-        created_lock: {
-            block_ref: api.input.included_in
-        }
+        // created_lock: {
+        //     block_ref: api.input.included_in
+        // }
     }
 
     const outputId = utils.SHA256(JSON.stringify(output))
@@ -281,23 +279,55 @@ actions.applyTx = async (tx: Transfer) => {
     //New output
     await state.update(`outputs/${outputId}`, output)
 }
+function calcKey(height: number) {
+    const cs = 100
+    const keyA = Math.floor((height / cs)) * cs
 
-actions.mint = async (tx: {tx_id: string}) => {
+    return `${keyA}-${keyA + cs}`
+}
 
+actions.mint = async (args: {proof:any}) => {
     const relayState = await state.remoteState(BTCCR_CONTRACT)
 
-    const verifiedTx = await relayState.pull(`txs/${tx.tx_id}`)
+    const {proof} = args
+    const tx_id = utils.bitcoin.reverseBytes(proof.tx_id)
 
-    
-    if(verifiedTx) {
-        const btcOutput = utils.bitcoin.BTCUtils.extractOutputAtIndex(utils.bitcoin.SPVUtils.deserializeHex((verifiedTx as any).vout), 0)
+    const bundleHeaders = await relayState.pull(`headers/${calcKey(proof.confirming_height)}`) || {}
+
+    const header = bundleHeaders[proof.confirming_height]
+
+
+    const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
+    const prevBlock = Buffer.from(utils.bitcoin.BTCUtils.extractPrevBlockLE(decodeHex)).toString('hex');
+    // const timestamp = utils.bitcoin.BTCUtils.extractTimestampLE(decodeHex)
+    const merkleRoot = Buffer.from(utils.bitcoin.BTCUtils.extractMerkleRootLE(decodeHex)).toString('hex')
+    // console.log(timestamp.toString())
+    const headerHash = Buffer.from(utils.bitcoin.BTCUtils.hash256(decodeHex)).toString('hex');
+
+    const confirming_header = {
+        raw: header,
+        hash: headerHash,
+        height: proof.confirming_height,
+        prevhash: prevBlock,
+        merkle_root: merkleRoot,
+    }
+
+    const fullProof = {
+        ...proof,
+        confirming_header
+    }
+    let validProof = utils.bitcoin.ValidateSPV.validateProof(utils.bitcoin.ser.deserializeSPVProof(JSON.stringify(fullProof)))
+
+    if(validProof && !(await state.pull<any>(`wraps/${tx_id}`))) {
+        // await state.update(`txs/${proof.tx_id}`, proof)
+        const btcOutput = utils.bitcoin.BTCUtils.extractOutputAtIndex(utils.bitcoin.SPVUtils.deserializeHex((proof as any).vout), 0)
         const val = utils.bitcoin.BTCUtils.extractValue(btcOutput)
-
+    
         var a = new BigDecimal(val.toString());
         var b = new BigDecimal("100000000");
     
         const amount = Number(a.divide(b).toString());
-
+    
         const controllers = [
             {
                 type: "DID",
@@ -313,7 +343,7 @@ actions.mint = async (tx: {tx_id: string}) => {
             obalance: amount,
     
             inputs: [{
-                id: tx.tx_id,
+                id: tx_id,
                 amount: amount,
                 type: 'MINT'
             }],
@@ -321,13 +351,16 @@ actions.mint = async (tx: {tx_id: string}) => {
     
             asset_type: "TOKEN:WBTC",
     
-            created_lock: {
-                block_ref: api.input.included_in
-            }
+            // created_lock: {
+            //     block_ref: api.input.included_in
+            // }
         }
     
         const outputId = utils.SHA256(JSON.stringify(output))
     
         await state.update<LedgerOutput>(`outputs/${outputId}`, output)
+        await state.update<any>(`wraps/${tx_id}`, "1")
     }
+
+    // const verifiedTx = await relayState.pull(`txs/${tx.tx_id}`)
 }

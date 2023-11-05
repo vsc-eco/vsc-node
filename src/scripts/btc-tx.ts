@@ -64,9 +64,10 @@ async function createProof(tx_id: string) {
     const blockHeaderRaw = (await rpcBitcoinCall('getblockheader', [dataTx.blockhash, false])).result
     // console.log((merkleProof[0] as any).length, (merkleProof[0] as any).reduce((a, b) => a + b))
     
+    console.log(merkleProof)
     const fullProof ={
         ...vinProf,
-        intermediate_nodes: merkleProof.length > 2 ? (merkleProof[0] as any).reduce((a, b) => a + b) : '',
+        intermediate_nodes: (merkleProof[0] as any).length > 2 ? (merkleProof[0] as any).reduce((a, b) => a + b) : '',
         index: merkleProof[1],
         tx_id: reverse(tx_id),
         confirming_header: {
@@ -88,16 +89,16 @@ async function createProof(tx_id: string) {
     }
     return {
         ...vinProf,
-        intermediate_nodes: merkleProof.length > 2 ? (merkleProof[0] as any).reduce((a, b) => a + b) : '',
+        intermediate_nodes: (merkleProof[0] as any).length > 2 ? (merkleProof[0] as any).reduce((a, b) => a + b) : '',
         index: merkleProof[1],
         tx_id: reverse(tx_id),
-        confirming_height: blockHeader.height + 1
+        confirming_height: blockHeader.height
     };
 }
 
 
 void (async () => {
-    const BHRaw = '010000000508085c47cc849eb80ea905cc7800a3be674ffc57263cf210c59d8d00000000112ba175a1e04b14ba9e7ea5f76ab640affeef5ec98173ac9799a852fa39add320cd6649ffff001d1e2de565'
+    const BHRaw = '00e0ff3fe95b44d10837636fe41b8ff98763cb267a3715f8abfa00000000000000000000db55a3ff3c1d10e2d855a8122fcc582bbadb01ea876fa5c7a6bbafa8d8c1d3d47590a864be8e051779c14481'
 
     const decodeHex = new Uint8Array(Buffer.from(BHRaw, 'hex'))
     const prevBlock = Buffer.from(BTCUtils.extractPrevBlockLE(decodeHex)).toString('hex')
@@ -109,25 +110,27 @@ void (async () => {
     const confirming_header = {
         raw: BHRaw,
         hash: headerHash,
-        height: 11,
+        height: 797674,
         prevhash: prevBlock,
         merkle_root: merkleRoot,
     }
 
-    console.log(confirming_header)
-    const proof = await createProof('d3ad39fa52a89997ac7381c95eeffeaf40b66af7a57e9eba144be0a175a12b11')
+    // console.log(confirming_header)
+    const proof = await createProof('28d488ad2dbc188e36d51ccf6c7645cd52d98fef01f9940cfbf90cd86c5c4ba6')
 
-    console.log('calc proof', {
-        ...proof,
-        confirming_header
-    })
-    let validProof = ValidateSPV.validateProof(ser.deserializeSPVProof(JSON.stringify({
-        ...proof,
-        confirming_header
-    })))
+    // console.log('calc proof', {
+    //     ...proof,
+    //     confirming_header
+    // })
+    // let validProof = ValidateSPV.validateProof(ser.deserializeSPVProof(JSON.stringify({
+    //     ...proof,
+    //     confirming_header
+    // })))
 
 
-    console.log(validProof)
+    // console.log(validProof)
+
+    // await sleep(15_000)
 
     // if(validProof) {
     //     process.exit()
@@ -136,7 +139,7 @@ void (async () => {
 
     // }
 
-    const contract_id = 'd03a60d82f820bd2fc3bdaf9882a4cbf70eaafe0'
+    const contract_id = '67c2a0d19e8a271da0b90d9b6c45a72d91185661'
 
     const core = new CoreService({
         prefix: 'manual tx core',
@@ -152,7 +155,7 @@ void (async () => {
     await transactionPool.start()
 
     const result = await transactionPool.callContract(contract_id, {
-        action: 'validateTxProof',
+        action: 'mint',
         payload: {
             proof
         }

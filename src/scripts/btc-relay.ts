@@ -121,15 +121,15 @@ void (async () => {
                 }, 15_000)
 
 
-
                 for await(let header of BTCBlockStream({
-                    height:topBlock, 
+                    height:topBlock + 1, 
                     signal: abortController.signal,
                     continueHead: true
                 })) {
                     // break;
                     // console.log(header)
                     headerBulk.push(header.rawData)
+                    console.log('pushing', header.x, header.data.hash)
                     // const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
                     // const prevBlock = reverse(BTCUtils.extractPrevBlockLE(decodeHex));
                     if(headerBulk.length > 144) {
@@ -138,6 +138,7 @@ void (async () => {
                     if(busyPromise) {
                         await busyPromise;
                         busyPromise = null;
+                        break;
                     }
                 }
                 

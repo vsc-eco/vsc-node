@@ -48,7 +48,7 @@ export async function* BTCBlockStream(options: {continueHead: boolean, height:nu
     }
     if (promises.length > batchSize) {
       for (let data of (await Promise.all(promises)).filter(e => !!e).sort(({x:a}, {x:b}) => {
-        return b - a;
+        return a - b;
       })) {
         lastBlock = data.x
         yield data;

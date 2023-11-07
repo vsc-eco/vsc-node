@@ -8,7 +8,6 @@ import { sha256 as hasher } from 'multiformats/hashes/sha2'
 import BloomFilters from 'bloom-filters'
 import { CoreService } from '.'
 import { BlockHeader, TransactionContainer, TransactionDbRecord, TransactionDbStatus, TransactionDbType, TransactionRaw } from '../types'
-import { VM, NodeVM, VMScript } from 'vm2'
 import fs from 'fs/promises'
 import { isNamedType } from 'graphql/type/definition.js'
 import * as vm from 'vm';

@@ -1,6 +1,7 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
 import { GraphQLError } from 'graphql';
+import { TransactionDbStatus, TransactionDbType } from '../../../types';
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -113,13 +114,57 @@ export const Resolvers = {
     }
   },
   findTransaction: async (_, args) => {
-    const tx = await appContainer.self.transactionPool.transactionPool.findOne({
-      id: args.id,
-    })
+    let query = {}
+
+    if(args.filterOptions?.byId) {
+      query['id'] = args.filterOptions.byId
+    }
+
+    if(args.filterOptions?.byStatus) {
+      query['status'] = args.filterOptions.byStatus
+    }
+
+    if(args.filterOptions?.byContract) {
+      query['headers.contract_id'] = args.filterOptions.byContract
+    }
+
+    if(args.filterOptions?.byAccount) {
+      query['account_auth'] = args.filterOptions.byAccount
+    }
+    
+    if(args.filterOptions?.byOpCategory) {
+      query['decoded_tx.op_cateogry'] = args.filterOptions.byOpCategory
+    }
+
+    if(args.filterOptions?.byAction) {
+      query['decoded_tx.action'] = args.filterOptions.byAction
+    }
+
+
+    const txs = await appContainer.self.transactionPool.transactionPool.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
 
     return {
-      ...tx,
-      // first_seen: tx.first_seen.toISOString(),
+      txs: txs.map(e => {
+        let type;
+        if(TransactionDbType.input === e.type) {
+          type = 'INPUT'
+        } else if(TransactionDbType.output === e.type) {
+          type = 'OUTPUT'
+        } else {
+          type = 'NULL'
+        }
+        
+        return {
+          ...e,
+          first_seen: e.first_seen.toISOString(),
+          type: type
+        }
+      })
     }
   },
   localNodeInfo: async () => {

@@ -45,8 +45,7 @@ export const schema = `
         # More coming
     }
     type TransactionSubmitResult {
-        status: String
-        contract: Contract
+        tx_id: String
     }
     type LocalNodeInfo {
         peer_id: String
@@ -97,6 +96,10 @@ export const schema = `
         deposit_id: String
         amount: Float
     }
+    interface BlockRef {
+        block_ref: String
+        included_block: Int
+    }
     type Deposit {
         from: String
         id: String
@@ -112,18 +115,24 @@ export const schema = `
         contract_id: String
         controllers_hash: String
     }
-    interface BlockRef {
-        block_ref: String
-        included_block: Int
+    type FindtransactionResult {
+        txs: [Transaction]
     }
+    input FindTransactionFilter {
+        byId: String
+        byAccount: String
+        byContract: String
+        byStatus: String
+    }
+    
     type Query {
         contractState(id: String): ContractState
-        findTransaction(id: String): Transaction
+        findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindtransactionResult
         findContract(id: String): FindContractResult
         findCID(id: String): findCIDResult
         findDeposit(id: String): Deposit
 
-        submitTransaction(id: String): TransactionSubmitResult
+        submitTransaction(blob: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo
         witnessNodes: [WitnessNode]
         nextWitnessSlot(local: Boolean): JSON

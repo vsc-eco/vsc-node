@@ -33,6 +33,7 @@ export const schema = `
         type: TransactionType
         included_in: String
         executed_in: String
+        decoded_tx: JSON
     }
     type ContractState {
         id: String
@@ -123,6 +124,8 @@ export const schema = `
         byAccount: String
         byContract: String
         byStatus: String
+        byOpCategory: String
+        byAction: String
     }
     
     type Query {

@@ -405,6 +405,43 @@ export class TransactionPoolService {
     })
   }
 
+  async txDecode(txId: string) {
+    const tx_id = CID.parse(txId)
+
+    const data = (await this.self.ipfs.dag.get(tx_id, {
+      path: "/link"
+    })).value
+
+    const {tx} = data;
+
+    let op_category
+    if(tx.action === "applyTx") {
+      op_category = 'ledger_transfer'
+    } else {
+      op_category = 'custom'
+    }
+
+    let opts = {}
+    // console.log(op_category, tx.action)
+    if(op_category === "ledger_transfer") {
+      opts['decoded_tx.dest'] = tx.payload.dest
+      opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
+        return a + b;
+      })
+    }
+    
+
+    await this.transactionPool.updateOne({
+      id: txId
+    }, {
+      $set: {
+        'decoded_tx.op_category': op_category,
+        'decoded_tx.action': tx.action,
+        ...opts
+      }
+    })
+  }
+
   async start() {
     this.transactionPool = this.self.db.collection('transaction_pool')
     this.blockHeaders = this.self.db.collection('block_headers')
@@ -419,6 +456,23 @@ export class TransactionPoolService {
         },
       )
     } catch {}
+
+    NodeSchedule.scheduleJob('* * * * *', async () => {
+      for(let entry of await this.transactionPool.find({
+        status: TransactionDbStatus.confirmed,
+        type: TransactionDbType.input,
+        decoded_tx: {
+          $exists: false
+        }
+      }).toArray()) {
+        // console.log(entry.id)
+        try {
+          await this.txDecode(entry.id)
+        } catch(ex) {
+          console.log(ex)
+        }
+      }
+    })
 
     // setInterval(async() => {
     //   const ids = await this.transactionPool.distinct('id', {

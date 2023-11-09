@@ -1,4 +1,4 @@
-import { Collection } from 'mongodb'
+import { Collection, ObjectId } from 'mongodb'
 import ivm from 'isolated-vm'
 import { CID } from 'multiformats'
 import jsonpatch from 'fast-json-patch'
@@ -7,7 +7,7 @@ import enchex from 'crypto-js/enc-hex'
 import { CoreService } from './index'
 import { verifyMultiDagJWS, Benchmark } from '../utils'
 import { Contract, ContractCommitment } from '../types/contracts'
-import { ContractOutput } from '../types/vscTransactions'
+import { ContractInput, ContractOutput } from '../types/vscTransactions'
 import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 import { BlockRef } from '@/types'
@@ -241,11 +241,13 @@ export class ContractEngine {
             state_updates['node-info'] = protoBuf;*/
   }
 
-  private async contractStateRaw(id: string, stateMerkle?: string) {
+  private async contractStateRaw(id: string, stateMerkle?: string, contractOverride?: Contract) {
     let stateCid
     let contract = await this.contractDb.findOne({
       id,
     })
+    if (contractOverride)
+      contract = { _id: new ObjectId(), ...contractOverride }
     if(!contract) {
       throw new Error("Contract Not Indexed Or Does Not Exist")
     }
@@ -478,6 +480,8 @@ export class ContractEngine {
   async contractExecuteRaw(id, operations, options: {
     benchmark: Benchmark
     codeOverride?: string
+    operationsOverride?: any[]
+    contractOverride?: Contract
   }): Promise<ContractOutput> {
     const benchmark = options.benchmark
     if(operations.length === 0) {
@@ -511,10 +515,20 @@ export class ContractEngine {
     let chainActions = null
     let stateMerkle
     let startMerkle
-    for (let op of operations) {
-      const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
-        path: "/link/tx"
-      })).value
+
+    // apply override operations
+    const opsOverriden = Array.isArray(options.operationsOverride) && options.operationsOverride.length > 0
+    const ops = opsOverriden ? options.operationsOverride : []
+    if (!opsOverriden)
+      for (let op of operations) {
+        ops.push((await this.self.ipfs.dag.get(CID.parse(op.id), {
+          path: "/link/tx"
+        })).value)
+      }
+
+    // execute in vm
+    for (let op of ops) {
+      const opData = op
       this.self.logger.debug(`executing op: ${op}`, opData)
       //Performance: access should be instant
       if(!contractInfo) {
@@ -522,7 +536,7 @@ export class ContractEngine {
       }
       //Performance: access should be loaded from disk unless content is remote
       
-      const state = await this.contractStateRaw(id, stateMerkle)
+      const state = await this.contractStateRaw(id, stateMerkle, options.contractOverride)
       if (!startMerkle) {
         startMerkle = state.startMerkle.toString()
       }
@@ -583,8 +597,8 @@ export class ContractEngine {
           },
           tx_id: op.id,
           included_in: op.included_in,
-          included_block: includedRecord.hive_ref_block,
-          included_date: includedRecord.hive_ref_date
+          included_block: opsOverriden ? op.hive_ref_block : includedRecord.hive_ref_block,
+          included_date: opsOverriden ? op.hive_ref_date : includedRecord.hive_ref_date
         }
       }))
       context.global.setSync('transfer_funds', new ivm.Reference(async (to: DID, amount: number) => {
@@ -631,7 +645,7 @@ export class ContractEngine {
       await compiled.run(context)
     }
 
-    this.self.logger.info('new state merkle of executed contract', stateMerkle)
+    this.self.logger.info('new state merkle of executed contract '+ CID.asCID(stateMerkle).toString())
     benchmark.stage('4')
     
     if(!(startMerkle instanceof CID)) {

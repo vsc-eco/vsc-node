@@ -241,7 +241,7 @@ export class ContractEngine {
             state_updates['node-info'] = protoBuf;*/
   }
 
-  private async contractStateRaw(id: string, stateMerkle?: string, contractOverride?: Contract) {
+  private async contractStateRaw(id: string, stateMerkle?: string | CID, contractOverride?: Contract) {
     let stateCid
     let contract = await this.contractDb.findOne({
       id,
@@ -253,7 +253,7 @@ export class ContractEngine {
     }
     if (contract) {
       if (stateMerkle) {
-        stateCid = CID.parse(stateMerkle)
+        stateCid = typeof stateMerkle === 'string' ? CID.parse(stateMerkle) : stateMerkle
       } else {
         if (contract.state_merkle) {
           stateCid = CID.parse(contract.state_merkle)
@@ -643,6 +643,8 @@ export class ContractEngine {
       })
       const compiled = await isolate.compileScript(code)
       await compiled.run(context)
+      if (options.contractOverride)
+        options.contractOverride.state_merkle = stateMerkle.toString()
     }
 
     this.self.logger.info('new state merkle of executed contract '+ CID.asCID(stateMerkle).toString())

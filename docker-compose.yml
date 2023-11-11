@@ -49,7 +49,7 @@ services:
       - vsc-node
     ports:
       - "4001:4001"
-      - "127.0.0.1:5001:5001"
+      - "127.0.0.1:5101:5001"
     environment: 
       IPFS_PATH: /etc/ipfs
     volumes:

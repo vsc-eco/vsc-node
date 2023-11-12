@@ -119,9 +119,9 @@ export class ChainBridgeV2 {
                                 json = {}
                             }
                             if (json.vsc_node) {
-                                console.log(json)
-                                console.log(opPayload)
-                                console.log(tx)
+                                // console.log(json)
+                                // console.log(opPayload)
+                                // console.log(tx)
                                 const keys = [
                                     {
                                         ct: 'DID',
@@ -174,6 +174,7 @@ export class ChainBridgeV2 {
 
                                 const lastRecordHistory = await this.witnessHistoryDb.findOne({
                                     account: opPayload.account,
+                                    type: 'witness.toggle'
                                 }, {
                                     sort: {
                                         valid_from: -1
@@ -201,7 +202,8 @@ export class ChainBridgeV2 {
 
                                 await this.witnessHistoryDb.updateOne({
                                     account: opPayload.account,
-                                    valid_from:valid_from2
+                                    valid_from:valid_from2,
+                                    type: "witness.toggle"
                                 }, {
                                     $set: {
                                         enabled,
@@ -219,7 +221,8 @@ export class ChainBridgeV2 {
                                     $set: {
                                         net_id: json.vsc_node.unsigned_proof.net_id,
                                         ipfs_peer_id: json.vsc_node.unsigned_proof.ipfs_peer_id,
-                                        signing_keys: json.vsc_node.unsigned_proof.witness.signing_keys
+                                        signing_keys: json.vsc_node.unsigned_proof.witness.signing_keys,
+                                        last_signed: blk.key
                                     }
                                 }, {
                                     upsert: true
@@ -228,8 +231,8 @@ export class ChainBridgeV2 {
 
                             }
                         } catch(ex) {
-                            console.log(ex)
-                            console.log(opPayload.json_metadata)
+                            // console.log(ex)
+                            // console.log(opPayload.json_metadata)
                         }
                     } else if (op === 'custom_json') {
                         try {
@@ -261,15 +264,84 @@ export class ChainBridgeV2 {
         }
     }
 
-    async init() {
+    async getWitnessesAtBlock(blk: number) {
+        const witnesses = await this.witnessDb.find().toArray()
+        const filteredWitnesses = (await Promise.all(witnesses.map(async(e) => {
+            let query
+            let sort
+            if(blk) {
+                query = {
+                    account: e.account,
+                    valid_from: {
+                        $gt: blk
+                    }
+                }
+                sort = {
+                    valid_to: 1
+                }
+            } else {
+                query = {
+                    account: e.account,
+    
+                    $or: [{
+                        valid_to: {
+                            $exists: true
+                        }
+                    }, {
+                        valid_to: null
+                    }]
+                }
+                sort = {
+                    valid_from: -1
+                }
+            }
+            const data = await this.witnessHistoryDb.findOne(query, {
+                sort
+            })
+            console.log(data)
 
+            if(!data) {
+                return null;
+            }
+
+            if(data.enabled !== true) {
+                return null;
+            }
+
+            console.log(data, {
+                account: data.account,
+                valid_from: {
+                    $gt: data.valid_from
+                }
+            })
+            const keys = await this.accountAuths.findOne({
+                account: data.account,
+                valid_from: {
+                    $gt: data.valid_from
+                }
+            }, {
+                sort: {
+                    valid_to: 1
+                }
+            })
+            console.log('keys', keys)
+
+            return e;
+        }))).filter(e => !!e)
+
+        console.log('filteredWitnesses', filteredWitnesses)
+    }
+
+    async init() {
+        
         this.db = createMongoDBClient('new')
         this.events = this.db.collection('events')
         this.accountAuths = this.db.collection('account_auths')
         this.streamState = this.db.collection('stream_state')
         this.witnessDb = this.db.collection('witnesses')
         this.witnessHistoryDb = this.db.collection('witness_history')
-
+        
+        await this.getWitnessesAtBlock(75193050)
         try {
             await this.events.createIndex({
                 id: -1,
@@ -302,7 +374,7 @@ export class ChainBridgeV2 {
                 }
             }, 1000)
             for await (let [block_height, block] of this.stream.streamOut) {
-                console.log('processing block', block_height)
+                // console.log('processing block', block_height)
                 await this._processBlock([block_height, block])
                 lastBlk = block_height
             }

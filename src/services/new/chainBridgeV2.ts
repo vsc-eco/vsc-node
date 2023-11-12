@@ -86,7 +86,7 @@ export class ChainBridgeV2 {
                 sort: {
                     key: 1
                 }
-            })).key
+            }) || {}).key
         }
         while (true) {
             const blocks = await this.events.find({

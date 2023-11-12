@@ -5,37 +5,10 @@ import { CoreService } from '../services';
 import { TransactionPoolService } from '../services/transactionPool';
 import { sleep } from '../utils';
 import Axios from 'axios'
+import { waitTxConfirm } from './utils';
 
 
 
-async function waitTxConfirm(id: string, self: CoreService, func) {
-    let lastStatus;
-    for( ; ; ) {
-        const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
-            query: `
-            query MyQuery {
-                findTransaction(id: "${id}") {
-                  status
-                }
-              }`
-        })
-        console.log(data.data)
-        await self.p2pService.memoryPoolChannel.call('announce_tx', {
-            payload: {
-              id: id.toString()
-            },
-            mode: 'basic'
-        })
-        if(func && ['CONFIRMED', 'INCLUDED'].includes(data.data.findTransaction.status) && lastStatus !== data.data.findTransaction.status) {
-            func(data.data.findTransaction.status)
-            lastStatus = data.data.findTransaction.status
-        }
-        if(data.data.findTransaction.status === "CONFIRMED") {
-            return;
-        }
-        await sleep(5_000)
-    }
-}
 
 void (async () => {
 

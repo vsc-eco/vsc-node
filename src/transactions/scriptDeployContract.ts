@@ -48,7 +48,11 @@ void (async () => {
             },
         setup);
         console.log(confirmation)
-
+        manifestData.deployedAt = new Date().toISOString()
+        manifestData.deployedId = confirmation.id
+        console.log(manifestData)
+        console.log(contractFile)
+        await fs.writeFile(Path.join(contractLocation, contractFile), JSON.stringify(manifestData))
     } catch(ex) {
         console.log(ex)
     }

@@ -12,7 +12,7 @@ import { DID } from 'dids'
 import { CustomJsonOperation, TransferOperation } from '@hiveio/dhive'
 import { BlockRef } from '@/types'
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
-import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
+import { parseTxHex, reverse } from './bitcoin-utils'
 import { addLink } from '../ipfs-utils/add-link'
 import { removeLink } from '../ipfs-utils/rm-link'
 
@@ -625,6 +625,7 @@ export class ContractEngine {
         await state.client.del(key)
       }))
       context.global.setSync('done', () => {
+        console.log('stateMerkle', stateMerkle)
         stateMerkle = state.finish().stateMerkle
       })
       const compiled = await isolate.compileScript(code)

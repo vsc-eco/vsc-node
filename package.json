@@ -6,6 +6,7 @@
   "dependencies": {
     "@assemblyscript/loader": "^0.27.15",
     "@chainsafe/bls": "^7.1.2",
+    "@chainsafe/blst": "^0.2.9",
     "@hiveio/dhive": "^1.2.2",
     "@hiveio/hive-js": "^2.0.5",
     "@multiformats/murmur3": "^2.1.7",

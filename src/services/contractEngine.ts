@@ -36,6 +36,9 @@ function wrapper () {
   RegExp.prototype.exec = function () {  };
   RegExp.prototype.test = function () {  };
   Math.random = function () {  };
+  Buffer = {
+    from: buffer_from
+  }
   class MockDate extends Date {
     constructor(val) {
       if(val) {
@@ -601,6 +604,8 @@ export class ContractEngine {
         } as BlockRef, id)
         return new ivm.ExternalCopy(result)
       }))
+
+      context.global.setSync('buffer_from', Buffer.from)
 
       // state
       context.global.setSync('state_remote', new ivm.Reference(async (id: string) => {

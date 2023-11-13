@@ -11,6 +11,7 @@ import assert from './vendor/bsert'
 import { CoreService } from '../services'
 import { TransactionPoolService } from '../services/transactionPool'
 import { CID } from 'kubo-rpc-client'
+import { waitTxConfirm } from './utils'
 
 
 
@@ -47,34 +48,6 @@ async function getMerkleProof(txid, height) {
     return [proof, index];
   }
 
-async function waitTxConfirm(id: string, self: CoreService, func) {
-    let lastStatus;
-    for( ; ; ) {
-        const {data} = await Axios.post('http://localhost:1337/api/v1/graphql', {
-            query: `
-            query MyQuery {
-                findTransaction(id: "${id}") {
-                  status
-                }
-              }`
-        })
-        console.log(data.data)
-        await self.p2pService.memoryPoolChannel.call('announce_tx', {
-            payload: {
-              id: id.toString()
-            },
-            mode: 'basic'
-        })
-        if(func && ['CONFIRMED', 'INCLUDED'].includes(data.data.findTransaction.status) && lastStatus !== data.data.findTransaction.status) {
-            func(data.data.findTransaction.status)
-            lastStatus = data.data.findTransaction.status
-        }
-        if(data.data.findTransaction.status === "CONFIRMED") {
-            return;
-        }
-        await sleep(5_000)
-    }
-}
 
 async function createProof(tx_id: string) {
     const dataTx = (await rpcBitcoinCall('getrawtransaction', [tx_id, 1])).result
@@ -176,6 +149,8 @@ void(async () => {
             relayedBlock = 0;
         }
 
+        const dataTx = (await rpcBitcoinCall('getrawtransaction', ['556e0615aae5abcf207a98a7de2969e63f9d3610fa69388bf5fc5d5da211a285', 1])).result
+        console.log('dataTx', dataTx)
 
         try {
 
@@ -184,8 +159,13 @@ void(async () => {
             
             let tx_id;
             for(let tx of transactions) {
-                console.log(links.map(e => e.Name), tx.hash, !links.map(e => e.Name).includes(tx.hash), relayedBlock, (tx.block_height + 4))
-                console.log(!links.map(e => e.Name).includes(tx.hash), (relayedBlock > (tx.block_height + 4)))
+                const dataTx = (await rpcBitcoinCall('getrawtransaction', [tx.hash, 1])).result
+                console.log('dataTx', dataTx)
+                // if(dataTx) {
+                //     return
+                // }
+                // console.log(links.map(e => e.Name), tx.hash, !links.map(e => e.Name).includes(tx.hash), relayedBlock, (tx.block_height + 4))
+                // console.log(!links.map(e => e.Name).includes(tx.hash), (relayedBlock > (tx.block_height + 4)))
                 if(!links.map(e => e.Name).includes(tx.hash) && (relayedBlock > (tx.block_height + 4))) {
                     tx_id = tx.hash
                     break;

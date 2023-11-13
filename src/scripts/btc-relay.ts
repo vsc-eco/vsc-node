@@ -1,9 +1,7 @@
 import Axios from 'axios'
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 import {CID} from 'kubo-rpc-client'
-import { parseTxHex, reverse } from '../scripts/bitcoin-wrapper/utils'
-
-import { BTCBlockStream } from "./bitcoin-wrapper/utils";
+import { BTCBlockStream, parseTxHex, reverse  } from "../services/bitcoin-utils";
 import { sleep } from '../utils';
 import { TransactionPoolService } from '../services/transactionPool';
 import { CoreService } from '../services';

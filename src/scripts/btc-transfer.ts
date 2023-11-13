@@ -1,6 +1,5 @@
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 import {CID} from 'kubo-rpc-client'
-import { parseTxHex, reverse, rpcBitcoinCall } from './bitcoin-wrapper/utils';
 import { CoreService } from '../services';
 import { TransactionPoolService } from '../services/transactionPool';
 import { sleep } from '../utils';

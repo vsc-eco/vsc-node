@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
-import { parseTxHex, reverse, rpcBitcoinCall } from './bitcoin-wrapper/utils';
 import { CoreService } from '../services';
 import { TransactionPoolService } from '../services/transactionPool';
 function readUInt64(buff, offset) {

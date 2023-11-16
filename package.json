@@ -24,6 +24,7 @@
     "bitset": "^5.1.1",
     "bloom-filters": "^3.0.1",
     "bls-eth-wasm": "^1.1.0",
+    "bs58check": "^3.0.1",
     "bson": "^4.7.0",
     "cli-progress": "^3.11.2",
     "concurrently": "^7.6.0",

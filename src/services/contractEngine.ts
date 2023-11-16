@@ -103,6 +103,11 @@ function wrapper () {
       SPVUtils: {
         deserializeHex: btc_spv_utils_deserialize_hex
       }
+    },
+    base58 {
+      encode: bs58check_encode
+      decode: bs58check_decode
+      decodeUnsafe: bs58check_decode_unsafe
     }
   }
   let output = {
@@ -571,6 +576,11 @@ export class ContractEngine {
       context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
       context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)
       context.global.setSync('btc_spv_utils_deserialize_hex', utils.deserializeHex)
+
+      //Base58
+      context.global.setSync('bs58check_encode', bs58check.encode)
+      context.global.setSync('bs58check_decode', bs58check.decode)
+      context.global.setSync('bs58check_decode_unsafe', bs58check.decodeUnsafe)
 
       // apis
       context.global.setSync('set_chain_actions', (actions: OutputActions) => {

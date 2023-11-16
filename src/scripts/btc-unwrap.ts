@@ -30,6 +30,7 @@ void (async () => {
   );
   const keyPairHacker = ECPair.makeRandom()
 
+  console.log('publicKey hex', keyPair.publicKey.toString('hex'))
   const bits = Crypto.randomBytes(32)
   const payScript = bitcoin.script.compile([
       //21
@@ -38,7 +39,11 @@ void (async () => {
       bits,
     ]) 
     
-  console.log(payScript.toString('hex'), [
+    function compileScript(pubKey: string, addrKey: string) {
+      return Buffer.from(`21${pubKey}ad20${addrKey}`, 'hex')
+  }
+  
+  console.log('compiled script', payScript.toString('hex'), [
     keyPair.publicKey.toString('hex'),
     bitcoin.opcodes.OP_CHECKSIGVERIFY,
     bits.toString('hex'),
@@ -48,20 +53,24 @@ void (async () => {
       redeem: {
         output: payScript,
       },
-      network: bitcoin.networks.testnet,
+      network: bitcoin.networks.bitcoin,
     });
     
-    console.log('test', payScript.toString('hex').slice(payScript.toString('hex').length - 64), bits.toString('hex'))
-    console.log('p2sh address', p2sh.address, p2sh.hash, Buffer.from(BTCUtils.hash160(payScript)).toString().slice(),  p2sh)
-    const height = await regtestUtils.height();
-    const unspent = await regtestUtils.faucet(p2sh.address, 1e5)
-    const lockTime = bip65.encode({ blocks: height + 5 });
-  const parsedTx = parseTxHex((await regtestUtils.fetch(unspent.txId)).txHex)
+    //console.log('test', payScript.toString('hex').slice(payScript.toString('hex').length - 64), bits.toString('hex'))
+    const hash = Buffer.from(BTCUtils.hash160(compileScript("034240ccd025374e0531945a65661aedaac5fff1b2ae46197623e594e0129e8b13",bits.toString('hex'))))
+    const endArray = new Uint8Array(21)
+    endArray.set([0x05])
+    endArray.set(hash, 1)
+    console.log('p2sh address', p2sh.address, p2sh.hash, hash)
+  //   const height = await regtestUtils.height();
+  //   const unspent = await regtestUtils.faucet(p2sh.address, 1e5)
+  //   const lockTime = bip65.encode({ blocks: height + 5 });
+  // const parsedTx = parseTxHex((await regtestUtils.fetch(unspent.txId)).txHex)
 
-    const btcOutput = BTCUtils.extractOutputAtIndex(utils.deserializeHex(parsedTx.vout), 0)
-      const val = BTCUtils.extractValue(btcOutput)
-      console.log(parsedTx, Buffer.from(btcOutput), p2sh.hash, parsedTx.vout)
-      console.log(Buffer.from(BTCUtils.extractHash(btcOutput)))
+  //   const btcOutput = BTCUtils.extractOutputAtIndex(utils.deserializeHex(parsedTx.vout), 0)
+  //     const val = BTCUtils.extractValue(btcOutput)
+  //     console.log(parsedTx, Buffer.from(btcOutput), p2sh.hash, parsedTx.vout)
+  //     console.log(Buffer.from(BTCUtils.extractHash(btcOutput)))
 
     
 

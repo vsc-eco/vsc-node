@@ -9,11 +9,6 @@ import { encodeBase64Url, decodeBase64, encodeBase64 } from 'dids/lib/utils'
 import * as u8a from 'uint8arrays'
 import { parse } from 'did-resolver'
 
-export function encodeDid(pubKey) {
-  return `did:key:`
-}
-
-export function decodeDid(pubKey) {}
 
 /**
  * Light implementation of BLS DIDs

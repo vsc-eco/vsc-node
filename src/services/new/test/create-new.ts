@@ -18,7 +18,7 @@ void (async () => {
         previous: CID.parse('bafybeidme3hjw2ja7ofter7pwjmfbf4l72kmtnnhxh3hfq4ekby54ngsqi'),
         required_auths: [{
             type: 'consensus',
-            value: 'theragingboy'
+            value: 'vsc.node1'
         }],
     }
 

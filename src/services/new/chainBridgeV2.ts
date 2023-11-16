@@ -298,7 +298,7 @@ export class ChainBridgeV2 {
             const data = await this.witnessHistoryDb.findOne(query, {
                 sort
             })
-            console.log(data)
+            // console.log(data)
 
             if(!data) {
                 return null;
@@ -308,28 +308,42 @@ export class ChainBridgeV2 {
                 return null;
             }
 
-            console.log(data, {
-                account: data.account,
-                valid_from: {
-                    $gt: data.valid_from
-                }
-            })
+            // console.log(data, {
+            //     account: data.account,
+            //     valid_from: {
+            //         $gt: data.valid_from
+            //     }
+            // })
             const keys = await this.accountAuths.findOne({
                 account: data.account,
                 valid_from: {
-                    $gt: data.valid_from
-                }
+                    $lt: data.valid_from
+                },
+                $or: [
+                    {
+                        valid_to: {$exists: false}
+                    }, {
+                        valid_to: {
+                            $gt: data.valid_from
+                        }
+                    }
+                ]
             }, {
                 sort: {
                     valid_to: 1
                 }
             })
-            console.log('keys', keys)
+            if(keys) {
+                e.keys = keys.keys;
+            } else {
+                console.log('keys is empty')
+                return null
+            }
 
             return e;
         }))).filter(e => !!e)
 
-        console.log('filteredWitnesses', filteredWitnesses)
+        console.log('filteredWitnesses', filteredWitnesses, filteredWitnesses.length)
     }
 
     async init() {
@@ -341,7 +355,7 @@ export class ChainBridgeV2 {
         this.witnessDb = this.db.collection('witnesses')
         this.witnessHistoryDb = this.db.collection('witness_history')
         
-        await this.getWitnessesAtBlock(75193050)
+        await this.getWitnessesAtBlock(76380150)
         try {
             await this.events.createIndex({
                 id: -1,

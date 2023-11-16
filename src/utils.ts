@@ -43,12 +43,14 @@ export class fastStream {
   lastBlock: number
   lastBlockTs: Date
   aborts: Array<AbortController>
+  streamOpts: { startBlock: number; endBlock?: number; trackHead?: boolean }
 
   constructor(queue: PQueue, streamOpts: {
     startBlock: number,
     endBlock?: number
     trackHead?: boolean
   }) {
+    this.streamOpts = streamOpts
     this.queue = queue
     this.events = new EventEmitter()
     this.streamOut = Pushable()
@@ -228,14 +230,18 @@ export class fastStream {
     await this.queue.onIdle();
   }
 
+  async init() {
+    if (!this.streamOpts.endBlock) {
+      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
+      const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16)
+      this.streamOpts.endBlock = block_height;
+    }
+  }
+
   static async create(streamOpts: { startBlock: number, endBlock?: number, trackHead?: boolean }) {
     const PQueue = (await import('p-queue')).default
     const queue = new PQueue({ concurrency: 2 })
-    if (!streamOpts.endBlock) {
-      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      const block_height = parseInt(currentBlock.block_id.slice(0, 8), 16)
-      streamOpts.endBlock = block_height;
-    }
+    
 
     return new fastStream(queue, streamOpts)
   }

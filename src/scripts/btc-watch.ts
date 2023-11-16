@@ -4,7 +4,7 @@ import { sleep } from "../utils"
 import {Collection, Db, MongoClient} from 'mongodb'
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 import {Long} from 'mongodb'
-import { BTCBlockStream, parseTxHex, reverse, rpcBitcoinCall } from "./bitcoin-wrapper/utils"
+import { BTCBlockStream, parseTxHex, reverse, rpcBitcoinCall } from "../services/bitcoin-utils"
 import hash256 from './vendor/hash256'
 import * as merkle from './vendor/merkle'
 import assert from './vendor/bsert'

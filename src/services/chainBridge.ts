@@ -759,6 +759,7 @@ export class ChainBridge {
       startBlock: startBlock,
       trackHead: true
     })
+    await this.hiveStream.init()
     void (async () => {
       try {
 

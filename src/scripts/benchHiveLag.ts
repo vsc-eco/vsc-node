@@ -32,6 +32,7 @@ void (async () => {
             startBlock: bh,
             trackHead: true
         })
+        await stream.init()
         setTimeout(() => {
             stream.startStream()
 

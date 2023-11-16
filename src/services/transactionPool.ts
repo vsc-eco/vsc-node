@@ -473,37 +473,5 @@ export class TransactionPoolService {
       }
     })
 
-    // setInterval(async() => {
-    //   const ids = await this.transactionPool.distinct('id', {
-
-    //   })
-
-    //   const bf = BloomFilter.from(ids, 0.001).saveAsJSON()
-    //   this.self.p2pService.memoryPoolChannel.call('announce_tx', {
-    //     payload: {
-    //       tx: "hello world",
-    //       bf: {
-    //         _size: bf._size,
-    //         _nbHashes: bf._nbHashes,
-    //         _filter: bf._filter,
-    //         _seed: bf._seed
-    //       }
-    //     },
-    //     mode: "basic"
-    //   })
-    // }, 600000)
-
-    // pla: DBG
-    try {
-      const newCid = (await this.self.ipfs.add(await fs.readFile('./src/services/contracts/basic-contract.js'))).cid.toString()
-      // await this.updateContract({
-      //   id: "kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz",
-      //   name: 'test contract',
-      //   codeCid: newCid
-      // })
-
-    } catch(ex) {
-      this.self.logger.error('failed to inject basic contract into local ipfs node', ex)
-    }
   }
 }

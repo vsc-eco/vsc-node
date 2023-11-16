@@ -102,7 +102,7 @@ export async function* BTCBlockStream(options: {continueHead: boolean, height:nu
     try {
       for (let x = lastBlock + 1; x < Infinity; x++) {
         yield await getBtcBlock(x, options.signal)
-  
+
         console.log('options.signal.aborted', options.signal.aborted)
         if (options.signal.aborted === true) {
           break

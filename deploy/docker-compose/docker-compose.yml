@@ -2,7 +2,7 @@ version: "3.3"
 
 services:
   vsc-node: # name of the service
-    image: platinium/vsc-node:latest
+    image: vaultec/vsc-node:latest
     container_name: vsc-node # what to label the container for docker ps
     restart: always # restart if failed, until we stop it ourselves
     #external_links:

@@ -8,6 +8,7 @@ import { encodePayload } from 'dag-jose-utils'
 import { encodeBase64Url, decodeBase64, encodeBase64 } from 'dids/lib/utils'
 import * as u8a from 'uint8arrays'
 import { parse } from 'did-resolver'
+import { SignaturePacked, SignatureType } from '../../types'
 
 
 /**
@@ -57,6 +58,39 @@ export class BlsDID {
     const encodedPayload = await encodePayload(msg)
 
     return encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes())
+  }
+  
+  async signPacked(msg) {
+    if (!this.privKey) {
+      throw new Error('No private key!')
+    }
+    const encodedPayload = await encodePayload(msg)
+
+    const signature = encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes());
+  
+    return {
+      link: encodedPayload.cid,
+      signature
+    }
+  }
+  
+  async signObject(msg): Promise<SignaturePacked> {
+    if (!this.privKey) {
+      throw new Error('No private key!')
+    }
+    const encodedPayload = await encodePayload(msg)
+  
+    const signature = encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes());
+  
+    return {
+      ...msg,
+      signatures: [
+        {
+          t: SignatureType.BLS,
+          s: signature
+        }
+      ]
+    }
   }
 
   static fromSeed(seed: Uint8Array) {
@@ -168,41 +202,43 @@ export class BlsCircuit {
 
 void (async () => {
   await init('blst-native')
-
-  let msg = 'hello'
-  let date = new Date()
-  const circuit = new BlsCircuit((await encodePayload(msg as any)).cid.bytes)
-  let pubs = []
-  let useablePubs = []
-
-  let addList = []
-  for (let x = 0; x < 150; x++) {
-    const did = BlsDID.fromSeed(
-      Buffer.from(`5a2b1f37ecc9fb7f27e1aa3daa4d66d9c3e54a4c0dcd53a4a5cacdfaf50578/${x}`),
-    )
-
-    pubs.push(did.id)
-    if (Math.random() > 0.13) {
-      addList.push({
-        did: did.id,
-        sig: await did.sign(msg),
-      })
-      useablePubs.push(did.id)
-    }
-
-    // console.log('hello', decodeBase64(await did.sign('hello')))
-    // console.log(circuit.serialize([
-
-    //   did.id,
-
-    // ]))
-  }
-  console.log(new Date().getTime() - date.getTime())
-  circuit.addMany(addList)
-  console.log('level 1', new Date().getTime() - date.getTime())
-  console.log(await circuit.verify('hello'))
-  console.log(circuit.verifyPubkeys(useablePubs))
-  console.log(new Date().getTime() - date.getTime())
-  console.log(circuit.verifyPubkeys(useablePubs))
-  console.log(circuit.serialize(pubs), useablePubs.length)
 })()
+// void (async () => {
+
+//   let msg = 'hello'
+//   let date = new Date()
+//   const circuit = new BlsCircuit((await encodePayload(msg as any)).cid.bytes)
+//   let pubs = []
+//   let useablePubs = []
+
+//   let addList = []
+//   for (let x = 0; x < 150; x++) {
+//     const did = BlsDID.fromSeed(
+//       Buffer.from(`5a2b1f37ecc9fb7f27e1aa3daa4d66d9c3e54a4c0dcd53a4a5cacdfaf50578/${x}`),
+//     )
+
+//     pubs.push(did.id)
+//     if (Math.random() > 0.13) {
+//       addList.push({
+//         did: did.id,
+//         sig: await did.sign(msg),
+//       })
+//       useablePubs.push(did.id)
+//     }
+
+//     // console.log('hello', decodeBase64(await did.sign('hello')))
+//     // console.log(circuit.serialize([
+
+//     //   did.id,
+
+//     // ]))
+//   }
+//   console.log(new Date().getTime() - date.getTime())
+//   circuit.addMany(addList)
+//   console.log('level 1', new Date().getTime() - date.getTime())
+//   console.log(await circuit.verify('hello'))
+//   console.log(circuit.verifyPubkeys(useablePubs))
+//   console.log(new Date().getTime() - date.getTime())
+//   console.log(circuit.verifyPubkeys(useablePubs))
+//   console.log(circuit.serialize(pubs), useablePubs.length)
+// })()

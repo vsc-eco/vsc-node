@@ -94,7 +94,7 @@ export class Config {
    *
    * @param {String} key
    */
-  get(key) {
+  get(key?) {
     if (typeof key === 'undefined') {
       return this.config
     }

@@ -524,7 +524,7 @@ export class ContractEngine {
       const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
         path: "/link/tx"
       })).value
-      this.self.logger.debug(`executing op: ${op}`, opData)
+      // this.self.logger.debug(`executing op: ${op}`, opData)
       //Performance: access should be instant
       if(!contractInfo) {
         throw new Error("Contract Not Indexed Or Does Not Exist")

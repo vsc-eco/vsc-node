@@ -74,13 +74,14 @@ interface VSCSignedData {
     signatures?: SignaturePacked | CID //signature on IPFS.
 }
 
-enum SignatureType {
+export enum SignatureType {
     JWS,
     HIVE,
-    BLS
+    BLS = 'DID-BLS',
+    BLS_AGG = 'DID-BLS-AGG'
 }
 
-interface SignatureIndividual {
+export interface SignatureIndividual {
     //Separate between JWS, HIVE, and custom BLS signatures
     t: SignatureType; 
     //Aka Protected 
@@ -90,7 +91,7 @@ interface SignatureIndividual {
 }
 
 
-interface SignaturePacked {
+export interface SignaturePacked {
 
     // 'hive:beeab0de000000000000000000000000:hiveio'
     

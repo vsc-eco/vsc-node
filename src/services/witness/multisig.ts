@@ -1,7 +1,8 @@
 import { PrivateKey, Transaction } from "@hiveio/dhive";
 import moment from 'moment'
 import hive from '@hiveio/hive-js'
-import { HiveClient, calcBlockInterval } from "../../utils";
+import hiveTx from 'hive-tx'
+import { HiveClient, HiveClient2, calcBlockInterval } from "../../utils";
 import { CoreService } from "..";
 import { WitnessService } from ".";
 
@@ -155,6 +156,21 @@ export class MultisigCore {
         const bh = await HiveClient.blockchain.getCurrentBlock();
         const [multisigAccount] = await HiveClient.database.getAccounts([process.env.MULTISIG_ACCOUNT])
        
+        const orderAlphabetically = (
+            auths: [string, number][],
+          ): [string, number][] => {
+            const names = auths.map((auth) => auth[0]).sort();
+            const sortedArr: [string, number][] = [];
+            for (let i = 0; i < names.length; i++) {
+              const index = auths.findIndex((e) => e[0] === names[i]);
+              const element: [string, number] = [
+                auths[index][0].toString(),
+                auths[index][1],
+              ];
+              sortedArr.push(element);
+            }
+            return sortedArr;
+          };
         const transaction: Transaction = {
             ref_block_num: parseInt(bh.block_id.slice(0, 8), 16) & 0xffff,
             ref_block_prefix: Buffer.from(bh.block_id, 'hex').readUInt32LE(4),
@@ -164,7 +180,7 @@ export class MultisigCore {
                     account: process.env.MULTISIG_ACCOUNT,
                     owner: {
                         account_auths: [['vaultec', multisigConf.threshold]],
-                        key_auths: ownerKeys.map(e => [e, 1]),
+                        key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
                         // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
                         //     return [(e as any).signing_keys.owner,1]
                         // })],
@@ -173,7 +189,7 @@ export class MultisigCore {
                     },
                     active: {
                         account_auths: multisigAccount.owner.account_auths,
-                        key_auths: activeKeys.map(e => [e, 1]),
+                        key_auths: orderAlphabetically(activeKeys.map(e => [e, 1])),
                         // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
                         //     return [(e as any).signing_keys.owner,1]
                         // })],
@@ -182,7 +198,7 @@ export class MultisigCore {
                     },
                     posting: {
                         account_auths: multisigAccount.owner.account_auths,
-                        key_auths: postingKeys.map(e => [e, 1]),
+                        key_auths: orderAlphabetically(postingKeys.map(e => [e, 1])),
                         // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
                         //     return [(e as any).signing_keys.owner,1]
                         // })],
@@ -195,8 +211,9 @@ export class MultisigCore {
             ],
             extensions: []
         }
-        // console.log(JSON.stringify(transaction, null, 2))
+        console.log(JSON.stringify(transaction, null, 2))
         
+        const hiveTxData = new hiveTx.Transaction(transaction)
         
         // hive.broadcast.send(transactionTest, [this.self.config.get('identity.signing_keys.owner')], (err, result) => {
         //     console.log(err, result);
@@ -225,14 +242,27 @@ export class MultisigCore {
             responseOrigin: 'many'
         })
 
-        console.log(multisigAccount.owner)
+
         let signatures = [...what.signatures]
-        for await(let {payload} of drain) {
-            console.log('sigData',signatures.length, payload)
-            if(multisigAccount.owner.weight_threshold <= signatures.length) {
-                break;
+        for await(let data of drain) {
+            const {payload} = data
+            console.log('sigData',signatures.length, payload, data)
+            const nodeInfo = await this.witness.witnessDb.findOne({
+                peer_id: data.from.toString()
+            })
+            if(nodeInfo) {
+                if(multisigAccount.owner.key_auths.map(e => e[0]).includes(nodeInfo.signing_keys.owner)) {
+                    const pubKey = hiveTx.PublicKey.from(nodeInfo.signing_keys.owner)
+        
+                    if(pubKey.verify(hiveTxData.digest().digest, hiveTx.Signature.from(payload.signature))) {
+                        if(multisigAccount.owner.weight_threshold <= signatures.length) {
+                            break;
+                        }
+                        signatures.push(payload.signature)
+                    }
+                }
             }
-            signatures.push(payload.signature)
+
         }
         
 
@@ -242,8 +272,12 @@ export class MultisigCore {
         // // signedTx.signatures.push(...signatures)
         // // console.log(signedTx.signatures)
         console.log('fully signed', what)
-        const txConfirm = await HiveClient.broadcast.send(what)
-        console.log(txConfirm)
+        try {
+            const txConfirm = await HiveClient2.broadcast.send(what)
+            console.log(txConfirm)
+        } catch (ex) {
+            console.log(ex)
+        }
         // hive.api.broadcastTransactionSynchronous(signedTx, function(err, result) {
         //     console.log(err, result);
         //   });
@@ -480,8 +514,11 @@ export class MultisigCore {
 
         // }, 6000)
 
-        if(this.self.mode !== 'lite') {
+        // setInterval(asyc() => {
 
+        // })
+       
+        if(this.self.mode !== 'lite') {
             setInterval(async() => {
                 if(this.self.witness.witnessSchedule && this.self.chainBridge.hiveStream.blockLag < 5 && this.self.chainBridge.syncedAt && this.self.chainBridge.hiveStream.blockLag) {
                     // console.log('Contract worker', this.self.witness.witnessSchedule, this.self.chainBridge.hiveStream.blockLag, this.self.chainBridge.syncedAt)

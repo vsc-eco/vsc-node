@@ -43,7 +43,6 @@
     "graphql-yoga": "^3.6.0",
     "hamt-sharding": "^3.0.2",
     "hive-tx": "^4.3.0",
-    "ipfs-unixfs-importer": "^15.2.1",
     "ipld-hashmap": "^3.0.4",
     "isolated-vm": "^4.6.0",
     "it-pushable": "^1.4.2",

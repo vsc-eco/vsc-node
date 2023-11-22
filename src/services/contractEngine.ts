@@ -97,6 +97,7 @@ function wrapper () {
         extractTimestamp: btc_utils_extract_ts,
         extractTimestampLE: btc_utils_extract_ts_le,
         extractMerkleRootLE: btc_utils_extract_merkleroot_le,
+        hash160: btc_utils_hash160,
         hash256: btc_utils_hash256,
         extractOutputAtIndex: btc_utils_extract_output_at_idx,
         extractValue: btc_utils_extract_value
@@ -105,9 +106,9 @@ function wrapper () {
         deserializeHex: btc_spv_utils_deserialize_hex
       }
     },
-    base58 {
-      encode: bs58check_encode
-      decode: bs58check_decode
+    base58: {
+      encode: bs58check_encode,
+      decode: bs58check_decode,
       decodeUnsafe: bs58check_decode_unsafe
     }
   }
@@ -573,6 +574,7 @@ export class ContractEngine {
       context.global.setSync('btc_utils_extract_ts', BTCUtils.extractTimestamp)
       context.global.setSync('btc_utils_extract_ts_le', BTCUtils.extractTimestampLE)
       context.global.setSync('btc_utils_extract_merkleroot_le', BTCUtils.extractMerkleRootLE)
+      context.global.setSync('btc_utils_hash160', BTCUtils.hash160)
       context.global.setSync('btc_utils_hash256', BTCUtils.hash256)
       context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
       context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)

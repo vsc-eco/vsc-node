@@ -7,3 +7,4 @@ inventory.yml
 data
 contracts/example.js
 seed-backup
+.DS_Store

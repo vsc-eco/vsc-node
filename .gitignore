@@ -1,5 +1,4 @@
 node_modules
-*-lock.json
 coverage
 logs
 dist
@@ -8,3 +7,4 @@ inventory.yml
 data
 contracts/example.js
 seed-backup
+.DS_Store

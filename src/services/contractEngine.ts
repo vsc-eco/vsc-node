@@ -100,10 +100,13 @@ function wrapper () {
         hash160: btc_utils_hash160,
         hash256: btc_utils_hash256,
         extractOutputAtIndex: btc_utils_extract_output_at_idx,
-        extractValue: btc_utils_extract_value
+        extractValue: btc_utils_extract_value,
+        extractHash: btc_utils_extract_hash,
+        extractOpReturn: btc_utils_extract_op_return_data
       },
       SPVUtils: {
-        deserializeHex: btc_spv_utils_deserialize_hex
+        deserializeHex: btc_spv_utils_deserialize_hex,
+        serializeHex: btc_spv_utils_serialize_hex
       }
     },
     base58: {
@@ -578,7 +581,10 @@ export class ContractEngine {
       context.global.setSync('btc_utils_hash256', BTCUtils.hash256)
       context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
       context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)
+      context.global.setSync('btc_utils_extract_hash', BTCUtils.extractHash)
+      context.global.setSync('btc_utils_extract_op_return_data', BTCUtils.extractOpReturnData)
       context.global.setSync('btc_spv_utils_deserialize_hex', utils.deserializeHex)
+      context.global.setSync('btc_spv_utils_serialize_hex', utils.serializeHex)
 
       //Base58
       context.global.setSync('bs58check_encode', bs58check.encode)

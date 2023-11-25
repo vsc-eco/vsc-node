@@ -53,11 +53,12 @@ interface OuputInterface {
 
 interface UtilsInterface {
   SHA256: (input: string) => string
-  bs58check: {
+  base58: {
     encode: (buf: Uint8Array) => string
     decode: (buf: string) => Uint8Array
     decodeUnsafe: (buf: string) => Uint8Array
   }
+  
   bitcoin: {
     ValidateSPV
     BTCUtils

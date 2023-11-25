@@ -28,7 +28,7 @@ import { NewCoreService } from "./new";
 interface CoreOptions {
     dbSuffix?: string
     mode?: 'lite'
-    newService: NewCoreService
+    newService?: NewCoreService
 }
 
 export class CoreService extends ModuleContainer {

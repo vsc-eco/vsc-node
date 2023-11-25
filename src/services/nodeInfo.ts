@@ -130,11 +130,11 @@ export class NodeInfoService {
             json_metadata: JSON.stringify({
                 ...json_metadata,
                 did_keys: [
-                    {
+                    ...(this.self.newService ? [{
                         ct: 'DID-BLS',
                         t: 'consensus',
                         key: this.self.newService.consensusKey.id,
-                    }
+                    }] : [])
                 ],
                 vsc_node: registrationInfo
             })

@@ -17,9 +17,11 @@ WORKDIR /vsc-node
 
 COPY --from=build /vsc-node-build/dist ./dist
 
+COPY --from=build /vsc-node-build/node_modules ./node_modules
+
 COPY package*.json ./
 
-RUN npm install --legacy-peer-deps --omit=dev
+RUN npm prune --production --legacy-peer-deps
 
 EXPOSE 1337
 

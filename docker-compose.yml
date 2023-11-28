@@ -51,6 +51,12 @@ services:
       IPFS_PATH: /etc/ipfs
     volumes:
       - ./data/ipfs:/etc/ipfs
+  
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600 --cleanup
 
 volumes:
   node-modules-store: {}

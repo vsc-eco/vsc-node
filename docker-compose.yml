@@ -1,13 +1,10 @@
 version: "3.3"
 
 services:
-  vsc-node: # name of the service
-    build: .
-    image: vsc-node # the image to use
-    container_name: vsc-node # what to label the container for docker ps
-    restart: always # restart if failed, until we stop it ourselves
-    #external_links:
-      #- mongo
+  vsc-node:
+    image: vaultec/vsc-node:latest
+    container_name: vsc-node
+    restart: always
     depends_on:
       - ipfs
     networks:
@@ -54,6 +51,12 @@ services:
       IPFS_PATH: /etc/ipfs
     volumes:
       - ./data/ipfs:/etc/ipfs
+  
+  watchtower:
+    image: containrrr/watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --interval 3600 --cleanup
 
 volumes:
   node-modules-store: {}

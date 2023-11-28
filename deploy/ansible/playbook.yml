@@ -124,7 +124,6 @@
 
     - name: Start up the vsc node
       docker_compose:
-        build: true
         project_src: /app/node
         files:
           - docker-compose.yml

@@ -34,6 +34,7 @@ export const schema = `
         included_in: String
         executed_in: String
         decoded_tx: JSON
+        redeem: JSON
     }
     type ContractState {
         id: String
@@ -134,6 +135,7 @@ export const schema = `
         findContract(id: String): FindContractResult
         findCID(id: String): findCIDResult
         findDeposit(id: String): Deposit
+        findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
         submitTransaction(blob: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo

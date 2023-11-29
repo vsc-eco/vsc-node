@@ -1,6 +1,7 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
 import { GraphQLError } from 'graphql';
+import * as IPFS from 'kubo-rpc-client'
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
 
 export const DebugResolvers = { 
@@ -167,6 +168,75 @@ export const Resolvers = {
       })
     }
   },
+  findLedgerTXs: async (_, args) => {
+    let query = {}
+
+    if(args.byContractId) {
+      query['headers.contract_id'] = args.byContractId
+    }
+
+    if(args.byToFrom) {
+      query['$or'] = [
+        {
+          'decoded_tx.from': args.byToFrom
+        },
+        {
+          'decoded_tx.dest': args.byToFrom
+        }
+      ]
+    }
+
+
+    let txs = await appContainer.self.transactionPool.transactionPool.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
+
+    const dedup = {}
+    const out = []
+    txs.forEach(e => {
+      if(!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
+        out.push(e)
+        dedup[(e as any).decoded_tx.tx_id] = true
+      }
+    })
+
+
+    return {
+      txs: out.map(e => {
+        return {
+          ...e,
+          redeem: async () => {
+            if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
+              return null
+            }
+            const contractInfo = await appContainer.self.contractEngine.contractDb.findOne({
+              id: e.headers.contract_id
+            })
+            console.log(contractInfo)
+            try {
+              
+              const redeemId = (e as any).decoded_tx.redeem_id
+              
+              const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+                path: `redeems/${redeemId}`,
+              })
+              
+              return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
+            } catch (ex) {
+              if (!ex.message.includes('no link named')) {
+                console.log(ex)
+              }
+              // console.log(ex)
+              return null
+            }
+          },
+        }
+      })
+    };
+  },
   localNodeInfo: async () => {
     const idInfo = await appContainer.self.ipfs.id()
     return {
@@ -253,5 +323,8 @@ export const Resolvers = {
     } else {
       throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
     }
+  },
+  submitTransaction: async (_, args) => {
+    
   }
 }

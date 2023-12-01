@@ -231,9 +231,13 @@ export const Resolvers = {
     const dedup = {}
     const out = []
     txs.forEach(e => {
-      if(!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
+      if((e as any).decoded_tx.tx_id) {
+        if(!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
+          out.push(e)
+          dedup[(e as any).decoded_tx.tx_id] = true
+        }
+      } else {
         out.push(e)
-        dedup[(e as any).decoded_tx.tx_id] = true
       }
     })
 

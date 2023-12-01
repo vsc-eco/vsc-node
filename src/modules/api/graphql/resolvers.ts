@@ -225,7 +225,10 @@ export const Resolvers = {
       ...query
     }, {
       limit: 100,
-      skip: 0
+      skip: 0,
+      sort: {
+        first_seen: -1
+      }
     }).toArray()
 
     const dedup = {}

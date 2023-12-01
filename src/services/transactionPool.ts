@@ -437,6 +437,7 @@ export class TransactionPoolService {
       opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
         return a + b;
       })
+      opts['decoded_tx.memo'] = tx.payload.memo;
     }
     
     if(op_category === "wrap_mint") {
@@ -493,6 +494,31 @@ export class TransactionPoolService {
       opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
         return a + b;
       })
+      const contractInfo = await this.self.contractEngine.contractDb.findOne({
+        id: tx.contract_id
+      })
+      try {
+        const listPathsCid = await this.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+          path: `outputs/${tx.payload.inputs[0].id}`,
+        })
+        
+        const data2 = await this.self.ipfs.dag.get(listPathsCid.cid)
+        const redeemId = data2.value.outputs.find(e => e.type === "REDEEM").id;
+        
+        const redeemCid = await this.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+          path: `redeems/${redeemId}`,
+        })
+        
+        opts['decoded_tx.redeem_id'] = redeemId
+        // dest = data2.value.val
+        // opts['decoded_tx.amount'] = wrapValue
+        // break;
+      } catch (ex) {
+        if (!ex.message.includes('no link named')) {
+          console.log(ex)
+        }
+        // console.log(ex)
+      }
     }
     
 

@@ -2,6 +2,7 @@ import { CID } from 'multiformats'
 import { appContainer } from '../index'
 import { GraphQLError } from 'graphql';
 import * as IPFS from 'kubo-rpc-client'
+import sift from 'sift'
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
 
 export const DebugResolvers = { 
@@ -61,9 +62,10 @@ export const Resolvers = {
       stateKeys: async (args) => {
         try {
           let key = args.key ? `${args.key}` : null
-          const obj2 = await appContainer.self.ipfs.dag.get(CID.parse(data.state_merkle), {
+          const objCid = await appContainer.self.ipfs.dag.resolve(CID.parse(data.state_merkle), {
             path: key,
           })
+          const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
           if(obj2.value.Links) {
             return obj2.value.Links.map(e => {
               return {
@@ -74,7 +76,36 @@ export const Resolvers = {
           } else {
             return []
           }
-        } catch {
+        } catch(ex) {
+          console.log(ex)
+          return null;
+        }
+      },
+      stateQuery: async (args) => {
+        try {
+          let key = args.key ? `${args.key}` : null
+          const objCid = await appContainer.self.ipfs.dag.resolve(CID.parse(data.state_merkle), {
+            path: key,
+          })
+          const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
+          if(obj2.value.Links) {
+            const out = await Promise.all(obj2.value.Links.map(e => {
+              return e.Hash
+            }).map(async (e) => {
+              return (await appContainer.self.ipfs.dag.get(e)).value
+            }));
+
+            // console.log(out, args.query)
+            if(args.query) {
+              return out.filter(sift(args.query))
+            } else {
+              return out
+            }
+          } else {
+            return []
+          }
+        } catch(ex) {
+          console.log(ex)
           return null;
         }
       },
@@ -208,6 +239,7 @@ export const Resolvers = {
       txs: out.map(e => {
         return {
           ...e,
+          first_seen: e.first_seen.toISOString(),
           redeem: async () => {
             if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
               return null
@@ -325,6 +357,34 @@ export const Resolvers = {
     }
   },
   submitTransaction: async (_, args) => {
-    
+    console.log(args.payload)
+    const json = JSON.parse(args.payload)
+
+
+    if(json.jws && json.linkedBlock) {
+      const root = await appContainer.self.ipfs.dag.put({
+        ...json.jws,
+        link: CID.parse(json.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
+      })
+
+      const linkedBlock = await appContainer.self.ipfs.block.put(Buffer.from(json.linkedBlock, 'base64'), {
+        format: 'dag-cbor'
+      })
+      console.log('graphql:linkedBlock', linkedBlock)
+
+      await appContainer.self.transactionPool.processMempoolTX(root.toString())
+
+
+      await appContainer.self.p2pService.memoryPoolChannel.call('announce_tx', {
+        payload: {
+          id: root.toString()
+        },
+        mode: 'basic'
+      })
+
+      return {
+        tx_id: root.toString()
+      }
+    }
   }
 }

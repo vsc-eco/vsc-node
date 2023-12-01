@@ -59,6 +59,7 @@
     "peer-id": "^0.16.0",
     "regtest-client": "^0.2.1",
     "shuffle-seed": "^1.1.6",
+    "sift": "^17.0.1",
     "tiny-secp256k1": "^2.2.3",
     "uuid": "^8.3.2",
     "varuint-bitcoin": "^1.1.2",

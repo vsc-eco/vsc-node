@@ -89,10 +89,13 @@ export const Resolvers = {
           })
           const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
           if(obj2.value.Links) {
-            const out = await Promise.all(obj2.value.Links.map(e => {
+            const out = await Promise.all(obj2.value.Links/*.map(e => {
               return e.Hash
-            }).map(async (e) => {
-              return (await appContainer.self.ipfs.dag.get(e)).value
+            })*/.map(async (e) => {
+              return {
+                ...(await appContainer.self.ipfs.dag.get(e.Hash)).value,
+                _id: e.Name
+              }
             }));
 
             // console.log(out, args.query)

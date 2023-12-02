@@ -384,6 +384,9 @@ export const Resolvers = {
 
       await appContainer.self.transactionPool.processMempoolTX(root.toString())
 
+      await appContainer.self.transactionPool.txDecode(root.toString(), await appContainer.self.transactionPool.transactionPool.findOne({
+        id: root.toString()
+      }))
 
       await appContainer.self.p2pService.memoryPoolChannel.call('announce_tx', {
         payload: {

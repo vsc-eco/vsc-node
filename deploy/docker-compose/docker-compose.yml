@@ -2,7 +2,7 @@ version: "3.3"
 
 services:
   vsc-node: # name of the service
-    image: vaultec/vsc-node:latest
+    image: vaultec/vsc-node:main
     container_name: vsc-node # what to label the container for docker ps
     restart: always # restart if failed, until we stop it ourselves
     #external_links:
@@ -21,6 +21,11 @@ services:
       - ./data/vsc-node:/root/.vsc-node
       - ./seed-backup.json:/root/.vsc-seed-backup.json
       - ./.git/refs/heads/main:/root/git_commit
+    logging:
+      driver: "json-file"
+      options:
+          max-file: "5"
+          max-size: "10m"
 
   mongo:
     container_name: mongo_vsc
@@ -32,6 +37,11 @@ services:
       - vsc-node
     volumes:
       - ./data/vsc-db:/data/db
+    logging:
+      driver: "json-file"
+      options:
+          max-file: "5"
+          max-size: "5m"
 
   ipfs:
     container_name: ipfs-vsc
@@ -47,15 +57,20 @@ services:
     ports:
       - "4001:4001"
       - "127.0.0.1:5001:5001"
-    environment: 
+    environment:
       IPFS_PATH: /etc/ipfs
     volumes:
       - ./data/ipfs:/etc/ipfs
+    logging:
+      driver: "json-file"
+      options:
+          max-file: "5"
+          max-size: "5m"
 
 volumes:
   node-modules-store: {}
   mongodb: {}
-      
+
 networks:
   vsc-node:
     driver: bridge

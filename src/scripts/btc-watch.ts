@@ -12,6 +12,7 @@ import { CoreService } from '../services'
 import { TransactionPoolService } from '../services/transactionPool'
 import { CID } from 'kubo-rpc-client'
 import { waitTxConfirm } from './utils'
+import { globalConfig } from './config'
 
 
 
@@ -94,7 +95,7 @@ async function createProof(tx_id: string) {
 
 void(async () => {
 
-    const mint_contract = '4026eb79dd55cd663dc6afb219dff47ff3058613'
+    const mint_contract = globalConfig.btcTokenContract
     const relay_contract = '42fe0195bb2fe0afe7e015871d8c5749d07177cc'
 
     const core = new CoreService({

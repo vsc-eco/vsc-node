@@ -5,13 +5,14 @@ import { TransactionPoolService } from '../services/transactionPool';
 import { sleep } from '../utils';
 import Axios from 'axios'
 import { waitTxConfirm } from './utils';
+import { globalConfig } from './config';
 
 
 
 
 void (async () => {
 
-    const mint_contract = '4026eb79dd55cd663dc6afb219dff47ff3058613'
+    const mint_contract = globalConfig.btcTokenContract
 
     const core = new CoreService({
         prefix: 'manual tx core',

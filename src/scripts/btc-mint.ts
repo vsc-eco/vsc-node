@@ -2,6 +2,7 @@
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 import { CoreService } from '../services';
 import { TransactionPoolService } from '../services/transactionPool';
+import { globalConfig } from './config';
 function readUInt64(buff, offset) {
     return buff.readInt32LE(offset) + 0x100000000*buff.readUInt32LE(offset + 4);
   }
@@ -55,7 +56,7 @@ void (async () => {
 
 
 
-    const contract_id = '71bb304cfe80a8fb4605007d589ba4d0eab6da59'
+    const contract_id = globalConfig.btcTokenContract
 
     const core = new CoreService({
         prefix: 'manual tx core',

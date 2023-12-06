@@ -434,9 +434,13 @@ export class TransactionPoolService {
       // console.log(tx)
       opts['decoded_tx.dest'] = tx.payload.dest
       opts['decoded_tx.from'] = entry.account_auth
-      opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
-        return a + b;
-      })
+      try {
+        opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
+          return a + b;
+        })
+      } catch {
+        console.log(tx)
+      }
       opts['decoded_tx.memo'] = tx.payload.memo;
     }
     
@@ -556,9 +560,9 @@ export class TransactionPoolService {
       for(let entry of await this.transactionPool.find({
         status: TransactionDbStatus.confirmed,
         type: TransactionDbType.input,
-        // decoded_tx: {
-        //   $exists: false
-        // }
+        decoded_tx: {
+          $exists: false
+        }
       }).toArray()) {
         // console.log(entry.id)
         try {

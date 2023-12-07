@@ -26,6 +26,7 @@ export class BlsDID {
   }
 
   get id() {
+    
     const publicKey = this.pubKey.toBytes()
     const bytes = new Uint8Array(publicKey.length + 2)
     bytes[0] = 0xea // ed25519 multicodec
@@ -203,6 +204,11 @@ export class BlsCircuit {
 void (async () => {
   await init('blst-native')
 })()
+
+export async function initBls() {
+  await init('blst-native')
+
+}
 // void (async () => {
 
 //   let msg = 'hello'

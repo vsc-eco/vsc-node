@@ -10,7 +10,7 @@ async function startup(): Promise<void> {
   })
   await core.start()
 
-  await coreNew.init()
+  await coreNew.init(core)
   await coreNew.start()
   
   const api = new ApiModule(1337, core)

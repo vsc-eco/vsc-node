@@ -20,8 +20,10 @@ export class NodeIdentity {
     async reportWitnesses() {
         const currentBlock = await HiveClient.blockchain.getCurrentBlockNum()
 
+        const originalWitneses = (await this.self.oldService.witness.witnessNodes()).map( e => e.account)
+
         const witnesses = await this.self.chainBridge.getWitnessesAtBlock(currentBlock)
-        console.log('Witneses at block', witnesses)
+        console.log('Witneses at block', witnesses.map(e => e.account).sort(), originalWitneses.sort())
 
     }
 

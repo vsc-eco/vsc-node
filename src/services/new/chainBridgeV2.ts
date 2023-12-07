@@ -30,10 +30,15 @@ export class ChainBridgeV2 {
     streamState: Collection
     witnessDb: Collection
     witnessHistoryDb: Collection
+    consensusDb: Collection
+    consensusDataDb: Collection
     pinQueue: PQueue;
     self: NewCoreService;
 
+    _tickHandles: Record<string, Function>
+
     constructor(coreService) {
+        this._tickHandles = {}
         this.self = coreService
         this.pinQueue = new PQueue({concurrency: 5})
     }
@@ -80,6 +85,10 @@ export class ChainBridgeV2 {
         })
     }
 
+    registerTickHandle(name, func: Function) {
+        this._tickHandles[name] = func
+    }
+
     async processEventStream() {
         console.log('processingEvents')
         let lastBlock;
@@ -121,6 +130,9 @@ export class ChainBridgeV2 {
                 await sleep(2_000)
             }
             for (let blk of blocks) {
+                for(let [name, handle] of Object.entries(this._tickHandles)) {
+                    await handle(blk)
+                }
                 for (let tx of blk.transactions) {
 
                     try {
@@ -201,6 +213,18 @@ export class ChainBridgeV2 {
                                     }, {
                                         upsert: true
                                     })
+
+                                    await this.witnessHistoryDb.updateOne({
+                                        account: opPayload.account,
+                                        valid_from:Number(blk.key),
+                                        type: "witness.last_signed"
+                                    }, {
+                                        $set: {
+                                            ref_id: tx.transaction_id
+                                        }
+                                    }, {
+                                        upsert: true
+                                    })
                                     
     
                                     //Handle witness DB update
@@ -274,7 +298,7 @@ export class ChainBridgeV2 {
                                     //     upsert: true
                                     // })
                                     this.pinQueue.add(async() => {
-                                        console.log(json.block_hash)
+                                        // console.log(json.block_hash)
                                         await this.self.ipfs.pin.add(IPFS.CID.parse(json.block_hash), {
                                             recursive: false
                                         })
@@ -294,7 +318,7 @@ export class ChainBridgeV2 {
                     
                 }
                 if(this.pinQueue.size > 0) {
-                    console.log('this.pinQueue.size', this.pinQueue.size)
+                    // console.log('this.pinQueue.size', this.pinQueue.size)
                 }
                 lastBlock = blk.key
                 await this.streamState.updateOne({
@@ -318,22 +342,25 @@ export class ChainBridgeV2 {
             let sort
             if(blk) {
                 query = {
+                    type: "witness.toggle",
                     account: e.account,
                     
                     valid_from: {
                         $lt: blk
-                    }
+                    },
+                    
                 }
                 sort = {
-                    valid_to: -1
+                    valid_from: -1
                 }
             } else {
                 query = {
+                    type: "witness.toggle",
                     account: e.account,
     
                     $or: [{
                         valid_to: {
-                            $exists: true
+                            $exists: false
                         }
                     }, {
                         valid_to: null
@@ -349,12 +376,12 @@ export class ChainBridgeV2 {
             // console.log(data)
 
             if(!data) {
-                console.log('filtered out 309', e.account)
+                // console.log('filtered out 309', e.account)
                 return null;
             }
             
             if(data.enabled !== true) {
-                console.log('filtered out 314', e.account, data)
+                // console.log('filtered out 314', e.account, data)
                 return null;
             }
 
@@ -367,14 +394,14 @@ export class ChainBridgeV2 {
                 const keys = await this.accountAuths.findOne({
                     account: data.account,
                     valid_from: {
-                        $lt: data.valid_from
+                        $lte: data.valid_from
                     },
                     $or: [
                         {
                             valid_to: {$exists: false}
                         }, {
                             valid_to: {
-                            $gt: data.valid_from
+                                $gt: data.valid_from
                         }
                     }
                 ]
@@ -383,11 +410,31 @@ export class ChainBridgeV2 {
                     valid_to: 1
                 }
             })
+            
+            const lastSigned = await this.witnessHistoryDb.findOne({
+                account: data.account,
+                type: "witness.last_signed",
+                valid_from: {
+                    $lt: blk
+                }
+            }, {
+                sort: {
+                    valid_from: -1
+                }
+            })
+
+            const maxSignedDiff = (3 * 24 * 60 * 20)
+
+            if(blk - lastSigned.valid_from > maxSignedDiff) {
+                return null
+            }
+
+            // console.log(keys)
             if(keys) {
                 e.keys = keys.keys;
             } else {
-                console.log('keys is empty')
-                console.log('filtered out 347 keys', e.account)
+                // console.log('keys is empty')
+                // console.log('filtered out 347 keys', e.account)
                 return null
             }
             
@@ -398,14 +445,21 @@ export class ChainBridgeV2 {
         return filteredWitnesses;
     }
 
+    async createConsensusHeader(height: number) {
+        const consensusList = await this.getWitnessesAtBlock(height)
+
+    }
+
     async init() {
         
-        this.db = createMongoDBClient('new')
+        this.db = this.self.db
         this.events = this.db.collection('events')
         this.accountAuths = this.db.collection('account_auths')
         this.streamState = this.db.collection('stream_state')
         this.witnessDb = this.db.collection('witnesses')
         this.witnessHistoryDb = this.db.collection('witness_history')
+        this.consensusDb = this.db.collection('consensus')
+        this.consensusDataDb = this.db.collection('consensus_data')
         
         try {
             await this.events.createIndex({
@@ -449,5 +503,8 @@ export class ChainBridgeV2 {
 
     async start() {
         this.stream.startStream()
+
+        const witnesses = await this.self.chainBridge.getWitnessesAtBlock(78_000_000)
+        console.log('witnesses at time', witnesses.map(e => e.account))
     }
 }

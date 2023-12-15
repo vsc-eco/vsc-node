@@ -1,4 +1,9 @@
 import * as IPFS from 'kubo-rpc-client'
+import { Ed25519Provider } from "key-did-provider-ed25519";
+import { DID } from "dids";
+import KeyResolver from 'key-did-resolver'
+import winston from 'winston';
+import { Db } from 'mongodb';
 import { Config } from "../nodeConfig";
 import { ChainBridgeV2 } from "./chainBridgeV2";
 import { NodeIdentity } from "./nodeIdentity";
@@ -6,9 +11,9 @@ import { BlsDID } from "./utils/crypto/bls-did";
 import { CoreService } from '..';
 import { WitnessServiceV2 } from './witness';
 import { getLogger } from '../../logger';
-import winston from 'winston';
 import { createMongoDBClient } from '../../utils';
-import { Db } from 'mongodb';
+import { TransactionPoolV2 } from './transactionPool';
+import { P2PService } from './p2pService';
 
 export class NewCoreService {
     config: Config;
@@ -20,6 +25,9 @@ export class NewCoreService {
     witness: WitnessServiceV2;
     logger: winston.Logger;
     db: Db;
+    transactionPool: TransactionPoolV2;
+    p2pService: P2PService
+    identity: DID;
     
     constructor() {
         this.config = new Config(Config.getConfigDir())
@@ -32,22 +40,29 @@ export class NewCoreService {
         this.chainBridge = new ChainBridgeV2(this)
         this.nodeIdentity = new NodeIdentity(this)
         this.witness = new WitnessServiceV2(this)
+        this.p2pService = new P2PService(this)
+        this.transactionPool = new TransactionPoolV2(this)
     }
     
     async init(oldService) {
-        this.db =  createMongoDBClient('new')
+        this.db = createMongoDBClient('new')
        
         this.oldService = oldService
         await this.config.open()
-        const privateKey = Buffer.from(this.config.get('identity.nodePrivate'),'base64')
+        const privateKey = Buffer.from(this.config.get('identity.nodePrivate'), 'base64')
         this.consensusKey = BlsDID.fromSeed(privateKey)
+
+        const keyPrivate = new Ed25519Provider(privateKey)
+        const did = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
+        await did.authenticate()
+        this.identity = did
+
         await this.chainBridge.init();
+        await this.p2pService.start()
         await this.witness.init();
+        await this.transactionPool.init()
         
-        // console.log('config file', privateKey)
-        // console.log(await this.consensusKey.signObject({
-        //     message: 'kitchen'
-        // }))
+       
     }
 
     async start() {

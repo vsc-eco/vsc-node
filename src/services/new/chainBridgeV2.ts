@@ -35,7 +35,10 @@ export class ChainBridgeV2 {
     pinQueue: PQueue;
     self: NewCoreService;
 
-    _tickHandles: Record<string, Function>
+    _tickHandles: Record<string, {
+        type?: 'tx' | 'block'
+        func: Function
+    }>
 
     constructor(coreService) {
         this._tickHandles = {}
@@ -85,8 +88,11 @@ export class ChainBridgeV2 {
         })
     }
 
-    registerTickHandle(name, func: Function) {
-        this._tickHandles[name] = func
+    registerTickHandle(name, func: Function, opts?: {type: 'tx' | 'block'}) {
+        this._tickHandles[name] = {
+            type: opts.type,
+            func
+        }
     }
 
     async processEventStream() {
@@ -130,8 +136,14 @@ export class ChainBridgeV2 {
                 await sleep(2_000)
             }
             for (let blk of blocks) {
-                for(let [name, handle] of Object.entries(this._tickHandles)) {
-                    await handle(blk)
+                for(let [name, {type, func}] of Object.entries(this._tickHandles)) {
+                    if(type === 'block') {
+                        try {
+                            await func(blk)
+                        } catch(ex) {
+                            console.log(ex)
+                        }
+                    }
                 }
                 for (let tx of blk.transactions) {
 
@@ -283,8 +295,20 @@ export class ChainBridgeV2 {
                         } else if (op === 'custom_json') {
                             try {
                                 if (opPayload.id.startsWith('vsc.')) {
+
+
                                     // console.log(opPayload)
                                     // console.log('txDI', tx)
+                                    for(let [name, {type, func}] of Object.entries(this._tickHandles)) {
+                                        if(type === 'tx') {
+                                            try {
+                                                tx.block_height = blk.key
+                                                await func([opPayload, tx])
+                                            } catch (ex) {
+                                                console.log(ex)
+                                            }
+                                        }
+                                    }
                                     const json = JSON.parse(opPayload.json)
                                     // await this.events.updateOne({
                                     //     id: "announce_block",
@@ -297,13 +321,15 @@ export class ChainBridgeV2 {
                                     // }, {
                                     //     upsert: true
                                     // })
-                                    this.pinQueue.add(async() => {
-                                        // console.log(json.block_hash)
-                                        await this.self.ipfs.pin.add(IPFS.CID.parse(json.block_hash), {
-                                            recursive: false
+                                    if(json.block_hash) {
+                                        this.pinQueue.add(async() => {
+                                            // console.log(json.block_hash)
+                                            await this.self.ipfs.pin.add(IPFS.CID.parse(json.block_hash), {
+                                                recursive: false
+                                            })
+                                            await this.self.ipfs.pin.rm(IPFS.CID.parse(json.block_hash))
                                         })
-                                        await this.self.ipfs.pin.rm(IPFS.CID.parse(json.block_hash))
-                                    })
+                                    }
                                 }
                             } catch (ex) {
                                 console.log(ex)

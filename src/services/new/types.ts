@@ -15,16 +15,17 @@ export enum TransactionDbType {
     output,
     virtual,
     core,
+    anchor_ref,
 }
 
 export interface BlockHeader extends VSCSignedData {
-    // anchor_chains: {
-    //     'hive:mainet': {
-    //         //ref_anchor_pos: 79976520
-    //         ref_anchor_block: number
-    //         ref_anchor_start: number
-    //     }
-    // }
+    anchor_chains: {
+        'hive:mainet': {
+            //ref_anchor_pos: 79976520
+            ref_anchor_block: number
+            ref_anchor_start: number
+        }
+    }
 
     // block: CID
     previous: CID
@@ -36,7 +37,8 @@ interface BlockContent {
     anchor_chains: {
         "hive:mainet": {
             ref_anchor_block: 20,
-            ref_anchor_start: 0
+            ref_anchor_start: 0,
+            tx_root: string
         }
     },
     contract_index: {
@@ -44,13 +46,17 @@ interface BlockContent {
     }
 
     txs: Array<TransactionConfirmed>
-    
 }
 
 interface RollupHeader extends VSCSignedData {
     
-    consensus_dag: CID
+    //DAG root of witness consensus list
+    witness_root: CID
     merkle_hash: string
+}
+
+interface BlockHeaderIdea {
+    
 }
 
 
@@ -64,10 +70,10 @@ export interface TransactionConfirmed {
 
 
 
-interface VSCSignedData {
+export interface VSCSignedData {
     //This stays with the data at all times. It is not removed from the payload when verifying
     required_auths: Array<{
-        type: 'consensus' | 'active' | 'posting',
+        type?: 'consensus' | 'active' | 'posting',
         value: string
     }>
     //Removed when verifying
@@ -75,8 +81,8 @@ interface VSCSignedData {
 }
 
 export enum SignatureType {
-    JWS,
-    HIVE,
+    JWS = 'JWS',
+    HIVE = 'HIVE',
     BLS = 'DID-BLS',
     BLS_AGG = 'DID-BLS-AGG'
 }
@@ -109,4 +115,88 @@ export interface HiveAccountAuthority {
         ct: 'DID' | 'DID-BLS' | 'DID-BLS-AGG'
         key: string
     }>
+}
+
+export enum OutputCode {
+    OK = 0,
+    FAILED_GENERAL = -1
+}
+
+export interface OutputResult {
+    code: OutputCode | number
+    msg?: any
+    logs?: string[]
+    value?: any
+    err?: any
+}
+
+export interface OutputEvent {
+    domain: 'hive' | 'vsc'
+    type: 'call' | ''
+}
+
+export interface OutputEvent2 {
+    domain: 'hive' | 'vsc'
+    type: 'call' | ''
+}
+
+export interface TxOutputBase {
+    
+    contract_id: string
+    inputs: Array<{
+        id: string
+    }>
+    state_merkle: string
+    tx_merkle: string
+    
+    //Indexed by TX order in inputs array
+    results: Array<OutputResult>
+    
+    events: Array<OutputEvent>
+}
+
+
+export interface TxOutputV2Signed extends TxOutputBase, VSCSignedData {}
+//Header
+export interface TxOutputHeaderBase {
+
+    data: CID
+    state_merkle: string
+    events: []
+}
+
+export interface TxOutputHeader extends TxOutputHeaderBase, VSCSignedData {}
+
+
+export interface TransactionDbRecordV2 {
+    status: TransactionDbStatus
+    id: string
+    // op: string
+    required_auths: Array<{
+        type: 'consensus' | 'active' | 'posting',
+        value: string
+    }>
+    headers: {
+        lock_block: number
+    }
+    data: any | null
+    result: any | null
+    local: boolean
+    accessible: boolean
+    first_seen: Date
+    src: 'vsc' | 'hive'
+}
+
+export interface TransactionContainerV2 {
+    __t: 'vsc-tx'
+    __v: '0.2'
+    headers: {
+        payer?: string
+        lock_block?: string
+    }
+    tx: { 
+        op: string
+        payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
+        type: TransactionDbType
+    }
 }

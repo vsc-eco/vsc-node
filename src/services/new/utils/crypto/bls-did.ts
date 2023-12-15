@@ -60,6 +60,15 @@ export class BlsDID {
 
     return encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes())
   }
+
+  async signRaw(msg: Buffer | Uint8Array) {
+    return {
+      s: encodeBase64(this.privKey.sign(msg).toBytes()),
+      p: Buffer.from(JSON.stringify({
+        pub: this.id,
+      })).toString('base64url'),
+    }
+  }
   
   async signPacked(msg) {
     if (!this.privKey) {
@@ -88,6 +97,9 @@ export class BlsDID {
       signatures: [
         {
           t: SignatureType.BLS,
+          p: Buffer.from(JSON.stringify({
+            pub: this.id,
+          })).toString('base64url'),
           s: signature
         }
       ]
@@ -122,7 +134,7 @@ export class BlsCircuit {
   // bitSet: BitSet
   constructor(msg) {
     this.msg = msg
-    let date = new Date()
+
     this.aggPubKeys = new Map()
   }
 
@@ -130,20 +142,23 @@ export class BlsCircuit {
     return this.addMany([data])
   }
 
-  addMany(data: Array<{ did: string; sig: string }>): { errors: string[] } {
+  async addMany(data: Array<{ did: string; sig: string }>): Promise<{ errors: string[] }> {
     let publicKeys = []
     let sigs = []
     let errors = []
     for (let e of data) {
       const did = BlsDID.fromString(e.did)
-      let sig = bls.Signature.fromBytes(decodeBase64(e.sig))
+      let sig = bls.Signature.fromBytes(Buffer.from(e.sig, 'base64url'))
 
-      if (sig.verify(did.pubKey, this.msg)) {
+      console.log(did.pubKey, this.msg)
+      const msg = await encodePayload(this.msg)
+      if (sig.verify(did.pubKey, msg.cid.bytes)) {
         this.aggPubKeys.set(did.id, true)
         publicKeys.push(did.pubKey)
         sigs.push(sig)
       } else {
         errors.push(`INVALID_SIG for ${did.id}`)
+        // throw new Error(`INVALID_SIG for ${did.id}`)
       }
     }
 
@@ -153,6 +168,8 @@ export class BlsCircuit {
     if (this.sig) {
       sigs.push(this.sig)
     }
+
+    console.log([...publicKeys], [...sigs])
     const pubKey = bls.PublicKey.aggregate([...publicKeys])
     const sig = bls.Signature.aggregate([...sigs])
 
@@ -170,6 +187,14 @@ export class BlsCircuit {
     return bls.Signature.fromBytes(this.sig).verify(
       this.did.pubKey,
       (await encodePayload(msg)).cid.bytes,
+    )
+  }
+
+  async verifySig(data: {sig: string, pub}) {
+    const did = BlsDID.fromString(data.pub)
+    return bls.Signature.fromBytes(Buffer.from(data.sig, 'base64url')).verify(
+      did.pubKey,
+      (await encodePayload(this.msg)).cid.bytes,
     )
   }
 

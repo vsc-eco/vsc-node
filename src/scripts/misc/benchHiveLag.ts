@@ -1,4 +1,4 @@
-import { fastStream, sleep } from "../utils"
+import { fastStream, sleep } from "../../utils"
 import { Client, PrivateKey } from "@hiveio/dhive"
 import 'dotenv/config'
 

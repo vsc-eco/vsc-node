@@ -1,4 +1,14 @@
 import loader from '@assemblyscript/loader'
+import Path, {dirname} from 'path'
+import {fork, ChildProcess} from 'child_process'
+import { fileURLToPath } from 'url';
+import EventEmitter from 'events'
+import Crypto from 'crypto'
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 
 /**
  * Copyright 2019 Google Inc. All Rights Reserved.
@@ -190,4 +200,127 @@ export async function instantiateStreaming(source, imports) {
   let result = await WebAssembly.instantiateStreaming(source, state.wrapImports(imports))
   state.init(result.instance, imports)
   return result
+}
+
+enum CallResultError {
+  TIMEOUT = 'timeout'
+}
+
+interface VmCallResult {
+  code: number
+  result: string
+  logs: Array<string>
+  err: null | CallResultError
+}
+
+export class VmContainer {
+  proc: {
+    start_time: Date
+    timer_pid: number
+  }
+  child: ChildProcess
+  opts: {
+    contract_id: string
+    state_merkle: string
+    cid: string
+  }
+  ready: boolean
+  events: EventEmitter;
+  reqId: string;
+  startTime: Date | null;
+
+  constructor(opts) {
+    this.opts = opts
+    this.events = new EventEmitter()
+  }
+
+  async call(args: {
+    action: string
+    payload: string
+  }) {
+    let reqId = Crypto.randomBytes(8).toString('base64url')
+    this.reqId = reqId
+    this.startTime = new Date();
+    this.child.send({
+      type: "call",
+      action: args.action,
+      payload: args.payload,
+      reqId
+    });
+    const timeoutPid = setInterval(() => {
+      const lag = new Date().getTime() - this.startTime.getTime();
+      if(lag > 50) {
+        this.events.emit('timeout', {
+          type: 'timeout'
+        })
+      }
+    }, 1)
+    const executeStop = await new Promise((resolve, reject) => {
+      this.events.once('execute-stop', (result0) => {
+        resolve(result0)
+        clearInterval(timeoutPid)
+      })
+      this.events.once('timeout', (resultErr) => {
+        resolve(resultErr)
+        clearInterval(timeoutPid)
+      })
+    })
+    
+    console.log('finish', executeStop, new Date().getTime() - this.startTime.getTime())
+    return executeStop
+  }
+  
+  async finish() {
+    this.child.send({
+      type: 'finish'
+    })
+    const result = await new Promise((resolve, reject) => {
+      this.events.once('result', (result0) => {
+        resolve(result0)
+      })
+      this.events.once('timeout', (resultErr) => {
+        resolve(resultErr)
+      })
+    })
+    return result;
+  }
+
+  async init() {
+
+    const parameters = [];
+    
+    const partPath = Path.join(__dirname, 'vm-runner.js').replace('src', 'dist')
+
+    const child = fork(partPath, parameters, {
+        env: {
+          cid: this.opts.cid,
+          contract_id: this.opts.contract_id
+        } as any,
+        silent: true,
+        detached: false
+    });
+    this.child = child;
+    this.child.on('message', (message: any) => {
+      if(message.type === 'ready') {
+        this.ready = true
+        this.events.emit('ready')
+      }
+      if(message.type === 'result') {
+        this.events.emit('result', message)
+      }
+      if(message.type === 'execute-stop') {
+        this.events.emit('execute-stop', message)
+      }
+    })
+  }
+
+  cleanup() {
+    this.child.kill()
+  }
+
+  onReady() {
+    return new Promise((resolve) => {
+      this.events.on('ready', resolve)
+    })
+  }
 }

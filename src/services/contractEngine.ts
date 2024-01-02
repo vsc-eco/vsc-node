@@ -1,5 +1,4 @@
 import { Collection } from 'mongodb'
-import ivm from 'isolated-vm'
 import { CID } from 'multiformats'
 import jsonpatch from 'fast-json-patch'
 import SHA256 from 'crypto-js/sha256'
@@ -488,265 +487,265 @@ export class ContractEngine {
    * Executes a list of operations
    * @param id
    */
-  async contractExecuteRaw(id, operations, options: {
-    benchmark: Benchmark
-    codeOverride?: string
-  }): Promise<ContractOutput> {
-    const benchmark = options.benchmark
-    if(operations.length === 0) {
-      throw new Error('A minimum of one contract operation should be specified')
-    }
-    const contractInfo = await this.contractDb.findOne({
-      id,
-    })
-    if(!contractInfo) {
-      await this.contractDb.findOneAndUpdate({
-        id
-      }, {
-        $set: {
-          status: 'FAILED'
-        }
-      })
-      throw new Error('Smart contract not registered with node')
-    }
-    let codeRaw = ''
-    if(!this.contractCache[id]) {
-      for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
-        codeRaw = codeRaw + chunk.toString()
-      }
-      this.contractCache[id] = codeRaw
-    } else {
-      codeRaw = this.contractCache[id]
-    }
+  // async contractExecuteRaw(id, operations, options: {
+  //   benchmark: Benchmark
+  //   codeOverride?: string
+  // }): Promise<ContractOutput> {
+  //   const benchmark = options.benchmark
+  //   if(operations.length === 0) {
+  //     throw new Error('A minimum of one contract operation should be specified')
+  //   }
+  //   const contractInfo = await this.contractDb.findOne({
+  //     id,
+  //   })
+  //   if(!contractInfo) {
+  //     await this.contractDb.findOneAndUpdate({
+  //       id
+  //     }, {
+  //       $set: {
+  //         status: 'FAILED'
+  //       }
+  //     })
+  //     throw new Error('Smart contract not registered with node')
+  //   }
+  //   let codeRaw = ''
+  //   if(!this.contractCache[id]) {
+  //     for await (const chunk of this.self.ipfs.cat(contractInfo.code)) {
+  //       codeRaw = codeRaw + chunk.toString()
+  //     }
+  //     this.contractCache[id] = codeRaw
+  //   } else {
+  //     codeRaw = this.contractCache[id]
+  //   }
 
-    let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
+  //   let code = codeTemplate.replace('###ACTIONS###', options.codeOverride || codeRaw)
 
-    let chainActions = null
-    let stateMerkle
-    let startMerkle
-    for (let op of operations) {
-      const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
-        path: "/link/tx"
-      })).value
-      // this.self.logger.debug(`executing op: ${op}`, opData)
-      //Performance: access should be instant
-      if(!contractInfo) {
-        throw new Error("Contract Not Indexed Or Does Not Exist")
-      }
-      //Performance: access should be loaded from disk unless content is remote
+  //   let chainActions = null
+  //   let stateMerkle
+  //   let startMerkle
+  //   for (let op of operations) {
+  //     const opData = (await this.self.ipfs.dag.get(CID.parse(op.id), {
+  //       path: "/link/tx"
+  //     })).value
+  //     // this.self.logger.debug(`executing op: ${op}`, opData)
+  //     //Performance: access should be instant
+  //     if(!contractInfo) {
+  //       throw new Error("Contract Not Indexed Or Does Not Exist")
+  //     }
+  //     //Performance: access should be loaded from disk unless content is remote
       
-      const state = await this.contractStateRaw(id, stateMerkle)
-      if (!startMerkle) {
-        startMerkle = state.startMerkle.toString()
-      }
+  //     const state = await this.contractStateRaw(id, stateMerkle)
+  //     if (!startMerkle) {
+  //       startMerkle = state.startMerkle.toString()
+  //     }
 
-      const includedRecord = await this.self.chainBridge.blockHeaders.findOne({
-        id: op.included_in
-      })
+  //     const includedRecord = await this.self.chainBridge.blockHeaders.findOne({
+  //       id: op.included_in
+  //     })
 
-      const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
-      const context = await isolate.createContext()
-      context.global.setSync('global', context.global.derefInto())
+  //     const isolate = new ivm.Isolate({ memoryLimit: 128 }) // fixed 128MB memory limit for now, maybe should be part of tx fee calculation
+  //     const context = await isolate.createContext()
+  //     context.global.setSync('global', context.global.derefInto())
 
-      // Expose a new function to the isolate which will create ExternalCopy of the passed argument
-      context.global.setSync('make_external_copy', function(arg: any) {
-        return new ivm.ExternalCopy(arg)
-      })
+  //     // Expose a new function to the isolate which will create ExternalCopy of the passed argument
+  //     context.global.setSync('make_external_copy', function(arg: any) {
+  //       return new ivm.ExternalCopy(arg)
+  //     })
 
-      // log
-      context.global.setSync('log', (...args) => {
-        console.log(...args)
-      })
+  //     // log
+  //     context.global.setSync('log', (...args) => {
+  //       console.log(...args)
+  //     })
 
-      // sha256
-      context.global.setSync('sha256', (payloadToHash: string | object) => {
-        if (typeof payloadToHash === 'string') {
-          return SHA256(payloadToHash).toString(enchex);
-        }
+  //     // sha256
+  //     context.global.setSync('sha256', (payloadToHash: string | object) => {
+  //       if (typeof payloadToHash === 'string') {
+  //         return SHA256(payloadToHash).toString(enchex);
+  //       }
 
-        return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
-      })
+  //       return SHA256(JSON.stringify(payloadToHash)).toString(enchex);
+  //     })
 
-      // btc functions
-      context.global.setSync('btc_validate_spv_header_chain', ValidateSPV.validateHeaderChain)
-      context.global.setSync('btc_validate_spv_proof', ValidateSPV.validateProof)
-      context.global.setSync('btc_ser_deserialize_spv_proof', ser.deserializeSPVProof)
-      context.global.setSync('btc_parse_tx_hex', parseTxHex)
-      context.global.setSync('btc_reverse_bytes', reverse)
-      context.global.setSync('btc_utils_extract_prev_block_le', BTCUtils.extractPrevBlockLE)
-      context.global.setSync('btc_utils_extract_ts', BTCUtils.extractTimestamp)
-      context.global.setSync('btc_utils_extract_ts_le', BTCUtils.extractTimestampLE)
-      context.global.setSync('btc_utils_extract_merkleroot_le', BTCUtils.extractMerkleRootLE)
-      context.global.setSync('btc_utils_hash160', BTCUtils.hash160)
-      context.global.setSync('btc_utils_hash256', BTCUtils.hash256)
-      context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
-      context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)
-      context.global.setSync('btc_utils_extract_hash', BTCUtils.extractHash)
-      context.global.setSync('btc_utils_extract_op_return_data', BTCUtils.extractOpReturnData)
-      context.global.setSync('btc_spv_utils_deserialize_hex', utils.deserializeHex)
-      context.global.setSync('btc_spv_utils_serialize_hex', utils.serializeHex)
+  //     // btc functions
+  //     context.global.setSync('btc_validate_spv_header_chain', ValidateSPV.validateHeaderChain)
+  //     context.global.setSync('btc_validate_spv_proof', ValidateSPV.validateProof)
+  //     context.global.setSync('btc_ser_deserialize_spv_proof', ser.deserializeSPVProof)
+  //     context.global.setSync('btc_parse_tx_hex', parseTxHex)
+  //     context.global.setSync('btc_reverse_bytes', reverse)
+  //     context.global.setSync('btc_utils_extract_prev_block_le', BTCUtils.extractPrevBlockLE)
+  //     context.global.setSync('btc_utils_extract_ts', BTCUtils.extractTimestamp)
+  //     context.global.setSync('btc_utils_extract_ts_le', BTCUtils.extractTimestampLE)
+  //     context.global.setSync('btc_utils_extract_merkleroot_le', BTCUtils.extractMerkleRootLE)
+  //     context.global.setSync('btc_utils_hash160', BTCUtils.hash160)
+  //     context.global.setSync('btc_utils_hash256', BTCUtils.hash256)
+  //     context.global.setSync('btc_utils_extract_output_at_idx', BTCUtils.extractOutputAtIndex)
+  //     context.global.setSync('btc_utils_extract_value', BTCUtils.extractValue)
+  //     context.global.setSync('btc_utils_extract_hash', BTCUtils.extractHash)
+  //     context.global.setSync('btc_utils_extract_op_return_data', BTCUtils.extractOpReturnData)
+  //     context.global.setSync('btc_spv_utils_deserialize_hex', utils.deserializeHex)
+  //     context.global.setSync('btc_spv_utils_serialize_hex', utils.serializeHex)
 
-      //Base58
-      context.global.setSync('bs58check_encode', bs58check.encode)
-      context.global.setSync('bs58check_decode', bs58check.decode)
-      context.global.setSync('bs58check_decode_unsafe', bs58check.decodeUnsafe)
+  //     //Base58
+  //     context.global.setSync('bs58check_encode', bs58check.encode)
+  //     context.global.setSync('bs58check_decode', bs58check.decode)
+  //     context.global.setSync('bs58check_decode_unsafe', bs58check.decodeUnsafe)
 
-      // apis
-      context.global.setSync('set_chain_actions', (actions: OutputActions) => {
-        chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
-      })
-      context.global.setSync('api', new ivm.ExternalCopy({
-        action: opData.action,
-        payload: opData.payload,
-        input: {
-          sender: {
-            type: "DID",
-            id: op.account_auth
-          },
-          tx_id: op.id,
-          included_in: op.included_in,
-          included_block: includedRecord.hive_ref_block,
-          included_date: includedRecord.hive_ref_date
-        }
-      }))
-      context.global.setSync('transfer_funds', new ivm.Reference(async (to: DID, amount: number) => {
-        let result = await this.transferFunds(to, amount)
-        return new ivm.ExternalCopy(result)
-      }))
-      context.global.setSync('withdraw_funds', new ivm.Reference(async (amount: number) => {
-        let result = await this.withdrawFunds(amount)
-        return new ivm.ExternalCopy(result)
-      }))
-      context.global.setSync('get_balance', new ivm.Reference(async (accountId: string) => {
-        let result = await this.self.chainBridge.calculateBalanceSum(accountId, {
-          // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
-        } as BlockRef, id)
-        return new ivm.ExternalCopy(result)
-      }))
+  //     // apis
+  //     context.global.setSync('set_chain_actions', (actions: OutputActions) => {
+  //       chainActions = (actions.opStack as Array<HiveOps>).map(e => ({tx: e}))
+  //     })
+  //     context.global.setSync('api', new ivm.ExternalCopy({
+  //       action: opData.action,
+  //       payload: opData.payload,
+  //       input: {
+  //         sender: {
+  //           type: "DID",
+  //           id: op.account_auth
+  //         },
+  //         tx_id: op.id,
+  //         included_in: op.included_in,
+  //         included_block: includedRecord.hive_ref_block,
+  //         included_date: includedRecord.hive_ref_date
+  //       }
+  //     }))
+  //     context.global.setSync('transfer_funds', new ivm.Reference(async (to: DID, amount: number) => {
+  //       let result = await this.transferFunds(to, amount)
+  //       return new ivm.ExternalCopy(result)
+  //     }))
+  //     context.global.setSync('withdraw_funds', new ivm.Reference(async (amount: number) => {
+  //       let result = await this.withdrawFunds(amount)
+  //       return new ivm.ExternalCopy(result)
+  //     }))
+  //     context.global.setSync('get_balance', new ivm.Reference(async (accountId: string) => {
+  //       let result = await this.self.chainBridge.calculateBalanceSum(accountId, {
+  //         // pla: TODO, NEED TO SUPPLY CURRENT BLOCK INFORMATION IN ORDER TO CALC THE BALANCE
+  //       } as BlockRef, id)
+  //       return new ivm.ExternalCopy(result)
+  //     }))
 
-      context.global.setSync('buffer_from', Buffer.from)
+  //     context.global.setSync('buffer_from', Buffer.from)
 
-      // state
-      context.global.setSync('state_remote', new ivm.Reference(async (id: string) => {
-        let result = await state.client.remoteState(id)
-        return new ivm.ExternalCopy({
-          pull: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.pull(key))),
-          ls: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.ls(key))),
-        })
-      }))
-      context.global.setSync('state_pull', new ivm.Reference(async (key: string) => {
-        let result = await state.client.pull(key)
-        return new ivm.ExternalCopy(result)
-      }))
-      context.global.setSync('state_update', new ivm.Reference(async (key: string, value: any) => {
-        await state.client.update(key, value)
-      }))
-      context.global.setSync('state_ls', new ivm.Reference(async (key: string) => {
-        let result = await state.client.ls(key)
-        return new ivm.ExternalCopy(result)
-      }))
-      context.global.setSync('state_del', new ivm.Reference(async (key: string) => {
-        await state.client.del(key)
-      }))
-      context.global.setSync('done', () => {
-        console.log('stateMerkle', stateMerkle)
-        stateMerkle = state.finish().stateMerkle
-      })
-      const compiled = await isolate.compileScript(code)
-      await compiled.run(context)
-    }
+  //     // state
+  //     context.global.setSync('state_remote', new ivm.Reference(async (id: string) => {
+  //       let result = await state.client.remoteState(id)
+  //       return new ivm.ExternalCopy({
+  //         pull: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.pull(key))),
+  //         ls: new ivm.Reference(async (key: string) => new ivm.ExternalCopy(await result.ls(key))),
+  //       })
+  //     }))
+  //     context.global.setSync('state_pull', new ivm.Reference(async (key: string) => {
+  //       let result = await state.client.pull(key)
+  //       return new ivm.ExternalCopy(result)
+  //     }))
+  //     context.global.setSync('state_update', new ivm.Reference(async (key: string, value: any) => {
+  //       await state.client.update(key, value)
+  //     }))
+  //     context.global.setSync('state_ls', new ivm.Reference(async (key: string) => {
+  //       let result = await state.client.ls(key)
+  //       return new ivm.ExternalCopy(result)
+  //     }))
+  //     context.global.setSync('state_del', new ivm.Reference(async (key: string) => {
+  //       await state.client.del(key)
+  //     }))
+  //     context.global.setSync('done', () => {
+  //       console.log('stateMerkle', stateMerkle)
+  //       stateMerkle = state.finish().stateMerkle
+  //     })
+  //     const compiled = await isolate.compileScript(code)
+  //     await compiled.run(context)
+  //   }
 
-    this.self.logger.info('new state merkle of executed contract', stateMerkle)
-    benchmark.stage('4')
+  //   this.self.logger.info('new state merkle of executed contract', stateMerkle)
+  //   benchmark.stage('4')
     
-    if(!(startMerkle instanceof CID)) {
-      startMerkle = CID.parse(startMerkle);
-    }
+  //   if(!(startMerkle instanceof CID)) {
+  //     startMerkle = CID.parse(startMerkle);
+  //   }
     
-    stateMerkle = CID.asCID(stateMerkle);
+  //   stateMerkle = CID.asCID(stateMerkle);
 
-    let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
-    startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
-      return {
-        ...e,
-        Hash: e.Hash.toString(),
-      }
-    })
-    let stateMerkleObj = await this.self.ipfs.dag.get(stateMerkle)
-    stateMerkleObj.value.Links = stateMerkleObj.value.Links.map((e) => {
-      return { 
-        ...e,
-        Hash: e.Hash.toString(),
-      }
-    })
+  //   let startMerkleObj = await this.self.ipfs.dag.get(startMerkle)
+  //   startMerkleObj.value.Links = startMerkleObj.value.Links.map((e) => {
+  //     return {
+  //       ...e,
+  //       Hash: e.Hash.toString(),
+  //     }
+  //   })
+  //   let stateMerkleObj = await this.self.ipfs.dag.get(stateMerkle)
+  //   stateMerkleObj.value.Links = stateMerkleObj.value.Links.map((e) => {
+  //     return { 
+  //       ...e,
+  //       Hash: e.Hash.toString(),
+  //     }
+  //   })
 
-    
-
-    this.self.logger.debug('state merkle object of executed contract', startMerkleObj)
-    benchmark.stage('4.5')
-    const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
-
-    benchmark.stage('5')
     
 
-    let log_matrix = {}
-    for (let logOp of merkleDiff) {
-      if (['add', 'replace'].includes(logOp.op)) {
-        let initObj = {}
-        let endObj = {}
-        if (logOp.op === 'replace') {
-          if(typeof logOp.value !== 'object') {
-            continue;
-          }
-          const obj = await this.self.ipfs.dag.resolve(startMerkle, {
-            path: `${logOp.value.Name}`,
-          })
-          initObj = (await this.self.ipfs.dag.get(obj.cid)).value
-        }
-        //If statement for typescript reasons
-        if (logOp.op === 'add' || logOp.op === 'replace') {
-          try {
-            if(typeof logOp.value !== 'object') {
-              continue;
-            }
-            const obj = await this.self.ipfs.dag.resolve(stateMerkle, {
-              path: `${logOp.value.Name}`,
-            })
-            endObj = (await this.self.ipfs.dag.get(obj.cid)).value
-          } catch (ex) {
-            return null
-          }
-          // console.log({ initObj, endObj })
-          log_matrix[logOp.value.Name] = jsonpatch.compare(initObj, endObj)
-        }
-      }
-    }
+  //   this.self.logger.debug('state merkle object of executed contract', startMerkleObj)
+  //   benchmark.stage('4.5')
+  //   const merkleDiff = jsonpatch.compare(startMerkleObj, stateMerkleObj)
 
-    benchmark.stage('6')
+  //   benchmark.stage('5')
+    
 
-    // console.log(await this.self.ipfs.dag.put(log_matrix))
-    // console.log(
-    //   JSON.stringify(
-    //     {
-    //       log_matrix,
-    //     },
-    //     null,
-    //     2,
-    //   ),
-    // )
+  //   let log_matrix = {}
+  //   for (let logOp of merkleDiff) {
+  //     if (['add', 'replace'].includes(logOp.op)) {
+  //       let initObj = {}
+  //       let endObj = {}
+  //       if (logOp.op === 'replace') {
+  //         if(typeof logOp.value !== 'object') {
+  //           continue;
+  //         }
+  //         const obj = await this.self.ipfs.dag.resolve(startMerkle, {
+  //           path: `${logOp.value.Name}`,
+  //         })
+  //         initObj = (await this.self.ipfs.dag.get(obj.cid)).value
+  //       }
+  //       //If statement for typescript reasons
+  //       if (logOp.op === 'add' || logOp.op === 'replace') {
+  //         try {
+  //           if(typeof logOp.value !== 'object') {
+  //             continue;
+  //           }
+  //           const obj = await this.self.ipfs.dag.resolve(stateMerkle, {
+  //             path: `${logOp.value.Name}`,
+  //           })
+  //           endObj = (await this.self.ipfs.dag.get(obj.cid)).value
+  //         } catch (ex) {
+  //           return null
+  //         }
+  //         // console.log({ initObj, endObj })
+  //         log_matrix[logOp.value.Name] = jsonpatch.compare(initObj, endObj)
+  //       }
+  //     }
+  //   }
 
-    return {
-      contract_id: id,
-      inputs: operations.map(e => {
-        return {
-          id: e.id
-        }
-      }),
-      state_merkle: stateMerkle.toString(),
-      log_matrix,
-      chain_actions: chainActions
-    } as ContractOutput
-  }
+  //   benchmark.stage('6')
+
+  //   // console.log(await this.self.ipfs.dag.put(log_matrix))
+  //   // console.log(
+  //   //   JSON.stringify(
+  //   //     {
+  //   //       log_matrix,
+  //   //     },
+  //   //     null,
+  //   //     2,
+  //   //   ),
+  //   // )
+
+  //   return {
+  //     contract_id: id,
+  //     inputs: operations.map(e => {
+  //       return {
+  //         id: e.id
+  //       }
+  //     }),
+  //     state_merkle: stateMerkle.toString(),
+  //     log_matrix,
+  //     chain_actions: chainActions
+  //   } as ContractOutput
+  // }
 
   async createSmartContract() {
     const executorId = this.self.identity.id

@@ -1,7 +1,4 @@
-import ivm from 'isolated-vm'
 import * as IPFS from 'kubo-rpc-client'
-import Axios from 'axios'
-import metering from 'wasm-metering'
 import { addLink } from '../../../ipfs-utils/add-link'
 import { removeLink } from '../../../ipfs-utils/rm-link'
 import { instantiate } from './utils'

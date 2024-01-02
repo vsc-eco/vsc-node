@@ -40,7 +40,7 @@ export class NewCoreService {
             printMetadata: this.config.get('logger.printMetadata'),
             level: this.config.get('logger.level'),
         })
-        this.ipfs = IPFS.create({url: 'http://127.0.0.1:5001'})
+        this.ipfs = IPFS.create({url: process.env.IPFS_HOST || '/ip4/127.0.0.1/tcp/5001'})
         this.chainBridge = new ChainBridgeV2(this)
         this.nodeIdentity = new NodeIdentity(this)
         this.witness = new WitnessServiceV2(this)

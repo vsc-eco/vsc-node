@@ -4,7 +4,7 @@ import { removeLink } from '../../../ipfs-utils/rm-link'
 import { ContractErrorType, instantiate } from './utils'
 const CID = IPFS.CID
 
-const ipfs = IPFS.create({ url: 'http://127.0.0.1:5001' })
+const ipfs = IPFS.create({ url: process.env.IPFS_HOST  || 'http://127.0.0.1:5001' })
 
 
 export class WasmRunner {

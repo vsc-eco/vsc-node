@@ -491,6 +491,10 @@ export class ChainBridgeV2 {
                 }
             })
 
+            if(!lastSigned) {
+                return null
+            }
+
             const maxSignedDiff = (3 * 24 * 60 * 20)
 
             if(blk - lastSigned.valid_from > maxSignedDiff) {

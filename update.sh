@@ -56,6 +56,6 @@ then
 
   docker-compose up -d
 
-  echo $deployedGitCommit > data/git-flag
+  echo $gitCommit > data/git-flag
 fi
 

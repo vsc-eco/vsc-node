@@ -149,9 +149,9 @@ export enum NodeStorageType {
 }
 
 export interface LoggerConfig {
-  prefix: string,
-  level: string,
-  printMetadata: boolean
+  prefix?: string,
+  level?: string,
+  printMetadata?: boolean
 }
 
 enum authType {

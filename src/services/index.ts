@@ -24,9 +24,11 @@ import { WitnessService } from "./witness";
 import networks from "./networks";
 import { DiscordBot } from "./discordbot";
 import { createIPFSClient, ModuleContainer, createMongoDBClient } from "../utils";
+import { NewCoreService } from "./new";
 interface CoreOptions {
     dbSuffix?: string
     mode?: 'lite'
+    newService?: NewCoreService
 }
 
 export class CoreService extends ModuleContainer {
@@ -50,10 +52,12 @@ export class CoreService extends ModuleContainer {
     discordBot: DiscordBot;
     mode: string;
     modules: any[];
+    newService: NewCoreService
 
     constructor(coreSettings?: LoggerConfig & CoreOptions) {
         super('core')
         this.mode = coreSettings?.mode
+        this.newService = coreSettings.newService
 
 
 

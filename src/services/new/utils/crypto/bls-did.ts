@@ -8,6 +8,7 @@ import { encodePayload } from 'dag-jose-utils'
 import { encodeBase64Url, decodeBase64, encodeBase64 } from 'dids/lib/utils'
 import * as u8a from 'uint8arrays'
 import { parse } from 'did-resolver'
+import { SignaturePacked, SignatureType } from '../../types'
 
 
 /**
@@ -25,6 +26,7 @@ export class BlsDID {
   }
 
   get id() {
+    
     const publicKey = this.pubKey.toBytes()
     const bytes = new Uint8Array(publicKey.length + 2)
     bytes[0] = 0xea // ed25519 multicodec
@@ -59,6 +61,51 @@ export class BlsDID {
     return encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes())
   }
 
+  async signRaw(msg: Buffer | Uint8Array) {
+    return {
+      s: encodeBase64(this.privKey.sign(msg).toBytes()),
+      p: Buffer.from(JSON.stringify({
+        pub: this.id,
+      })).toString('base64url'),
+    }
+  }
+  
+  async signPacked(msg) {
+    if (!this.privKey) {
+      throw new Error('No private key!')
+    }
+    const encodedPayload = await encodePayload(msg)
+
+    const signature = encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes());
+  
+    return {
+      link: encodedPayload.cid,
+      signature
+    }
+  }
+  
+  async signObject(msg): Promise<SignaturePacked> {
+    if (!this.privKey) {
+      throw new Error('No private key!')
+    }
+    const encodedPayload = await encodePayload(msg)
+  
+    const signature = encodeBase64(this.privKey.sign(encodedPayload.cid.bytes).toBytes());
+  
+    return {
+      ...msg,
+      signatures: [
+        {
+          t: SignatureType.BLS,
+          p: Buffer.from(JSON.stringify({
+            pub: this.id,
+          })).toString('base64url'),
+          s: signature
+        }
+      ]
+    }
+  }
+
   static fromSeed(seed: Uint8Array) {
     return new BlsDID({
       privKey: bls.SecretKey.fromKeygen(seed),
@@ -87,7 +134,7 @@ export class BlsCircuit {
   // bitSet: BitSet
   constructor(msg) {
     this.msg = msg
-    let date = new Date()
+
     this.aggPubKeys = new Map()
   }
 
@@ -95,20 +142,23 @@ export class BlsCircuit {
     return this.addMany([data])
   }
 
-  addMany(data: Array<{ did: string; sig: string }>): { errors: string[] } {
+  async addMany(data: Array<{ did: string; sig: string }>): Promise<{ errors: string[] }> {
     let publicKeys = []
     let sigs = []
     let errors = []
     for (let e of data) {
       const did = BlsDID.fromString(e.did)
-      let sig = bls.Signature.fromBytes(decodeBase64(e.sig))
+      let sig = bls.Signature.fromBytes(Buffer.from(e.sig, 'base64url'))
 
-      if (sig.verify(did.pubKey, this.msg)) {
+      console.log(did.pubKey, this.msg)
+      const msg = await encodePayload(this.msg)
+      if (sig.verify(did.pubKey, msg.cid.bytes)) {
         this.aggPubKeys.set(did.id, true)
         publicKeys.push(did.pubKey)
         sigs.push(sig)
       } else {
         errors.push(`INVALID_SIG for ${did.id}`)
+        // throw new Error(`INVALID_SIG for ${did.id}`)
       }
     }
 
@@ -118,6 +168,8 @@ export class BlsCircuit {
     if (this.sig) {
       sigs.push(this.sig)
     }
+
+    console.log([...publicKeys], [...sigs])
     const pubKey = bls.PublicKey.aggregate([...publicKeys])
     const sig = bls.Signature.aggregate([...sigs])
 
@@ -135,6 +187,14 @@ export class BlsCircuit {
     return bls.Signature.fromBytes(this.sig).verify(
       this.did.pubKey,
       (await encodePayload(msg)).cid.bytes,
+    )
+  }
+
+  async verifySig(data: {sig: string, pub}) {
+    const did = BlsDID.fromString(data.pub)
+    return bls.Signature.fromBytes(Buffer.from(data.sig, 'base64url')).verify(
+      did.pubKey,
+      (await encodePayload(this.msg)).cid.bytes,
     )
   }
 
@@ -164,45 +224,71 @@ export class BlsCircuit {
       circuitHex: bitset.toString(16),
     }
   }
+
+  static deserialize(signedPayload, keyset: Array<string>) {
+    const signatures = signedPayload.signatures
+    delete signedPayload.signatures
+
+    const bs = BitSet.fromHexString(signatures[0].circuitHex)
+
+    const pubKeys = new Map();
+    for(let keyIdx in keyset) {
+      if(bs.get(Number(keyIdx)) === 1) {
+        pubKeys.set(keyset[keyIdx], true)
+      }
+    }
+
+    let circuit = new BlsCircuit(signedPayload);
+    circuit.aggPubKeys = pubKeys
+
+    return circuit;
+  }
 }
 
 void (async () => {
   await init('blst-native')
-
-  let msg = 'hello'
-  let date = new Date()
-  const circuit = new BlsCircuit((await encodePayload(msg as any)).cid.bytes)
-  let pubs = []
-  let useablePubs = []
-
-  let addList = []
-  for (let x = 0; x < 150; x++) {
-    const did = BlsDID.fromSeed(
-      Buffer.from(`5a2b1f37ecc9fb7f27e1aa3daa4d66d9c3e54a4c0dcd53a4a5cacdfaf50578/${x}`),
-    )
-
-    pubs.push(did.id)
-    if (Math.random() > 0.13) {
-      addList.push({
-        did: did.id,
-        sig: await did.sign(msg),
-      })
-      useablePubs.push(did.id)
-    }
-
-    // console.log('hello', decodeBase64(await did.sign('hello')))
-    // console.log(circuit.serialize([
-
-    //   did.id,
-
-    // ]))
-  }
-  console.log(new Date().getTime() - date.getTime())
-  circuit.addMany(addList)
-  console.log('level 1', new Date().getTime() - date.getTime())
-  console.log(await circuit.verify('hello'))
-  console.log(circuit.verifyPubkeys(useablePubs))
-  console.log(new Date().getTime() - date.getTime())
-  console.log(circuit.verifyPubkeys(useablePubs))
-  console.log(circuit.serialize(pubs), useablePubs.length)
 })()
+
+export async function initBls() {
+  await init('blst-native')
+
+}
+// void (async () => {
+
+//   let msg = 'hello'
+//   let date = new Date()
+//   const circuit = new BlsCircuit((await encodePayload(msg as any)).cid.bytes)
+//   let pubs = []
+//   let useablePubs = []
+
+//   let addList = []
+//   for (let x = 0; x < 150; x++) {
+//     const did = BlsDID.fromSeed(
+//       Buffer.from(`5a2b1f37ecc9fb7f27e1aa3daa4d66d9c3e54a4c0dcd53a4a5cacdfaf50578/${x}`),
+//     )
+
+//     pubs.push(did.id)
+//     if (Math.random() > 0.13) {
+//       addList.push({
+//         did: did.id,
+//         sig: await did.sign(msg),
+//       })
+//       useablePubs.push(did.id)
+//     }
+
+//     // console.log('hello', decodeBase64(await did.sign('hello')))
+//     // console.log(circuit.serialize([
+
+//     //   did.id,
+
+//     // ]))
+//   }
+//   console.log(new Date().getTime() - date.getTime())
+//   circuit.addMany(addList)
+//   console.log('level 1', new Date().getTime() - date.getTime())
+//   console.log(await circuit.verify('hello'))
+//   console.log(circuit.verifyPubkeys(useablePubs))
+//   console.log(new Date().getTime() - date.getTime())
+//   console.log(circuit.verifyPubkeys(useablePubs))
+//   console.log(circuit.serialize(pubs), useablePubs.length)
+// })()

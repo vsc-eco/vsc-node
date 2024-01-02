@@ -24,21 +24,21 @@ void (async () => {
           },
         ])
       }
-      const output = await core.contractEngine.contractExecuteRaw(
-        'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
-        optsToRun,
-        {
-          benchmark: benchmarkContainer.createInstance(),
-        },
-      )
-      benchmarkContainer.table()
-      const doneIn = new Date().getTime() - startDate.getTime()
-      const persecond = TRIAL_NUMBER / (doneIn / 1000)
-      console.table({
-        ['Done in']: doneIn,
-        ['Per second']: persecond,
-        ['ms per OP']: 1000 / persecond,
-      })
+      // const output = await core.contractEngine.contractExecuteRaw(
+      //   'kjzl6cwe1jw149ac8h7kkrl1wwah8jkrnam9ys5yci2vhssg05khm71tktdbcbz',
+      //   optsToRun,
+      //   {
+      //     benchmark: benchmarkContainer.createInstance(),
+      //   },
+      // )
+      // benchmarkContainer.table()
+      // const doneIn = new Date().getTime() - startDate.getTime()
+      // const persecond = TRIAL_NUMBER / (doneIn / 1000)
+      // console.table({
+      //   ['Done in']: doneIn,
+      //   ['Per second']: persecond,
+      //   ['ms per OP']: 1000 / persecond,
+      // })
   }
   let promises = []
   for(let threadId = 0; threadId < 1; threadId++) {

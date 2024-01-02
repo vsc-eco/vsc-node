@@ -34,10 +34,12 @@ export const schema = `
         included_in: String
         executed_in: String
         decoded_tx: JSON
+        redeem: JSON
     }
     type ContractState {
         id: String
         state(key: String): JSON
+        stateQuery(key: String, query: JSON): JSON
         stateKeys(key: String): JSON
         state_merkle: String
     }
@@ -134,8 +136,10 @@ export const schema = `
         findContract(id: String): FindContractResult
         findCID(id: String): findCIDResult
         findDeposit(id: String): Deposit
+        findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
-        submitTransaction(blob: String): TransactionSubmitResult
+        submitTransaction(payload: String): TransactionSubmitResult
+        submitTransactionV1(payload: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo
         witnessNodes: [WitnessNode]
         nextWitnessSlot(local: Boolean): JSON

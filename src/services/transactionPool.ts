@@ -17,10 +17,13 @@ import { HiveClient, unwrapDagJws } from '../utils'
 import { init } from '../transactions/core'
 import { ContractManifest } from '../types/contracts'
 import Axios from 'axios'
+import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
+import * as IPFS from 'kubo-rpc-client'
 import { CoreBaseTransaction, CoreTransactionTypes, CreateContract, Deposit, EnableWitness, JoinContract, LeaveContract, WithdrawFinalization, WithdrawRequest } from '../types/coreTransactions'
 import { ContractInput, VSCTransactionTypes } from '../types/vscTransactions'
 import { PeerChannel } from './pubsub'
 import networks from './networks'
+import bs58check from 'bs58check'
 const {BloomFilter} = BloomFilters
 
 const INDEX_RULES = {}
@@ -110,7 +113,7 @@ export class TransactionPoolService {
         _id: new ObjectId(),
         id: cid.toString(),
         op: txContainer.tx.op,
-        account_auth: await this.self.wallet.id,
+        account_auth: await this.self.identity.id,
         local: true,
         lock_block: null,
         first_seen: new Date(),
@@ -404,7 +407,7 @@ export class TransactionPoolService {
     })
   }
 
-  async txDecode(txId: string) {
+  async txDecode(txId: string, entry: any) {
     const tx_id = CID.parse(txId)
 
     const data = (await this.self.ipfs.dag.get(tx_id, {
@@ -413,9 +416,14 @@ export class TransactionPoolService {
 
     const {tx} = data;
 
+    
     let op_category
     if(tx.action === "applyTx") {
       op_category = 'ledger_transfer'
+    } else if(tx.action === "mint" && tx.payload.proof) {
+      op_category = "wrap_mint"
+    } else if(tx.action === "redeem") {
+      op_category = "wrap_redeem"
     } else {
       op_category = 'custom'
     }
@@ -423,10 +431,98 @@ export class TransactionPoolService {
     let opts = {}
     // console.log(op_category, tx.action)
     if(op_category === "ledger_transfer") {
+      // console.log(tx)
       opts['decoded_tx.dest'] = tx.payload.dest
+      opts['decoded_tx.from'] = entry.account_auth
+      try {
+        opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
+          return a + b;
+        })
+      } catch {
+        console.log(tx)
+      }
+      opts['decoded_tx.memo'] = tx.payload.memo;
+    }
+    
+    if(op_category === "wrap_mint") {
+      opts['decoded_tx.tx_id'] = Buffer.from(tx.payload.proof.tx_id, 'hex').reverse().toString('hex')
+      
+      const contractInfo = await this.self.contractEngine.contractDb.findOne({
+        id: tx.contract_id
+      })
+      
+      
+      //Cannot support multiple wraps in one BTC transaction.
+      //TODO: build special indexing for tokens / wrapping tech
+      let dest;
+      let x = -1
+      for( ; ; ) {
+        x = x + 1;
+        try {
+          const output = BTCUtils.extractOutputAtIndex(Buffer.from(tx.payload.proof.vout, 'hex'), x)
+          
+          const hash = new Uint8Array(BTCUtils.extractHash(output))
+          const btcAddr = new Uint8Array(21)
+          btcAddr.set([0x05])
+          btcAddr.set(hash, 1)
+          const testAddr = bs58check.encode(btcAddr)
+          const wrapValue = Number(BTCUtils.extractValue(output)) / 100_000_000
+          
+          try {
+            const listPathsCid = await this.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+              path: `btc_addrs/${testAddr}`,
+            })
+            
+            const data2 = await this.self.ipfs.dag.get(listPathsCid.cid)
+            
+            dest = data2.value.val
+            opts['decoded_tx.amount'] = wrapValue
+            break;
+          } catch (ex) {
+            if (!ex.message.includes('no link named')) {
+              console.log(ex)
+            }
+            // console.log(ex)
+          }
+          
+        } catch(ex) {
+          break
+        }
+      }
+      opts['decoded_tx.dest'] = dest
+    }
+      
+    if(op_category === "wrap_redeem") {
+      opts['decoded_tx.dest'] = tx.payload.dest
+      opts['decoded_tx.from'] = entry.account_auth; //Self
       opts['decoded_tx.amount'] = tx.payload.inputs.map(e => e.amount).reduce((a, b) => {
         return a + b;
       })
+      const contractInfo = await this.self.contractEngine.contractDb.findOne({
+        id: tx.contract_id
+      })
+      try {
+        const listPathsCid = await this.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+          path: `outputs/${tx.payload.inputs[0].id}`,
+        })
+        
+        const data2 = await this.self.ipfs.dag.get(listPathsCid.cid)
+        const redeemId = data2.value.outputs.find(e => e.type === "REDEEM").id;
+        
+        const redeemCid = await this.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+          path: `redeems/${redeemId}`,
+        })
+        
+        opts['decoded_tx.redeem_id'] = redeemId
+        // dest = data2.value.val
+        // opts['decoded_tx.amount'] = wrapValue
+        // break;
+      } catch (ex) {
+        if (!ex.message.includes('no link named')) {
+          console.log(ex)
+        }
+        // console.log(ex)
+      }
     }
     
 
@@ -439,6 +535,10 @@ export class TransactionPoolService {
         ...opts
       }
     })
+  }
+
+  async txDecodeJob() {
+
   }
 
   async start() {
@@ -466,7 +566,7 @@ export class TransactionPoolService {
       }).toArray()) {
         // console.log(entry.id)
         try {
-          await this.txDecode(entry.id)
+          await this.txDecode(entry.id, entry)
         } catch(ex) {
           console.log(ex)
         }

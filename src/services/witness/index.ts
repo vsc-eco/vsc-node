@@ -176,13 +176,7 @@ export class WitnessService {
         outSchedule.push(witnessNodes[x % witnessNodes.length])
       }
     }
-    // console.log(outSchedule)
-    // console.log(Crypto.randomBytes(32).toString('base64'))
-    // outSchedule = shuffleSeed.shuffle(outSchedule, blockHash).map((e, index) => ({
-    //     account: e.account,
-    //     index: index * 20
-    // }));
-    // console.log((await this.applyBNSchedule(outSchedule)), witnessNodes.length, outSchedule.length)
+
     return await this.applyBNSchedule(outSchedule)
   }
 
@@ -190,22 +184,13 @@ export class WitnessService {
     const {roundLength, totalRounds} = networks[this.self.config.get('network.id')];
     const blockNumber = await HiveClient.blockchain.getCurrentBlockNum()
 
-    // const mod1 = blockNumber % 20;
-    // console.log(mod1)
-    // console.log(mod1 + blockNumber)
-    // const mod2 = mod1 + blockNumber
-    // console.log(mod2 % 20)
+    
 
     const modLength = roundLength * totalRounds
     const mod3 = blockNumber % modLength
     const pastRoundHash = blockNumber - mod3
-    // console.log(
-    //   'blockNumber',
-    //   blockNumber,
-    //   'pastRoundHash',
-    //   pastRoundHash % modLength,
-    //   pastRoundHash,
-    // )
+    
+
     return {
       nextRoundHash: blockNumber + (modLength - mod3),
       pastRoundHash,

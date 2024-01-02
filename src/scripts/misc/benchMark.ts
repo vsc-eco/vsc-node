@@ -1,4 +1,4 @@
-import { HiveClient, streamHiveBlocks } from "../utils"
+import { HiveClient, streamHiveBlocks } from "../../utils"
 
 
  

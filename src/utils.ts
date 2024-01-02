@@ -17,6 +17,7 @@ import { mongo } from './services/db'
 const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.web3telekom.xyz'
 
 export const HiveClient = new Client(process.env.HIVE_HOST || [HIVE_API, 'https://api.deathwing.me', 'https://anyx.io', 'https://api.openhive.network', 'https://rpc.ausbit.dev'])
+export const HiveClient2 = new Client('https://api.hive.blog')
 
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
@@ -129,7 +130,7 @@ export class fastStream {
 
     this.headTracker = setInterval(async () => {
       const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      console.log(`headTracker: currentBlock=${typeof currentBlock === 'object' ? parseInt(currentBlock.block_id.slice(0, 8), 16) : currentBlock}`)
+      // console.log(`headTracker: currentBlock=${typeof currentBlock === 'object' ? parseInt(currentBlock.block_id.slice(0, 8), 16) : currentBlock}`)
       if (currentBlock) {
         this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
       }

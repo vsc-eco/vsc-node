@@ -1,7 +1,11 @@
 import { CID } from 'multiformats'
 import { appContainer } from '../index'
 import { GraphQLError } from 'graphql';
+import * as IPFS from 'kubo-rpc-client'
+import sift from 'sift'
+import DAGCbor from 'ipld-dag-cbor'
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
+import { verifyTx } from '../../../services/new/utils';
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -60,9 +64,10 @@ export const Resolvers = {
       stateKeys: async (args) => {
         try {
           let key = args.key ? `${args.key}` : null
-          const obj2 = await appContainer.self.ipfs.dag.get(CID.parse(data.state_merkle), {
+          const objCid = await appContainer.self.ipfs.dag.resolve(CID.parse(data.state_merkle), {
             path: key,
           })
+          const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
           if(obj2.value.Links) {
             return obj2.value.Links.map(e => {
               return {
@@ -73,7 +78,39 @@ export const Resolvers = {
           } else {
             return []
           }
-        } catch {
+        } catch(ex) {
+          console.log(ex)
+          return null;
+        }
+      },
+      stateQuery: async (args) => {
+        try {
+          let key = args.key ? `${args.key}` : null
+          const objCid = await appContainer.self.ipfs.dag.resolve(CID.parse(data.state_merkle), {
+            path: key,
+          })
+          const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
+          if(obj2.value.Links) {
+            const out = await Promise.all(obj2.value.Links/*.map(e => {
+              return e.Hash
+            })*/.map(async (e) => {
+              return {
+                ...(await appContainer.self.ipfs.dag.get(e.Hash)).value,
+                _id: e.Name
+              }
+            }));
+
+            // console.log(out, args.query)
+            if(args.query) {
+              return out.filter(sift(args.query))
+            } else {
+              return out
+            }
+          } else {
+            return []
+          }
+        } catch(ex) {
+          console.log(ex)
           return null;
         }
       },
@@ -167,6 +204,83 @@ export const Resolvers = {
       })
     }
   },
+  findLedgerTXs: async (_, args) => {
+    let query = {}
+
+    if(args.byContractId) {
+      query['headers.contract_id'] = args.byContractId
+    }
+
+    if(args.byToFrom) {
+      query['$or'] = [
+        {
+          'decoded_tx.from': args.byToFrom
+        },
+        {
+          'decoded_tx.dest': args.byToFrom
+        }
+      ]
+    }
+
+
+    let txs = await appContainer.self.transactionPool.transactionPool.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0,
+      sort: {
+        first_seen: -1
+      }
+    }).toArray()
+
+    const dedup = {}
+    const out = []
+    txs.forEach(e => {
+      if((e as any).decoded_tx.tx_id) {
+        if(!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
+          out.push(e)
+          dedup[(e as any).decoded_tx.tx_id] = true
+        }
+      } else {
+        out.push(e)
+      }
+    })
+
+
+    return {
+      txs: out.map(e => {
+        return {
+          ...e,
+          first_seen: e.first_seen.toISOString(),
+          redeem: async () => {
+            if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
+              return null
+            }
+            const contractInfo = await appContainer.self.contractEngine.contractDb.findOne({
+              id: e.headers.contract_id
+            })
+            console.log(contractInfo)
+            try {
+              
+              const redeemId = (e as any).decoded_tx.redeem_id
+              
+              const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+                path: `redeems/${redeemId}`,
+              })
+              
+              return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
+            } catch (ex) {
+              if (!ex.message.includes('no link named')) {
+                console.log(ex)
+              }
+              // console.log(ex)
+              return null
+            }
+          },
+        }
+      })
+    };
+  },
   localNodeInfo: async () => {
     const idInfo = await appContainer.self.ipfs.id()
     return {
@@ -253,5 +367,48 @@ export const Resolvers = {
     } else {
       throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
     }
+  },
+  submitTransaction: async (_, args) => {
+    console.log(args.payload)
+    const json = JSON.parse(args.payload)
+
+
+    if(json.jws && json.linkedBlock) {
+      const root = await appContainer.self.ipfs.dag.put({
+        ...json.jws,
+        link: CID.parse(json.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
+      })
+
+      const linkedBlock = await appContainer.self.ipfs.block.put(Buffer.from(json.linkedBlock, 'base64'), {
+        format: 'dag-cbor'
+      })
+      console.log('graphql:linkedBlock', linkedBlock)
+
+      await appContainer.self.transactionPool.processMempoolTX(root.toString())
+
+      await appContainer.self.transactionPool.txDecode(root.toString(), await appContainer.self.transactionPool.transactionPool.findOne({
+        id: root.toString()
+      }))
+
+      await appContainer.self.p2pService.memoryPoolChannel.call('announce_tx', {
+        payload: {
+          id: root.toString()
+        },
+        mode: 'basic'
+      })
+
+      return {
+        tx_id: root.toString()
+      }
+    }
+  },
+  submitTransactionV1: async (_, args) => {
+    console.log(args.payload)
+    const buf = Buffer.from(args.payload, 'base64')
+
+    const decodedBuf = DAGCbor.util.deserialize(buf)
+    console.log(decodedBuf)
+    console.log(await verifyTx(decodedBuf, appContainer.self.identity))
+    await appContainer.self.newService.transactionPool.broadcastRawTx(decodedBuf)
   }
 }

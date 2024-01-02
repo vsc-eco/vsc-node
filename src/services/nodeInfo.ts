@@ -129,6 +129,13 @@ export class NodeInfoService {
             memo_key: accountDetails.memo_key,
             json_metadata: JSON.stringify({
                 ...json_metadata,
+                did_keys: [
+                    ...(this.self.newService ? [{
+                        ct: 'DID-BLS',
+                        t: 'consensus',
+                        key: this.self.newService.consensusKey.id,
+                    }] : [])
+                ],
                 vsc_node: registrationInfo
             })
         }, PrivateKey.from(process.env.HIVE_ACCOUNT_ACTIVE))

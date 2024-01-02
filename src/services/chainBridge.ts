@@ -294,6 +294,15 @@ export class ChainBridge {
         upsert: true
       })
 
+      const contractInfo = await this.self.contractEngine.contractDb.findOne({
+        id: content.tx.contract_id
+      })
+      this.self.ipfs.pin.add(CID.parse(content.tx.state_merkle)).catch(e => console.log(e))
+      
+      if(contractInfo) {
+        this.self.ipfs.pin.rm(CID.parse(contractInfo.state_merkle)).catch(e => console.log(e))
+      }
+
       await this.self.contractEngine.contractDb.findOneAndUpdate({
         id: content.tx.contract_id
       }, {
@@ -877,7 +886,9 @@ export class ChainBridge {
                       })
                     }
                   } catch(ex) {
-                    console.log(ex)
+                    if(!ex.message.includes('Unexpected end of JSON input')) {
+                      console.log(ex)
+                    }
                   }
                 }
                 if (op_id === "custom_json") {

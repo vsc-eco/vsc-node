@@ -3,7 +3,9 @@ import { appContainer } from '../index'
 import { GraphQLError } from 'graphql';
 import * as IPFS from 'kubo-rpc-client'
 import sift from 'sift'
+import DAGCbor from 'ipld-dag-cbor'
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
+import { verifyTx } from '../../../services/new/utils';
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -399,5 +401,14 @@ export const Resolvers = {
         tx_id: root.toString()
       }
     }
+  },
+  submitTransactionV1: async (_, args) => {
+    console.log(args.payload)
+    const buf = Buffer.from(args.payload, 'base64')
+
+    const decodedBuf = DAGCbor.util.deserialize(buf)
+    console.log(decodedBuf)
+    console.log(await verifyTx(decodedBuf, appContainer.self.identity))
+    await appContainer.self.newService.transactionPool.broadcastRawTx(decodedBuf)
   }
 }

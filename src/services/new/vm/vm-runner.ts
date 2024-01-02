@@ -1,7 +1,7 @@
 import * as IPFS from 'kubo-rpc-client'
 import { addLink } from '../../../ipfs-utils/add-link'
 import { removeLink } from '../../../ipfs-utils/rm-link'
-import { instantiate } from './utils'
+import { ContractErrorType, instantiate } from './utils'
 const CID = IPFS.CID
 
 const ipfs = IPFS.create({ url: 'http://127.0.0.1:5001' })
@@ -219,6 +219,7 @@ export class WasmRunner {
 }
 
 void (async () => {
+  console.log('init')
   
   const contract_id = process.env.contract_id
   
@@ -240,87 +241,147 @@ void (async () => {
       })
       
       let IOGas = 0;
-
+      let error;
       const logs = []
-      const insta = await instantiate(module, {
-        env: {
-          memory,
-        },
-        input: {
-          'console.log': (keyPtr) => {
-            const logMsg = insta.exports.__getString(keyPtr)
-            logs.push(logMsg)
-            IOGas = IOGas + logMsg.length
-          },
-          'console.logNumber': (val) => {
-            logs.push(val)
-          },
-          'console.logBool': (val) => {
-            logs.push(Boolean(val))
-          },
-          'state.setObject': (keyPtr, valPtr) => {
-            const key = insta.exports.__getString(keyPtr)
-            const val = insta.exports.__getString(valPtr)
-            
-            IOGas = IOGas + key.length + val.length
-
-    
-            wasmRunner.stateCache.set(key, val)
-            return 1
-          },
-          'state.getObject': async (keyPtr) => {
-            const key = insta.exports.__getString(keyPtr)
-            let value;
-            if(wasmRunner.stateCache.has(key)) {
-              value = wasmRunner.stateCache.get(key)
-            } else {
-              value = await stateAccess.client.pull(key)
-              wasmRunner.stateCache.set(key, value)
-            }
-
-            const val = JSON.stringify(value)
-            
-            IOGas = IOGas + val.length; // Total serialized length of gas
-
-
-            return val
-          },
-        },
-      } as any)
       
-
       
-
-
-      console.log('message from parent:', message, new Date(), new Date().getTime())
-      const ptr = await (insta.instance.exports[message.action] as any)(
-        insta.exports.__newString(message.payload),
-      )
-      const str =  insta.exports.__getString(ptr)
-      process.send({
-        type: 'execute-stop',
-        result: str,
-        logs,
-        reqId: message.reqId,
-        IOGas,
-      })
       
-      console.log('message to parent:', message, new Date(), new Date().getTime())
-      console.log('logs', logs, 'result', str)
-      // process.send({
-      //   type: 'result',
-      //   result: str,
-      //   reqId: message.reqId,
-      // })
+      try {
+        const insta = await instantiate(module, {
+          env: {
+            memory,
+            abort(msg, file, line, colm) {
+              console.log(insta.exports.__getString(msg), 'LN1', insta.exports.__getString(file), line, colm)
+              console.log('error happened');
+              error = {
+                msg: insta.exports.__getString(msg),
+                file: insta.exports.__getString(file),
+                line,
+                colm
+              }
+            },
+            //Prevent AS loader from allowing any non-deterministic data in.
+            seed: () => {
+              return 0;
+            },
+          },
+          //Same here
+          Date: {},
+          Math: {},
+          sdk: {
+            'console.log': (keyPtr) => {
+              const logMsg = (insta as any).exports.__getString(keyPtr)
+              logs.push(logMsg)
+              IOGas = IOGas + logMsg.length
+            },
+            'console.logNumber': (val) => {
+              logs.push(val)
+            },
+            'console.logBool': (val) => {
+              logs.push(Boolean(val))
+            },
+            'db.setObject': (keyPtr, valPtr) => {
+              const key = (insta as any).exports.__getString(keyPtr)
+              const val = (insta as any).exports.__getString(valPtr)
+              
+              IOGas = IOGas + key.length + val.length
+  
+      
+              wasmRunner.stateCache.set(key, val)
+              return 1
+            },
+            'db.getObject': async (keyPtr) => {
+              const key = (insta as any).exports.__getString(keyPtr)
+              let value;
+              if(wasmRunner.stateCache.has(key)) {
+                value = wasmRunner.stateCache.get(key)
+              } else {
+                value = await stateAccess.client.pull(key)
+                wasmRunner.stateCache.set(key, value)
+              }
+  
+              const val = JSON.stringify(value)
+              
+              IOGas = IOGas + val.length; // Total serialized length of gas
+  
+  
+              return val
+            },
+          },
+        } as any)
+  
+
+        if(!insta.instance.exports[message.action]) {
+          process.send({
+            type: 'execute-stop',
+            ret: null,
+            errorType: ContractErrorType.INVALID_ACTION,
+            logs,
+            reqId: message.reqId,
+            IOGas: 0,
+          })
+          return;
+        }
+        let ptr;
+        try {
+          ptr = await (insta.instance.exports[message.action] as any)(
+            (insta as any).exports.__newString(message.payload),
+          )
+
+          const str =  (insta as any).exports.__getString(ptr)
+          process.send({
+            type: 'execute-stop',
+            ret: str,
+            logs,
+            reqId: message.reqId,
+            IOGas,
+          })
+        } catch (ex) {
+          if(ex.name === "RuntimeError" && ex.message === "unreachable") {
+            console.log(`RuntimeError: unreachable ${JSON.stringify(error)}`, error)
+            process.send({
+              type: 'execute-stop',
+              ret: null,
+              error: error,
+              errorType: ContractErrorType.RUNTIME_EXCEPTION,
+              logs,
+              reqId: message.reqId,
+              IOGas,
+            });
+          } else {
+            process.send({
+              type: 'execute-stop',
+              ret: null,
+              errorType: ContractErrorType.RUNTIME_UNKNOWN,
+              logs,
+              reqId: message.reqId,
+              IOGas,
+            });
+          }
+        }
+        
+        } catch (ex) {
+          console.log(ex)
+          process.send({
+            type: 'execute-stop',
+            ret: null,
+            logs,
+            errorType: ContractErrorType.RUNTIME_SETUP,
+            reqId: message.reqId,
+            IOGas,
+          })
+        }
     }
+
+    //Finalization when VM is done
     if(message.type === "finish") {
       for(let [key, value] of wasmRunner.stateCache.entries()) {
         await stateAccess.client.update(key, JSON.parse(value))
       }
-      console.log(stateAccess.finish())
+      console.log('sending result')
       process.send({
-        type: 'result',
-        result: stateAccess.finish().stateMerkle.toString(),
+        type: 'finish-result',
+        stateMerkle: stateAccess.finish().stateMerkle.toString(),
       })
     }
   })

@@ -193,10 +193,31 @@ export interface TransactionContainerV2 {
     headers: {
         payer?: string
         lock_block?: string
+        required_auths: Array<{
+            type: 'consensus' | 'active' | 'posting',
+            value: string
+        }>
     }
     tx: { 
         op: string
         payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
         type: TransactionDbType
     }
+}
+
+export interface AddrRecord {
+    id: string
+    headers: any
+    controllers?:Array<string>
+    type: 'vs1' | 'vs2' | 'vs3' | 'vs4'
+}
+
+
+export interface BlockHeader {
+    hive_ref_block: number
+    hive_ref_tx: string
+    hive_ref_date: Date
+    height: number
+    proposer: string
+    id: string
 }

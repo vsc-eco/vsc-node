@@ -7,6 +7,7 @@ import * as IPFS from 'kubo-rpc-client'
 import {fork} from 'child_process'
 import Crypto from 'crypto'
 import { VmContainer } from './utils';
+import { sleep } from '../../../utils';
 
 
 const ipfs = IPFS.create({url: 'http://127.0.0.1:5001'})
@@ -51,35 +52,39 @@ void (async () => {
         return;
     }
 
-    const binary = stdout.toBuffer()
-
-
-    const cid = await ipfs.block.put(binary)
-    console.log(cid)
-
-    const vmContainer = new VmContainer({
-      contract_id: 'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556',
-      cid: cid.toString()
-    })
-
-    await vmContainer.init()
-    await vmContainer.onReady()
-
-
-    for(let x = 0; x < 1; x++) {
-      const result = await vmContainer.call({
-        action: 'testJSON',
-        payload: JSON.stringify({
-          to: "test1",
-          from: 'test2',
-          
-        })
+    try {
+      const binary = stdout.toBuffer()
+  
+  
+      const cid = await ipfs.block.put(binary)
+      console.log(cid)
+  
+      const vmContainer = new VmContainer({
+        contract_id: 'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556',
+        cid: cid.toString()
       })
-      console.log(result)
-    }    
-        
+  
+      await vmContainer.init()
+      await vmContainer.onReady()
+  
+  
+      for(let x = 0; x < 1; x++) {
+        const result = await vmContainer.call({
+          action: 'testJSON',
+          payload: JSON.stringify({
+            to: "test1",
+            from: 'test2',
+          })
+        })
+        console.log(result)
+      }    
+          
+      await vmContainer.finish()
+    } catch(ex) {
+      console.log(ex)
+    }
 
-    await vmContainer.finish()
+    process.exit(0)
 
     let reqId;
     let startTime

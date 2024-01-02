@@ -224,6 +224,25 @@ export class BlsCircuit {
       circuitHex: bitset.toString(16),
     }
   }
+
+  static deserialize(signedPayload, keyset: Array<string>) {
+    const signatures = signedPayload.signatures
+    delete signedPayload.signatures
+
+    const bs = BitSet.fromHexString(signatures[0].circuitHex)
+
+    const pubKeys = new Map();
+    for(let keyIdx in keyset) {
+      if(bs.get(Number(keyIdx)) === 1) {
+        pubKeys.set(keyset[keyIdx], true)
+      }
+    }
+
+    let circuit = new BlsCircuit(signedPayload);
+    circuit.aggPubKeys = pubKeys
+
+    return circuit;
+  }
 }
 
 void (async () => {

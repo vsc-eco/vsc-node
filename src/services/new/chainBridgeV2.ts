@@ -3,9 +3,11 @@ import { Collection, Db } from "mongodb";
 import DeepEqual from 'deep-equal'
 import PQueue from "p-queue";
 import { NewCoreService } from ".";
-import { HiveAccountAuthority } from "./types";
+import { BlockHeader, HiveAccountAuthority } from "./types";
 import networks from "../networks";
 import { createMongoDBClient, fastStream, sleep } from "../../utils";
+import { BlsCircuit } from './utils/crypto/bls-did';
+import BitSet from 'bitset';
 
 
 
@@ -32,6 +34,7 @@ export class ChainBridgeV2 {
     witnessHistoryDb: Collection
     consensusDb: Collection
     consensusDataDb: Collection
+    blockHeaders: Collection<BlockHeader>
     pinQueue: PQueue;
     self: NewCoreService;
 
@@ -57,14 +60,16 @@ export class ChainBridgeV2 {
             if (op === "account_update") {
                 transactions.push({
                     operations: tx.operations,
-                    transaction_id: tx.transaction_id
+                    transaction_id: tx.transaction_id,
+                    index: block.transactions.indexOf(tx)
                 })
             } else if (op === 'custom_json') {
                 try {
                     if (opPayload.id.startsWith('vsc.')) {
                         transactions.push({
                             operations: tx.operations,
-                            transaction_id: tx.transaction_id
+                            transaction_id: tx.transaction_id,
+                            index: block.transactions.indexOf(tx)
                         })
                     }
                 } catch {
@@ -321,14 +326,51 @@ export class ChainBridgeV2 {
                                     // }, {
                                     //     upsert: true
                                     // })
-                                    if(json.block_hash) {
-                                        this.pinQueue.add(async() => {
-                                            // console.log(json.block_hash)
-                                            await this.self.ipfs.pin.add(IPFS.CID.parse(json.block_hash), {
-                                                recursive: false
+
+                                    if(opPayload.id === "vsc.propose_block" && json.net_id === this.self.config.get('network.id')) {
+                                        //Initial checks passed
+                                        const slotHeight = Number(blk.key);
+                                        const witnessSet = (await this.getWitnessesAtBlock(slotHeight)).map(e => {
+                                            return e.keys.find(key => {
+                                              console.log(key)
+                                              return key.t === "consensus"
                                             })
-                                            await this.self.ipfs.pin.rm(IPFS.CID.parse(json.block_hash))
+                                        }).filter(e => !!e).map(e => e.key)
+                                        const witnessSchedule = await this.self.witness.roundCheck(slotHeight)
+
+                                        //Check witnessSlot validity prior to validation
+                                        const witnessSlot = witnessSchedule.find(e => {
+                                            return e.bn === slotHeight && e.account === opPayload.required_auths[0]
                                         })
+
+                                        if(witnessSlot) {
+                                            const signedBlock = {
+                                                ...json.signed_block,
+                                                block: IPFS.CID.parse(json.signed_block.block)
+                                            }
+    
+                                            const circuit = BlsCircuit.deserialize(signedBlock, witnessSet)
+                                            
+                                            let pubKeys = []
+                                            for(let pub of circuit.aggPubKeys) {
+                                                pubKeys.push(pub)
+                                            }
+
+                                            if(circuit.verifyPubkeys(pubKeys)) {
+
+                                            }
+
+                                            
+                                            this.pinQueue.add(async() => {
+                                                // console.log(json.block_hash)
+                                                await this.self.ipfs.pin.add(IPFS.CID.parse(json.block_hash), {
+                                                    recursive: false
+                                                })
+                                                await this.self.ipfs.pin.rm(IPFS.CID.parse(json.block_hash))
+                                            })
+                                        }
+                                        
+                                        
                                     }
                                 }
                             } catch (ex) {
@@ -497,7 +539,7 @@ export class ChainBridgeV2 {
         } catch {
 
         }
-        const startBlock = (await this.streamState.findOne({ id: "last_hb" }) || {} as any).val || networks['testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c'].genesisDay
+        const startBlock = (await this.streamState.findOne({ id: "last_hb" }) || {} as any).val || networks[this.self.config.get('network.id')].genesisDay
         console.log('start block is', startBlock)
         this.stream = await fastStream.create({
             startBlock

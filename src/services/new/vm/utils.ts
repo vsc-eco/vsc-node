@@ -206,6 +206,29 @@ enum CallResultError {
   TIMEOUT = 'timeout'
 }
 
+export enum ContractErrorType {
+  //If transaction attempts to call invalid runtime function.
+  INVALID_ACTION = -1,
+  //Input data does not meet valiation requirements
+  INVALID_INPUT = -2,
+  //Any arbitrary exception occurred within the smart contract 
+  RUNTIME_EXCEPTION = -3,
+  //Code error if WASM imports or attempts to use unavailable bindings.
+  RUNTIME_SETUP = -4,
+  //Unknown runtime error occurrs.
+  RUNTIME_UNKNOWN = -5,
+  //If overall VM becomes frozen a timeout is issued.
+  TIMEOUT = -6,
+  //If contract returns none JSON or other accepted format
+  INVALID_RETURN = -7,
+
+
+  //Reserved for future use.
+  //If contract over uses gas or TX does not have enough gas.
+  GAS_EXHAUSTED = -20
+  
+}
+
 interface VmCallResult {
   code: number
   result: string
@@ -255,7 +278,15 @@ export class VmContainer {
         })
       }
     }, 1)
-    const executeStop = await new Promise((resolve, reject) => {
+    const executeStop = await new Promise<{
+      type: string
+      ret: string | null
+      logs: Array<string>
+      error: any
+      errorType: ContractErrorType
+      reqId: string
+      IOGas: number
+    } | null>((resolve, reject) => {
       this.events.once('execute-stop', (result0) => {
         resolve(result0)
         clearInterval(timeoutPid)
@@ -271,18 +302,32 @@ export class VmContainer {
   }
   
   async finish() {
-    this.child.send({
-      type: 'finish'
-    })
-    const result = await new Promise((resolve, reject) => {
-      this.events.once('result', (result0) => {
-        resolve(result0)
+    if(this.child.connected) {
+      this.child.send({
+        type: 'finish'
       })
-      this.events.once('timeout', (resultErr) => {
-        resolve(resultErr)
+      const result = await new Promise<{
+        stateMerkle: string
+      }>((resolve, reject) => {
+        this.events.once('finish-result', (result0) => {
+          console.log('finish-result', this.child.connected)
+          resolve(result0)
+        })
+        this.events.once('timeout', (resultErr) => {
+          resolve(resultErr)
+        })
       })
-    })
-    return result;
+      return result;
+    } else {
+      return null;
+    }
+  }
+
+  async finishAndCleanup() {
+    const val = await this.finish()
+    this.cleanup()
+
+    return val.stateMerkle;
   }
 
   async init() {
@@ -296,7 +341,7 @@ export class VmContainer {
           cid: this.opts.cid,
           contract_id: this.opts.contract_id
         } as any,
-        silent: true,
+        // silent: true,
         detached: false
     });
     this.child = child;
@@ -305,8 +350,8 @@ export class VmContainer {
         this.ready = true
         this.events.emit('ready')
       }
-      if(message.type === 'result') {
-        this.events.emit('result', message)
+      if(message.type === 'finish-result') {
+        this.events.emit('finish-result', message)
       }
       if(message.type === 'execute-stop') {
         this.events.emit('execute-stop', message)

@@ -27,9 +27,9 @@ import { createJwsMultsign, verifyMultiJWS } from '../../utils';
 
 
 enum PUBSUB_CHANNELS  {
-    multicast = '/vsc/multicast',
-    routesAnnounce = '/vsc/multicast',
-    memoryPool = '/vsc/memorypool'
+    multicast = '/vsc/multicast/v1',
+    routesAnnounce = '/vsc/multicast/v1',
+    memoryPool = '/vsc/memorypool/v1'
 }
 
 enum MESSAGE_TYPES {

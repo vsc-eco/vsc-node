@@ -886,7 +886,9 @@ export class ChainBridge {
                       })
                     }
                   } catch(ex) {
-                    console.log(ex)
+                    if(!ex.message.includes('Unexpected end of JSON input')) {
+                      console.log(ex)
+                    }
                   }
                 }
                 if (op_id === "custom_json") {

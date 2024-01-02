@@ -139,6 +139,7 @@ export const schema = `
         findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
         submitTransaction(payload: String): TransactionSubmitResult
+        submitTransactionV1(payload: String): TransactionSubmitResult
         localNodeInfo: LocalNodeInfo
         witnessNodes: [WitnessNode]
         nextWitnessSlot(local: Boolean): JSON

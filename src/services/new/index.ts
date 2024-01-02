@@ -3,7 +3,7 @@ import { Ed25519Provider } from "key-did-provider-ed25519";
 import { DID } from "dids";
 import KeyResolver from 'key-did-resolver'
 import winston from 'winston';
-import { Db } from 'mongodb';
+import { Collection, Db } from 'mongodb';
 import { Config } from "../nodeConfig";
 import { ChainBridgeV2 } from "./chainBridgeV2";
 import { NodeIdentity } from "./nodeIdentity";
@@ -14,6 +14,8 @@ import { getLogger } from '../../logger';
 import { createMongoDBClient } from '../../utils';
 import { TransactionPoolV2 } from './transactionPool';
 import { P2PService } from './p2pService';
+import { AddrRecord } from './types';
+import { ContractEngineV2 } from './contractEngineV2';
 
 export class NewCoreService {
     config: Config;
@@ -28,6 +30,8 @@ export class NewCoreService {
     transactionPool: TransactionPoolV2;
     p2pService: P2PService
     identity: DID;
+    addrsDb: Collection<AddrRecord>;
+    contractEngine: ContractEngineV2;
     
     constructor() {
         this.config = new Config(Config.getConfigDir())
@@ -42,6 +46,7 @@ export class NewCoreService {
         this.witness = new WitnessServiceV2(this)
         this.p2pService = new P2PService(this)
         this.transactionPool = new TransactionPoolV2(this)
+        this.contractEngine = new ContractEngineV2(this)
     }
     
     async init(oldService) {
@@ -61,8 +66,9 @@ export class NewCoreService {
         await this.p2pService.start()
         await this.witness.init();
         await this.transactionPool.init()
-        
-       
+        await this.contractEngine.init()
+
+        this.addrsDb = this.db.collection('addrs')
     }
 
     async start() {

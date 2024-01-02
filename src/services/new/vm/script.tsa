@@ -1,19 +1,36 @@
 //@ts-nocheck
 import { JSON } from 'assemblyscript-json/assembly'
+
+import {db, console, TxOutput} from '@vsc.eco/sdk/assembly'
 // import {JSON} from 'json-as'
 
 // import { sdk } from '@vsc.eco/sdk'
 
-declare function consoleLog(arg0: String): void
-declare function logNumber(arg0: i32): void
-declare function logBool(arg0: bool): void
-declare function logUint8Array(arg0: Uint8Array): void
-declare function api(): string
 
-declare namespace db {
-  function setObject(key: String, val: String): i32
-  function getObject(key: String): String
+declare namespace System {
+  function getEnv(str: string): string
+  function call(str: string): string
 }
+
+class InvalidInputError extends Error {
+  constructor(msg: string) {
+      super(msg);
+      
+      // Set the prototype explicitly.
+      Object.setPrototypeOf(this, InvalidInputError.prototype);
+  }
+}
+
+
+function testError(msg: string): void {
+  const json = new JSON.Obj()
+  json.set('msg', msg)
+  json.set('__t', 'invalid_input')
+  const error = new Error(json.stringify())
+  throw error
+}
+
+// function assertEqual
 
 class ObjType {
   callCount: i32
@@ -22,52 +39,127 @@ const obj:ObjType = {
   callCount: 0
 }
 
-@serializable
-class Paramters {
-  to: string
-  from: string
-}
+@external('env', 'seed')
+declare function seed(): i64;
+
+
 export function testJSON(payload: string):string {
-  // consoleLog(payload)
-  //   const jsonPayload:Paramters = JSON.parse<Paramters>(payload)
-  //   consoleLog(jsonPayload.to)
-    // if(jsonPayload.isObj === true) {
-      
-    // }
     let jsonObj: JSON.Obj = <JSON.Obj>(JSON.parse(payload));
 
-    consoleLog(jsonObj.stringify())
-    consoleLog(jsonObj.keys[0])
+    console.log(jsonObj.stringify())
+    console.log(jsonObj.keys[0])
     jsonObj.keys.forEach((e) => {
-      consoleLog(e)
+      console.log(e)
     })
+
+    console.log(`to value: ${jsonObj.getString('to')!} ${jsonObj.getString('to')! == "test1"}`)
+    assert(jsonObj.getString('to')!, "test2")
+    console.log(`assert code: ${assert(jsonObj.getString('to')!._str, "test2")}`)
+    if(jsonObj.getString('to')!.valueOf() === "test1") {
+      console.log('I should throw error')
+      testError('I should break here')
+    }
     
+    // state.setObject('key-1', jsonObj.stringify())
+    // const val = state.getObject('key-2')
+
+    // console.log(`test val` + val)
     
-   
     obj.callCount = obj.callCount + 1
+    
     return `Count: ${obj.callCount}`
 }
 
-export function test(call: Uint8Array): i32 {
-  // logNumber(call)
-  logUint8Array(call)
-  if (call === 'set') {
-    db.setObject('name', 'space')
-    consoleLog('testing')
-  }
-  return 4
+class T_TOKEN_CONFIG {
+
+  decimals: i64
+  mint_authority: string
 }
-export function testString(a: string): void {
-  consoleLog(a + 'world')
-  api()
-    .split('.')
-    .map((e: string): string => {
-      consoleLog(e)
-      consoleLog((parseInt(e) * 5).toString())
-      logBool(parseInt(e) * 5 === 810)
-      return (parseInt(e) * 5).toString()
-    })
-  // let bytes = new Uint8Array(this.len);
-  // memory.copy(bytes.dataStart, a)
-  // return bytes
+
+const TOKEN_CONFIG: T_TOKEN_CONFIG = {
+  decimals: 3,
+  mint_authority: ''
+}
+
+class transferPayload {
+  to: string
+  from: string
+  amount: i64
+}
+
+export function transfer(payload: string): string {
+  let jsonObj: JSON.Obj = <JSON.Obj>(JSON.parse(payload));
+  const transferPayload: transferPayload = {
+    to: jsonObj.getString('to')!._str,
+    from: '',
+    amount: 33
+  }
+
+
+  return new TxOutput().exitCode(0).done()
+}
+
+
+class MintPayload {
+  to: string
+  amount: i64
+}
+
+class MintVal {
+  val: i64
+}
+
+export function mint(payload: string): string {
+  let jsonObj: JSON.Obj = <JSON.Obj>(JSON.parse(payload));
+  const mintPayload:MintPayload = {
+    amount: jsonObj.getInteger('amount')!.valueOf(),
+    to: jsonObj.getString('to')!.valueOf()
+  }
+  db.setObject(mintPayload.to, JSON.from<MintVal>({
+    val: mintPayload.amount
+  }).stringify())
+
+  return new TxOutput().exitCode(0).msg("MINT_SUCCESS").done()
+}
+
+class BurnPayload {
+  address: string
+  amount: i64
+}
+
+export function burn(payload: string): string {
+  let jsonObj: JSON.Obj = <JSON.Obj>(JSON.parse(payload));
+  const out = new TxOutput();
+  const amount = jsonObj.getInteger('amount');
+
+
+  if(!amount) {
+    return out.exitCode(-1).msg('Invalid Input').done()
+  }
+
+  if(!amount.isInteger) {
+    return out.exitCode(-1).msg('Invalid data').done()
+  }
+  
+  const burnPayload:BurnPayload = {
+    amount: amount._num,
+    address: jsonObj.getString('address')!._str
+  }
+  const val = <JSON.Obj>JSON.parse(db.getObject(`balances/${burnPayload.address}`))
+  
+  const balance = val.getInteger('val')
+
+  if(!balance) {
+    return out.exitCode(-1).msg('Invalid data').done()
+  }
+
+  if(!balance.isInteger) {
+    return out.exitCode(-1).msg('Invalid data').done()
+  }
+
+  if(balance._num < burnPayload.amount) {
+    return out.exitCode(-1).msg('In sufficient balance').done()
+  }
+  
+  return new TxOutput().done()
 }

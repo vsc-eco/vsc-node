@@ -3,7 +3,7 @@ import SHA256 from 'crypto-js/sha256'
 import { encodePayload } from 'dag-jose-utils'
 import networks from "../../../services/networks";
 import { NewCoreService } from "..";
-import { HiveClient } from "../../../utils";
+import { HiveClient, sleep } from "../../../utils";
 import { CID } from 'kubo-rpc-client';
 import { BlsCircuit, BlsDID } from '../utils/crypto/bls-did';
 import { Collection } from 'mongodb';
@@ -409,7 +409,17 @@ export class WitnessServiceV2 {
       const {message, drain} = pubReq;
 
       
-      const cadBlock = this._candidateBlocks[message.block_height]
+      let cadBlock = this._candidateBlocks[message.block_height]
+      if(!cadBlock) {
+        for(let attempts = 0; attempts < 6; attempts++) {
+          if(this._candidateBlocks[message.block_height]) {
+            cadBlock = this._candidateBlocks[message.block_height]
+            break;
+          } else {
+            await sleep(1_000)
+          }
+        }
+      }
       console.log('VERIFYING block over p2p channels', cadBlock, message.block_height, message)
       if(cadBlock) {
         const signData = await this.self.consensusKey.signRaw((await encodePayload(cadBlock)).cid.bytes)

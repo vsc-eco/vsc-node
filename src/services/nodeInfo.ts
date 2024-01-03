@@ -33,7 +33,8 @@ export class NodeInfoService {
          * In P2P channels: link can be verified between DID <--> PeerId
          */
 
-
+        
+        
         if(moment().subtract('1', 'minute').toDate() < this.lastUpdate && this.lastUpdate) {
             return;
         }
@@ -46,14 +47,14 @@ export class NodeInfoService {
             return;
         }
         const [accountDetails] = await HiveClient.database.getAccounts([hiveAccount])
-
+        
         let json_metadata;
         try {
             json_metadata = JSON.parse(accountDetails.json_metadata)
         } catch {
             json_metadata = {}
         }
-
+        
         let witnessEnabled = this.self.config.get("witness.enabled");
         let disableReason;
 
@@ -77,7 +78,6 @@ export class NodeInfoService {
 
         const ipfs_peer_id = (await this.self.ipfs.id()).id.toString()
 
-       
         if(json_metadata.vsc_node) {
             if(
                 json_metadata.vsc_node.unsigned_proof.witness.enabled === witnessEnabled && 
@@ -119,11 +119,12 @@ export class NodeInfoService {
             unsigned_proof,
             signed_proof: await this.self.identity.createJWS(unsigned_proof),
         }
-
         const dag = await this.self.ipfs.dag.put(JSON.parse(JSON.stringify(registrationInfo)))
 
-        const publishResult = await this.self.ipfs.name.publish(dag)
-        console.log(publishResult)
+        void(async () => {
+            const publishResult = await this.self.ipfs.name.publish(dag)
+            console.log(publishResult)
+        })()
         await HiveClient.broadcast.updateAccount({
             account: hiveAccount,
             memo_key: accountDetails.memo_key,
@@ -183,6 +184,12 @@ export class NodeInfoService {
         this.gitCommit = await getCommitHash()
         NodeSchedule.scheduleJob('0 * * * *', this.announceNode)
         NodeSchedule.scheduleJob('* * * * *', this.runEarlyUpdate)
-        this.announceNode()
+        setTimeout(async() => {
+            try {
+                await this.announceNode()
+            } catch(ex) {
+                console.log(ex)
+            }
+        }, 1000)
     }
 }

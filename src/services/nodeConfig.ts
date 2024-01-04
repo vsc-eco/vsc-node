@@ -130,7 +130,7 @@ export class Config {
   async init(config?) {
     const defaultConfig = {
       network: {
-        id: 'testnet/d12e6110-9c8c-4498-88f8-67ddf90d451c',
+        id: 'testnet/0bf2e474-6b9e-4165-ad4e-a0d78968d20c',
       },
       setupIdentification: {
         dbSuffix: ''

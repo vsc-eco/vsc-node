@@ -719,9 +719,9 @@ export class P2PService {
                 connected: false
             }
         })
-        this.announceNode()
+        // this.announceNode()
         // NodeSchedule.scheduleJob('*/15 * * * * ', this.announceNode)
-        NodeSchedule.scheduleJob('* * * * * ', this.announceNode)
+        // NodeSchedule.scheduleJob('* * * * * ', this.announceNode)
         // await this.createDirectChannels()
         // NodeSchedule.scheduleJob('* * * * * ', this.createDirectChannels)
     }

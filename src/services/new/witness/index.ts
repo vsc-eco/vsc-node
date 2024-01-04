@@ -20,7 +20,6 @@ export class BlockContainer {
     }
 
     async toHeader() {
-      
       const block = await encodePayload(this.rawData)
       
       return {
@@ -28,7 +27,7 @@ export class BlockContainer {
         __v: '0.1',
         headers: {
           //Find previous block here
-          prevB: '',
+          prevb: this.rawData.prevb || null,
           //block range
           br: [this.ref_start, this.ref_end]
         },
@@ -298,61 +297,73 @@ export class WitnessServiceV2 {
           return key.t === "consensus"
         })
       }).filter(e => !!e).map(e => e.key);
-      console.log('keysMap', keysMap)
+      console.log('keysMap', keysMap, keys.map(e => e.account))
 
       let voteMajority = 0.67
       for await(let sigMsg of drain) {
-        const pub = JSON.parse(Buffer.from(sigMsg.payload.p, 'base64url').toString()).pub
-        console.log('INCOMING PUB SIG', pub)
-        //Prevent rogue key attacks
-        if(!keysMap.includes(pub)) {
-          continue;
-        }
         const sig = sigMsg.payload.s
-        const verifiedSig = await circuit.verifySig({
-          sig,
-          pub,
-        });
-        // 'verified sig',
-        console.log(verifiedSig)
-        if(verifiedSig) {
-          console.log({
-            sig,
-            did: pub,
-          })
-          const result = await circuit.add({
-            sig,
-            did: pub,
-          })
-
-
-          //Vote majority is over threshold.
-          if(circuit.aggPubKeys.size / keysMap.length > voteMajority ) {
-            //Stop filling circuit if over majority. Saving on unneeded extra bitvectors
-            break;
+        try {
+          const pub = JSON.parse(Buffer.from(sigMsg.payload.p, 'base64url').toString()).pub
+          console.log('INCOMING PUB SIG', pub)
+          //Prevent rogue key attacks
+          console.log(keys.find((e) => {
+            return !!e.keys.find(b => b.key === pub)
+          }))
+          if(!keysMap.includes(pub)) {
+            console.log('keyMap included', pub)
+            continue;
           }
-          console.log('result', result)
-          console.log('aggregated DID', circuit.did.id)
+          
+          const verifiedSig = await circuit.verifySig({
+            sig,
+            pub,
+          });
+          // 'verified sig',
+          console.log(verifiedSig)
+          if(verifiedSig) {
+            console.log({
+              sig,
+              did: pub,
+            })
+            const result = await circuit.add({
+              sig,
+              did: pub,
+            })
+            
+            
+            console.log('result', result)
+            console.log('aggregated DID', circuit.did.id)
+            //Vote majority is over threshold.
+            if(circuit.aggPubKeys.size / keysMap.length > voteMajority ) {
+              //Stop filling circuit if over majority. Saving on unneeded extra bitvectors
+              console.log('BLS circuit filled')
+              break;
+            }
+          }
+        } catch (ex) {
+          console.log(ex)
         }
       }
 
-      
+      const signedBlock = {
+        ...blockHeader,
+        block: blockHeader.block.toString(),
+        signature: circuit.serialize(keysMap)
+      }
+      console.log(signedBlock, circuit.aggPubKeys.size, keysMap.length)      
       if(circuit.aggPubKeys.size / keysMap.length > voteMajority){
-        const signedBlock = {
-          ...blockHeader,
-          block: blockHeader.block.toString(),
-          signature: circuit.serialize(keysMap)
-        }
-        await HiveClient.broadcast.json({
-          id: 'vsc.propose_block.ignoretest', 
-          required_auths: [process.env.HIVE_ACCOUNT],
-          required_posting_auths: [],
-          json: JSON.stringify({
-            net_id: this.self.config.get('network.id'),
-            signed_block: signedBlock
-          })
-        }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
+        if(process.env.BLOCK_BROADCAST_ENABLED === "yes") {
+          await HiveClient.broadcast.json({
+            id: 'vsc.propose_block.ignoretest', 
+            required_auths: [process.env.HIVE_ACCOUNT],
+            required_posting_auths: [],
+            json: JSON.stringify({
+              net_id: this.self.config.get('network.id'),
+              signed_block: signedBlock
+            })
+          }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
 
+        }
       }
     }
 
@@ -362,7 +373,6 @@ export class WitnessServiceV2 {
 
     async blockTick(block) {
         const block_height = block.key;
-        console.log('block_height', block_height)
         const schedule = await this.roundCheck(block_height) || []
 
         const scheduleSlot = schedule.find(e => e.bn === block_height)

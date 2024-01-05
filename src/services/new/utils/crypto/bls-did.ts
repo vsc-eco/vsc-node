@@ -128,7 +128,7 @@ export class BlsDID {
  */
 export class BlsCircuit {
   did: BlsDID
-  sig: Uint8Array
+  sig: Signature
   msg: Uint8Array
   aggPubKeys: Map<string, boolean>
   // bitSet: BitSet
@@ -171,12 +171,13 @@ export class BlsCircuit {
 
     console.log([...publicKeys], [...sigs])
     const pubKey = bls.PublicKey.aggregate([...publicKeys])
+    console.log('agg sigs', sigs)
     const sig = bls.Signature.aggregate([...sigs])
 
     this.did = new BlsDID({
       pubKey,
     })
-    this.sig = sig.toBytes()
+    this.sig = sig
 
     return {
       errors,
@@ -184,7 +185,7 @@ export class BlsCircuit {
   }
 
   async verify(msg) {
-    return bls.Signature.fromBytes(this.sig).verify(
+    return this.sig.verify(
       this.did.pubKey,
       (await encodePayload(msg)).cid.bytes,
     )
@@ -217,10 +218,16 @@ export class BlsCircuit {
         bitset.set(Number(str), 1)
       }
     }
+    function d2h(d) {
+      var h = (d).toString(16);
+      return h.length % 2 ? '0' + h : h;
+    }
     return {
-      sig: Buffer.from(this.sig).toString('base64url'),
+      sig: Buffer.from(this.sig.toBytes()).toString('base64url'),
       did: this.did.id,
-      circuit: Buffer.from(bitset.toString(16), 'hex').toString('base64url'),
+      //Don't use. Produces invalid results when bitset is too small
+      circuit: Buffer.from(d2h(bitset.toString(16)), 'hex').toString('base64url'),
+      //Better to use
       circuitHex: bitset.toString(16),
     }
   }

@@ -115,14 +115,24 @@ export class ChainBridgeV2 {
 
 
         if (!lastBlock) {
-            lastBlock = (await this.events.findOne({
-                id: "hive_block"
-            }, {
-                sort: {
-                    key: 1
+            //Search for very first hive block.
+            while (true) {
+                const firstBlock = (await this.events.findOne({
+                    id: "hive_block"
+                }, {
+                    sort: {
+                        key: 1
+                    }
+                }));
+                if(firstBlock) {
+                    lastBlock = firstBlock.key
+                    break;
+                } else {
+                    await sleep(1_000)
                 }
-            }) || {}).key
+            }
         }
+        
         while (true) {
             const blocks = await this.events.find({
                 id: 'hive_block',
@@ -404,7 +414,10 @@ export class ChainBridgeV2 {
     }
 
     async getWitnessesAtBlock(blk: number) {
-        const witnesses = await this.witnessDb.find().toArray()
+        //This is not safe as it can vary with historical records
+        const witnesses = await this.witnessDb.find({
+            net_id: this.self.config.get('network.id')
+        }).toArray()
         const filteredWitnesses = (await Promise.all(witnesses.map(async(e) => {
             let query
             let sort
@@ -576,7 +589,7 @@ export class ChainBridgeV2 {
     async start() {
         this.stream.startStream()
 
-        const witnesses = await this.self.chainBridge.getWitnessesAtBlock(78_000_000)
-        console.log('witnesses at time', witnesses.map(e => e.account))
+        // const witnesses = await this.self.chainBridge.getWitnessesAtBlock(78_000_000)
+        // console.log('witnesses at time', witnesses.map(e => e.account))
     }
 }

@@ -10,7 +10,7 @@ import { VmContainer } from './utils';
 import { sleep } from '../../../utils';
 
 
-const ipfs = IPFS.create({url: 'http://127.0.0.1:5001'})
+const ipfs = IPFS.create({url: process.env.IPFS_HOST || 'http://127.0.0.1:5001'})
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 

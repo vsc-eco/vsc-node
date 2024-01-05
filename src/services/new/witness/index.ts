@@ -12,7 +12,20 @@ import { PrivateKey } from '@hiveio/dhive';
 
 
 export class BlockContainer {
-    rawData: any;
+    rawData: {
+      __t: 'vsc-block',
+      __v: '0.1',
+      headers?: {
+        //Previous block header
+        prevb: null
+      }
+      txs: Array<{
+        id: string
+        type: string
+      }>,
+      merkle_root: string,
+      mmr_root: string
+    };
     ref_start: number;
     ref_end: number
     constructor(rawData) {
@@ -27,11 +40,12 @@ export class BlockContainer {
         __v: '0.1',
         headers: {
           //Find previous block here
-          prevb: this.rawData.prevb || null,
+          prevb: this.rawData.headers?.prevb || null,
           //block range
           br: [this.ref_start, this.ref_end]
         },
         merkle_root: this.rawData.merkle_root,
+        // mmr_root: this.rawData.mmr_root,
         block: block.cid
       }
     }
@@ -240,10 +254,9 @@ export class WitnessServiceV2 {
         __t: 'vsc-block',
         __v: '0.1',
         txs: txList,
-        // contract_index: {
-        //   'null': []
-        // },
-        merkle_root: !merkleRoot && null
+        
+        merkle_root: !merkleRoot && null,
+        // mmr_root: !merkleRoot && null
       }
       console.log('blockFull', blockFull)
       const blockContainer = new BlockContainer(blockFull);
@@ -281,13 +294,14 @@ export class WitnessServiceV2 {
 
 
       console.log('proposing block over p2p channels', blockHeader)
+      await sleep(12_000)
       const {drain} = await this.self.p2pService.memoryPoolChannel.call('propose_block', {
         payload: {
           block_height,
           hash: encodedPayload.cid.toString(),
         },
         mode: 'stream',
-        streamTimeout: 12_000
+        streamTimeout: 15_000
       })
       const keys = await this.self.chainBridge.getWitnessesAtBlock(block_height)
       const circuit = new BlsCircuit(blockHeader)
@@ -301,10 +315,11 @@ export class WitnessServiceV2 {
 
       let voteMajority = 0.67
       for await(let sigMsg of drain) {
+        const from = sigMsg.from
         const sig = sigMsg.payload.s
         try {
           const pub = JSON.parse(Buffer.from(sigMsg.payload.p, 'base64url').toString()).pub
-          console.log('INCOMING PUB SIG', pub)
+          console.log('INCOMING PUB SIG', pub, from)
           //Prevent rogue key attacks
           console.log(keys.find((e) => {
             return !!e.keys.find(b => b.key === pub)

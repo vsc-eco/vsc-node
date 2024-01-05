@@ -10,6 +10,7 @@ services:
       #- mongo
     depends_on:
       - ipfs
+      - mongo
     networks:
       - vsc-node
     env_file:

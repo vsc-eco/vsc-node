@@ -34,11 +34,11 @@ echo "$indexVersion $indexVersionDeployed"
 
 if [ "$gitCommit" != "$deployedGitCommit" ];
 then
-  docker-compose down
+  docker compose down
 
   sleep 15; # Ensure safe shutdown
 
-  docker-compose build
+  docker compose build
 
 
   if [ "$indexVersion" -ne "$indexVersionDeployed" ];
@@ -54,7 +54,7 @@ then
   fi
 
 
-  docker-compose up -d
+  docker compose up -d
 
   echo $gitCommit > data/git-flag
 fi

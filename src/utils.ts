@@ -288,7 +288,7 @@ export async function* liveHiveBlocks(API, opts: {
     try {
       const hive = new Client(HIVE_API)
       bh = await hive.blockchain.getCurrentBlockNum()
-      const dynProps = await hive.database.getDynamicGlobalProperties()
+      // const dynProps = await hive.database.getDynamicGlobalProperties()
       // console.log({
       //   last_irreversible_block_num: dynProps.last_irreversible_block_num,
       //   head_block_number: dynProps.head_block_number
@@ -299,7 +299,7 @@ export async function* liveHiveBlocks(API, opts: {
     } catch {
 
     }
-  }, 500)
+  }, 1000)
 
   opts.signal.addEventListener('abort', () => {
     clearInterval(headUpdater)

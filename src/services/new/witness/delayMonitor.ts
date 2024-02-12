@@ -1,9 +1,11 @@
 import { Collection } from "mongodb";
 import Moment from 'moment'
 import NodeSchedule from 'node-schedule'
-import { WitnessService } from ".";
-import { CoreService } from "..";
-import { median } from "../..//utils";
+import { WitnessService } from "../../witness";
+import { CoreService } from "../..";
+import { median } from "../../../utils";
+import { NewCoreService } from "..";
+import { WitnessServiceV2 } from ".";
 
 /**
  * List of allowed interval notches for hive anchor record creation
@@ -21,22 +23,22 @@ const ALLOWED_NOTCHES = [
 const MAX_RECORDS = 300;
 
 export class DelayMonitor {
-    self: CoreService;
-    witness: WitnessService;
+    self: NewCoreService;
+    witness: WitnessServiceV2;
     delayMarks: Collection<{value: number, ts: Date}>;
-    constructor(self: CoreService, witness: WitnessService) {
+    constructor(self: NewCoreService, witness: WitnessServiceV2) {
         this.self = self;
         this.witness = witness
 
         
-
+        this.gatherAverages = this.gatherAverages.bind(this)
         this.runMark = this.runMark.bind(this)
     }
 
     async runMark() {
         await this.delayMarks.insertOne({
             ts: new Date(),
-            value: this.self.chainBridge.hiveStream.blockLag
+            value: this.self.chainBridge.parseLag
         })
         await this.delayMarks.deleteMany({
             _id: {
@@ -84,11 +86,11 @@ export class DelayMonitor {
         this.delayMarks = this.self.db.collection('delay_marks')
         console.log('delay monitor is running!')
         
-        if(this.self.mode !== 'lite') {
-            NodeSchedule.scheduleJob('*/5 * * * *', this.runMark)
-            NodeSchedule.scheduleJob('*/5 * * * *', async() => {
-                console.log('Delay notch', await this.gatherAverages())
-            })
-        }
+        // if(this.self.mode !== 'lite') {
+        NodeSchedule.scheduleJob('*/5 * * * *', this.runMark)
+        NodeSchedule.scheduleJob('*/5 * * * *', async() => {
+            console.log('Delay notch', await this.gatherAverages())
+        })
+        // }
     }
 }

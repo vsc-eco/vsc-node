@@ -332,7 +332,6 @@ export class MultisigCore {
             'output_actions.tx_id': {$exists: false},
             'headers.contract_id': {$exists: true}
         }).toArray()
-        console.log('outputsWithActions', outputsWithActions)
        
         let outputActions = []
         for(let out of outputsWithActions) {
@@ -343,7 +342,6 @@ export class MultisigCore {
             })))
         }
         for(let action of outputActions) {
-            console.log(action)
             let tx;
             if(action.tx[0] === 'custom_json') {
                 tx = ['custom_json', {
@@ -362,7 +360,6 @@ export class MultisigCore {
                 continue;
             }
 
-            console.log('got here')
 
             const bh = await HiveClient.blockchain.getCurrentBlock();
             const [multisigAccount] = await HiveClient.database.getAccounts([process.env.MULTISIG_ACCOUNT])
@@ -407,7 +404,6 @@ export class MultisigCore {
             }
             signedTx.signatures = signatures;
 
-            console.log(signedTx)
 
             if(!this.sentTest) {
                 const recipt = await HiveClient.broadcast.send(signedTx)
@@ -422,8 +418,6 @@ export class MultisigCore {
             }
 
             this.sentTest = true;
-
-            
         }
     }
 

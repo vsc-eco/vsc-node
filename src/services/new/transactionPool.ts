@@ -1,12 +1,14 @@
 import { Collection } from "mongodb";
 import { NewCoreService } from ".";
 import { MessageHandleOpts } from "./p2pService";
-import { SignatureType, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from "./types";
+import { SignatureType, TransactionContainerV2, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from "./types";
 import { HiveClient, unwrapDagJws } from "../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { encodePayload } from 'dag-jose-utils'
-import { CID } from "kubo-rpc-client/dist/src";
+import { CID } from "kubo-rpc-client";
 import { verifyTx } from "./utils";
+import { convertTxJws } from "@vsc.eco/client/dist/utils";
+import DAGCbor from 'ipld-dag-cbor'
 
 interface TxAnnounceMsg {
     //ref_tx = only CID of TX useful for TXs under 2kb
@@ -30,86 +32,176 @@ export class TransactionPoolV2 {
     constructor(self: NewCoreService) {
         this.self = self
 
-        this.tickHandle = this.tickHandle.bind(this)
+        this.blockParser = this.blockParser.bind(this)
+        this.onTxAnnounce = this.onTxAnnounce.bind(this)
     }
 
+    /**
+     * Runs when "announce_tx" is broadcasted on the P2P channels
+     * @todo cleanup and DRY out signature validation logic.
+     * @param param0 
+     * @returns 
+     */
     async onTxAnnounce({message}: MessageHandleOpts) {
-        console.log(message)
-        let payload;
-        let txId;
+        let decodedTx;
+        let tx_id;
+        let sig_data = message.sig_data; //Must always be defined
         if(message.type === 'ref_tx') {
-            txId = message.id
-            payload = (await this.self.ipfs.dag.get(txId)).value
+            tx_id = message.id
+            decodedTx = (await this.self.ipfs.dag.get(tx_id)).value
         } else if(message.type = 'direct_tx') {
-            payload = Buffer.from(message.data, 'base64');
-            txId = (await this.self.ipfs.dag.put(payload, {
+            decodedTx = Buffer.from(message.data, 'base64');
+            tx_id = (await this.self.ipfs.dag.put(decodedTx, {
                 onlyHash: true
             })).toString()
         } else {
             return;
         }
-
-        const alreadyExistingTx = await this.txDb.findOne({
-            id: txId.toString()
+        const txRecord = await this.txDb.findOne({
+            id: tx_id
         })
-        let auths = []
-        if(!alreadyExistingTx) {
-            const {content, auths: authsOut} = await unwrapDagJws(payload, this.self.ipfs, this.self.identity)
+        if(!txRecord) { 
+            if(!sig_data) {
+                return;
+            }
+            //Run validation pipeline!
+            
+            const jwsList = await convertTxJws({
+                sig: sig_data,
+                tx: Buffer.from(DAGCbor.util.serialize(decodedTx)).toString('base64url')
+            })
+            const cid = await CID.parse(tx_id)
+        
+            for(let jws of jwsList) {
+                if(jws.jws.payload !== Buffer.from(cid.bytes).toString('base64url')) {
+                    return;
+                }
+                let signedDid;
+                try {
+                    const verifyResult = await this.self.identity.verifyJWS(jws.jws)
+            
+                    signedDid = verifyResult.kid.split('#')[0]
+                } catch {
+                    return;
+                }
+            
+                if(!decodedTx.headers.required_auths.map(e => {
+                    //Ensure there is no extra query fragments
+                    return e.split('?')[0]
+                }).includes(signedDid) && !(decodedTx.headers.payer === signedDid)) {
+                    return;
+                }
+            }
+            //TODO: Do nonce validation
 
-            console.log(content)
-
-            await this.txDb.findOneAndUpdate({
-                id: txId
-            }, {
-
-            }, {
-                upsert: true
+            await this.txDb.insertOne({
+                id: cid.toString(),
+                status: TransactionDbStatus.unconfirmed,
+                headers: {
+                    nonce: decodedTx.headers.nonce
+                },
+                required_auths: decodedTx.headers.required_auths.map(e => {
+                    const [value, query] = e.split('?')
+                    return {
+                        value,
+                    }
+                }),
+                data: decodedTx.tx,
+                sig_hash: (await this.self.ipfs.block.put(Buffer.from(sig_data, 'base64url'), {
+                    format: 'dag-cbor'
+                })).toString(),
+                src: 'vsc',
+                first_seen: new Date(),
+                local: true,
+                accessible: true
             })
         }
     }
 
-    async broadcastRawTx(txData) {
-        //Intercept final size data
-        const {linkedBlock, cid} = await encodePayload(txData)
-        //Added to IPFS irresepctive of broadcast method.
-        await this.self.ipfs.block.put(linkedBlock)
+    /**
+     * Ingests TX into DB
+     */
+    async ingestTx(args: {
+        tx: string,
+        //Raw sig data
+        sig: string
+        broadcast?: boolean
+    }) {
+        if(typeof args.broadcast !== 'undefined') {
+            //default to broadcast yes
+            args.broadcast = true
+        }
 
-        console.log('txData', txData)
-
-        const validData = await verifyTx(txData, this.self.identity)
-        console.log('validDid', validData, txData)
+        const jwsList = await convertTxJws({
+            sig: args.sig,
+            tx: args.tx
+        })
+        const buf = Buffer.from(args.tx, 'base64url')
+        const cid = await DAGCbor.util.cid(buf)
+        const decodedTx = DAGCbor.util.deserialize(buf) as TransactionContainerV2
+    
+        for(let jws of jwsList) {
+            console.log(jws.jws.payload, Buffer.from(cid.bytes).toString('base64url'))
+            if(jws.jws.payload !== Buffer.from(cid.bytes).toString('base64url')) {
+                throw new Error('Invalid Signature')
+            }
+            let signedDid;
+            try {
+                const verifyResult = await this.self.identity.verifyJWS(jws.jws)
+        
+                signedDid = verifyResult.kid.split('#')[0]
+            } catch {
+                throw new Error('Invalid Signature')
+            }
+        
+            if(!decodedTx.headers.required_auths.map(e => {
+                //Ensure there is no extra query fragments
+                return e.split('?')[0]
+            }).includes(signedDid) && !(decodedTx.headers.payer === signedDid)) {
+                throw new Error('Incorrectly signed by wrong authority. Not included in "required_auths"')
+            }
+        }
+        //TODO: Do nonce validation
 
         const txRecord = await this.txDb.findOne({
             id: cid.toString()
         })
-        if(!txRecord) {
-            await this.txDb.findOneAndUpdate({
-                id: cid.toString()
-            }, {
-                $set: {
-                    status: TransactionDbStatus.unconfirmed,
-                    required_auths: [],
-                    headers: {
-                        lock_block: null
-                    },
-                    data: txData.tx.payload,
-                    result: null,
-                    first_seen: new Date(),
-                    accessible: true,
-                    local: true,
-                    src: 'vsc'
-                }
-            }, {
-                upsert: true
+        if(!txRecord) { 
+            await this.txDb.insertOne({
+                id: cid.toString(),
+                status: TransactionDbStatus.unconfirmed,
+                headers: {
+                    nonce: decodedTx.headers.nonce
+                },
+                required_auths: decodedTx.headers.required_auths.map(e => {
+                    const [value, query] = e.split('?')
+                    return {
+                        value,
+                    }
+                }),
+                data: decodedTx.tx,
+                sig_hash: (await this.self.ipfs.block.put(Buffer.from(args.sig, 'base64url'), {
+                    format: 'dag-cbor'
+                })).toString(),
+                src: 'vsc',
+                first_seen: new Date(),
+                local: true,
+                accessible: true
             })
         }
+        await this.self.ipfs.block.put(buf, {
+            format: 'dag-cbor'
+        })
 
-        if(linkedBlock.length > CONSTANTS.max_broadcast_size) {
+        
+        if(buf.length > CONSTANTS.max_broadcast_size) {
             //Over broadcast limit
             await this.self.p2pService.memoryPoolChannel.call('announce_tx', {
                 payload: {
                     type: 'ref_tx',
-                    id: cid.toString()
+                    id: cid.toString(),
+                    //Fill in
+                    sig_data: args.sig
                 },
                 mode: 'basic'
             })
@@ -117,10 +209,17 @@ export class TransactionPoolV2 {
             await this.self.p2pService.memoryPoolChannel.call('announce_tx', {
                 payload: {
                     type: 'direct_tx',
-                    data: Buffer.from(linkedBlock).toString('base64')
+                    data: buf.toString('base64url'),
+                    //Fill in
+                    sig_data: args.sig
                 },
                 mode: 'basic'
             })
+        }
+
+
+        return {
+            id: cid.toString()
         }
     }
 
@@ -137,9 +236,11 @@ export class TransactionPoolV2 {
                 id: 'vsc.announce_tx',
                 json: JSON.stringify({
                     net_id: this.self.config.get('network.id'),
-                    op: 'dummy_tx',
-                    action: 'dummy_tx',
-                    payload: 'test-test'
+                    data: {
+                        op: 'dummy_tx',
+                        action: 'dummy_tx',
+                        payload: 'test-test'
+                    }
                 })
             }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING))
 
@@ -156,10 +257,10 @@ export class TransactionPoolV2 {
                 tx: { 
                     op: "null",
                     payload: 'test',
-                    type: TransactionDbType.null,
                 },
                 headers: {
-                    lock_block: currentBlock + 120,
+                    type: TransactionDbType.null,
+                    lock_block: currentBlock + 20 * 15,
                 },
                 required_auths: [
                     // {
@@ -187,8 +288,13 @@ export class TransactionPoolV2 {
         }
     }
 
-    async tickHandle(inData) {
-        const [tx, fullTx] = inData
+    /**
+     * Hive block parser for TX pool
+     * @param args 
+     * @returns 
+     */
+    protected async blockParser(args) {
+        const {tx, blkHeight} = args.data
         // console.log('picked up TX', tx, fullTx)
         if(tx.id === 'vsc.announce_tx' || tx.id === 'vsc.tx') {
             const json = JSON.parse(tx.json)
@@ -199,26 +305,19 @@ export class TransactionPoolV2 {
 
             const required_auths = []
             required_auths.push(...tx.required_posting_auths.map(e => {
-                return {
-                    type: 'posting',
-                    value: e
-                }
+                return `${e}?type=posting`
             }))
             required_auths.push(...tx.required_auths.map(e => {
-                return {
-                    type: 'active',
-                    value: e
-                }
+                return `${e}?type=active`
             }))
-            console.log('required_auths', required_auths)
             const txData = {
                 status: TransactionDbStatus.included,
-                id: fullTx.transaction_id,
+                id: tx.transaction_id,
                 required_auths,
+                anchored_height: blkHeight,
+                anchored_index: tx.index,
                 headers: {
-                    anchored_height: fullTx.block_height,
-                    lock_block: fullTx.block_height + 120,
-                    index: fullTx.index,
+                    // lock_block: fullTx.block_height + 120,
                     contract_id: json.data.contract_id
                 },
                 data: {
@@ -239,12 +338,21 @@ export class TransactionPoolV2 {
     
     async init() {
         this.txDb = this.self.db.collection('transaction_pool')
-        this.self.chainBridge.registerTickHandle('tx_pool.processTx', this.tickHandle, {
-            type: 'tx'
+        // this.self.chainBridge.registerTickHandle('tx_pool.processTx', this.tickHandle, {
+        //     type: 'tx',
+        //     priority: 'before'
+        // })
+        this.self.chainBridge.streamParser.addParser({
+            name: "tx-pool",
+            type: 'tx',
+            priority: 'before',
+            func: this.blockParser
         })
-        this.self.p2pService.memoryPoolChannel.register('announce_tx', this.onTxAnnounce)
-        // this.createDummyTx({where: 'offchain'})
-        // this.createDummyTx({where: 'onchain'})
+        this.self.p2pService.memoryPoolChannel.register('announce_tx', this.onTxAnnounce, {
+            loopbackOk: true
+        })
+        
+        await this.createDummyTx({where: 'offchain'})
     }
 
     async start() {

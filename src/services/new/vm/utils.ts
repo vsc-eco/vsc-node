@@ -4,6 +4,7 @@ import {fork, ChildProcess} from 'child_process'
 import { fileURLToPath } from 'url';
 import EventEmitter from 'events'
 import Crypto from 'crypto'
+import Pushable from 'it-pushable';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -243,21 +244,38 @@ export class VmContainer {
   }
   child: ChildProcess
   opts: {
-    contract_id: string
-    state_merkle: string
-    cid: string
+    // contract_id: string
+    // state_merkle: string
+    // cid: string
+    state: {
+      [x: string]: string
+    }
+    modules: {
+      [x: string]: string
+    }
   }
   ready: boolean
   events: EventEmitter;
   reqId: string;
   startTime: Date | null;
 
-  constructor(opts) {
+  constructor(opts: {
+    // contract_id: string
+    // state_merkle: string
+    // cid: string
+    state: {
+      [x: string]: string
+    }
+    modules: {
+      [x: string]: string
+    }
+  }) {
     this.opts = opts
     this.events = new EventEmitter()
   }
 
   async call(args: {
+    contract_id: string
     action: string
     payload: string
   }) {
@@ -268,6 +286,7 @@ export class VmContainer {
       type: "call",
       action: args.action,
       payload: args.payload,
+      contract_id: args.contract_id,
       reqId
     });
     const timeoutPid = setInterval(() => {
@@ -297,7 +316,6 @@ export class VmContainer {
       })
     })
     
-    console.log('finish', executeStop, new Date().getTime() - this.startTime.getTime())
     return executeStop
   }
   
@@ -323,6 +341,33 @@ export class VmContainer {
     }
   }
 
+  finishIterator() {
+    if(this.child.connected) {
+      this.child.send({
+        type: 'finish'
+      })
+      const pushable = Pushable()
+
+      void (async () => {
+        const func = (result0) => {
+          pushable.push(result0)
+        };
+        this.events.on('partial-result', func)
+        this.events.once('timeout', (resultErr) => {
+          this.events.off('partial-result', func)
+          pushable.end(resultErr)
+        })
+        this.events.once('finish-result', () => {
+          pushable.end()
+        })
+
+      })()
+      return pushable
+    } else {
+      return null;
+    }
+  }
+
   async finishAndCleanup() {
     const val = await this.finish()
     this.cleanup()
@@ -338,8 +383,10 @@ export class VmContainer {
 
     const child = fork(partPath, parameters, {
         env: {
-          cid: this.opts.cid,
-          contract_id: this.opts.contract_id
+          // cid: this.opts.cid,
+          // contract_id: this.opts.contract_id,
+          state: JSON.stringify(this.opts.state),
+          modules: JSON.stringify(this.opts.modules)
         } as any,
         // silent: true,
         detached: false
@@ -352,6 +399,9 @@ export class VmContainer {
       }
       if(message.type === 'finish-result') {
         this.events.emit('finish-result', message)
+      }
+      if(message.type === 'partial-result') {
+        this.events.emit('partial-result', message)
       }
       if(message.type === 'execute-stop') {
         this.events.emit('execute-stop', message)

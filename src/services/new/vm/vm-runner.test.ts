@@ -60,8 +60,12 @@ void (async () => {
       console.log(cid)
   
       const vmContainer = new VmContainer({
-        contract_id: 'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556',
-        cid: cid.toString()
+        state: {
+          'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556': (await ipfs.object.new({template: 'unixfs-dir'})).toString()
+        },
+        modules: {
+          'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556': cid.toString()
+        }
       })
   
       await vmContainer.init()
@@ -70,6 +74,7 @@ void (async () => {
   
       for(let x = 0; x < 1; x++) {
         const result = await vmContainer.call({
+          contract_id: "vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556",
           action: 'testJSON',
           payload: JSON.stringify({
             to: "test1",
@@ -79,7 +84,9 @@ void (async () => {
         console.log(result)
       }    
           
-      await vmContainer.finish()
+      for await(let it of vmContainer.finishIterator()) {
+        console.log(it)
+      }
     } catch(ex) {
       console.log(ex)
     }

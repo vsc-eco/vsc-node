@@ -48,7 +48,14 @@ export const schema = `
         # More coming
     }
     type TransactionSubmitResult {
-        tx_id: String
+        id: String
+    }
+    type AccountNonceResult {
+        nonce: Int
+    }
+    type AccountInfoResult {
+        rc_max: Int
+        rc_current: Int
     }
     type LocalNodeInfo {
         peer_id: String
@@ -139,7 +146,9 @@ export const schema = `
         findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
         submitTransaction(payload: String): TransactionSubmitResult
-        submitTransactionV1(payload: String): TransactionSubmitResult
+        submitTransactionV1(tx: String!, sig: String!): TransactionSubmitResult
+        getAccountNonce(keyGroup: [String]!): AccountNonceResult
+
         localNodeInfo: LocalNodeInfo
         witnessNodes: [WitnessNode]
         nextWitnessSlot(local: Boolean): JSON

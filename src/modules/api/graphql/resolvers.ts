@@ -4,8 +4,29 @@ import { GraphQLError } from 'graphql';
 import * as IPFS from 'kubo-rpc-client'
 import sift from 'sift'
 import DAGCbor from 'ipld-dag-cbor'
+import {convertTxJws} from '@vsc.eco/client/dist/utils'
+import Ajv from "ajv"
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
-import { verifyTx } from '../../../services/new/utils';
+import { computeKeyId, verifyTx } from '../../../services/new/utils';
+import { TransactionContainerV2 } from '../../../services/new/types';
+
+const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
+
+ajv.compile({
+  type: "object",
+  properties: {
+    headers: {
+      type: "object",
+      properties: {
+
+      }
+    },
+  },
+  required: ["hea"],
+  additionalProperties: false
+})
+
+
 
 export const DebugResolvers = { 
   peers: async (_, args) => {
@@ -403,12 +424,26 @@ export const Resolvers = {
     }
   },
   submitTransactionV1: async (_, args) => {
-    console.log(args.payload)
-    const buf = Buffer.from(args.payload, 'base64')
-
-    const decodedBuf = DAGCbor.util.deserialize(buf)
-    console.log(decodedBuf)
-    console.log(await verifyTx(decodedBuf, appContainer.self.identity))
-    await appContainer.self.newService.transactionPool.broadcastRawTx(decodedBuf)
+    const {id} = await appContainer.self.newService.transactionPool.ingestTx({
+      tx: args.tx,
+      sig: args.sig
+    })
+    return {
+      id
+    }
+  },
+  getAccountNonce: async (_, args) => {
+    const nonceData = await appContainer.self.newService.nonceMap.findOne({
+      id: await computeKeyId(args.keyGroup)
+    })
+    let nonce;
+    if(nonceData) {
+      nonce = nonceData.nonce
+    } else {
+      nonce = 0;
+    }
+    return {
+      nonce
+    }
   }
 }

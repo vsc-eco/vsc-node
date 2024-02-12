@@ -129,7 +129,10 @@ export class BlsDID {
 export class BlsCircuit {
   did: BlsDID
   sig: Signature
-  msg: Uint8Array
+  msg: {
+    data: Uint8Array
+    hash: Uint8Array
+  }
   aggPubKeys: Map<string, boolean>
   // bitSet: BitSet
   constructor(msg) {
@@ -150,9 +153,14 @@ export class BlsCircuit {
       const did = BlsDID.fromString(e.did)
       let sig = bls.Signature.fromBytes(Buffer.from(e.sig, 'base64url'))
 
-      console.log(did.pubKey, this.msg)
-      const msg = await encodePayload(this.msg)
-      if (sig.verify(did.pubKey, msg.cid.bytes)) {
+      let msg;
+      if(this.msg.hash) {
+        msg = this.msg.hash
+        console.log('this.msg.hash', this.msg.hash)
+      } else {
+        msg = (await encodePayload(this.msg.data)).cid.bytes
+      }
+      if (sig.verify(did.pubKey, msg)) {
         this.aggPubKeys.set(did.id, true)
         publicKeys.push(did.pubKey)
         sigs.push(sig)
@@ -169,9 +177,8 @@ export class BlsCircuit {
       sigs.push(this.sig)
     }
 
-    console.log([...publicKeys], [...sigs])
     const pubKey = bls.PublicKey.aggregate([...publicKeys])
-    console.log('agg sigs', sigs)
+
     const sig = bls.Signature.aggregate([...sigs])
 
     this.did = new BlsDID({
@@ -192,10 +199,16 @@ export class BlsCircuit {
   }
 
   async verifySig(data: {sig: string, pub}) {
+    let msg;
+    if(this.msg.hash) {
+      msg = this.msg.hash
+    } else {
+      msg = (await encodePayload(this.msg.data)).cid.bytes
+    }
     const did = BlsDID.fromString(data.pub)
     return bls.Signature.fromBytes(Buffer.from(data.sig, 'base64url')).verify(
       did.pubKey,
-      (await encodePayload(this.msg)).cid.bytes,
+      msg,
     )
   }
 
@@ -211,6 +224,18 @@ export class BlsCircuit {
     return did.id === this.did.id
   }
 
+  setAgg(pubKeys: Array<string>) {
+    let aggPub = bls.PublicKey.aggregate(
+      pubKeys.map((e) => {
+        return BlsDID.fromString(e).pubKey
+      }),
+    )
+    const did = new BlsDID({
+      pubKey: aggPub,
+    })
+    this.did = did;
+  }
+
   serialize(circuitMap: Array<string>) {
     let bitset = new BitSet()
     for (let str in circuitMap) {
@@ -222,22 +247,25 @@ export class BlsCircuit {
       var h = (d).toString(16);
       return h.length % 2 ? '0' + h : h;
     }
+    if(!this.sig) {
+      throw new Error('No Valid BLS Signature')
+    }
     return {
       sig: Buffer.from(this.sig.toBytes()).toString('base64url'),
-      did: this.did.id,
-      //Don't use. Produces invalid results when bitset is too small
-      circuit: Buffer.from(d2h(bitset.toString(16)), 'hex').toString('base64url'),
-      //Better to use
-      circuitHex: bitset.toString(16),
+      // did: this.did.id,
+      //BitVector
+      bv: Buffer.from(d2h(bitset.toString(16)), 'hex').toString('base64url'),
     }
   }
 
   static deserialize(signedPayload, keyset: Array<string>) {
-    const signatures = signedPayload.signatures
-    delete signedPayload.signatures
+    const signature = signedPayload.signature
+    delete signedPayload.signature
 
-    const bs = BitSet.fromHexString(signatures[0].circuitHex)
+    console.log(signature)
+    const bs = BitSet.fromHexString(Buffer.from(signature.bv, 'base64url').toString('hex'))
 
+    console.log(bs)
     const pubKeys = new Map();
     for(let keyIdx in keyset) {
       if(bs.get(Number(keyIdx)) === 1) {
@@ -247,6 +275,8 @@ export class BlsCircuit {
 
     let circuit = new BlsCircuit(signedPayload);
     circuit.aggPubKeys = pubKeys
+    circuit.sig = bls.Signature.fromBytes(Buffer.from(signature.sig, 'base64url'))
+
 
     return circuit;
   }

@@ -13,14 +13,23 @@ import * as IPFS from "kubo-rpc-client";
 import { Version } from 'multiformats'
 import {pathToFileURL} from 'node:url';
 import { mongo } from './services/db'
+import https from 'node:https'
+export const keepAliveAgent = new https.Agent({keepAlive:true});
+
 
 const HIVE_API = process.env.HIVE_HOST || 'https://hive-api.web3telekom.xyz'
 
 export const HiveClient = new Client(process.env.HIVE_HOST || [HIVE_API, 'https://api.deathwing.me', 'https://anyx.io', 'https://api.openhive.network', 'https://rpc.ausbit.dev'])
 export const HiveClient2 = new Client('https://api.hive.blog')
 
+HiveClient.options.agent = keepAliveAgent;
 export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
+/**
+ * Fast Hive streaming API
+ * 
+ * @TODO Increase chunking size dynamically
+ */
 export class fastStream {
 
   replayComplete: boolean
@@ -340,7 +349,7 @@ export async function* liveHiveBlocks(API, opts: {
         }
 
       } catch (ex) {
-        console.log(ex)
+        // console.log(ex)
         await sleep(5_000)
       }
     }
@@ -381,7 +390,8 @@ export async function streamHiveBlocks(API, opts) {
       }
       return parseHiveBlocks(data.result.blocks)
     } catch (ex) {
-      console.log(ex)
+      
+      // console.log(ex)
       if (attempt === 0) {
         await sleep(5_000)
       } else {
@@ -699,7 +709,7 @@ export class ModuleContainer {
     for (let [key, regClass] of this.modules) {
       if (regClass.start) {
         try {
-          console.log('starting', regClass.moduleName)
+          console.log('Starting', regClass.moduleName)
           await regClass.start()
         } catch (ex) {
           startStack.push(key, ex)

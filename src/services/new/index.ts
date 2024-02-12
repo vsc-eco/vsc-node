@@ -16,7 +16,12 @@ import { TransactionPoolV2 } from './transactionPool';
 import { P2PService } from './p2pService';
 import { AddrRecord } from './types';
 import { ContractEngineV2 } from './contractEngineV2';
+import { VersionManager } from './witness/versionManager';
 
+const CONSTANTS = {
+    //Reset block records 
+    tb_reset_key: '1'
+}
 export class NewCoreService {
     config: Config;
     consensusKey: BlsDID;
@@ -32,6 +37,9 @@ export class NewCoreService {
     identity: DID;
     addrsDb: Collection<AddrRecord>;
     contractEngine: ContractEngineV2;
+    miscDb: Collection;
+    versionManager: VersionManager
+    nonceMap: Collection;
     
     constructor() {
         this.config = new Config(Config.getConfigDir())
@@ -51,7 +59,10 @@ export class NewCoreService {
     
     async init(oldService) {
         this.db = createMongoDBClient('new')
-       
+        this.addrsDb = this.db.collection('addrs')
+        this.miscDb = this.db.collection('misc')
+        this.nonceMap = this.db.collection('nonce_map')
+
         this.oldService = oldService
         await this.config.open()
         const privateKey = Buffer.from(this.config.get('identity.nodePrivate'), 'base64')
@@ -67,14 +78,14 @@ export class NewCoreService {
         await this.witness.init();
         await this.transactionPool.init()
         await this.contractEngine.init()
-
-        this.addrsDb = this.db.collection('addrs')
+         
     }
 
     async start() {
         await this.chainBridge.start();
         console.log('running here')
         await this.nodeIdentity.start()
+        await this.witness.start()
     }
 
     async stop() {

@@ -1,6 +1,11 @@
 import canonicalizeData from 'canonicalize'
 import { encodePayload } from 'dag-jose-utils'
-import { DID } from "dids";
+import { DID, DagJWS, GeneralJWS } from "dids";
+import ShuffleSeed from 'shuffle-seed'
+import DagCbor from 'ipld-dag-cbor'
+import { TransactionContainerV2 } from '../types';
+
+export * from './streamUtils'
 
 export function verifyNodeInfo() {
     

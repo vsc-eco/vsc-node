@@ -106,7 +106,7 @@ export class NodeInfoService {
                 enabled: witnessEnabled,
                 disabled_reason: disableReason,
                 plugins: ['multisig'],
-                delay_notch: await this.self.witness.delayMonitor.gatherAverages(),
+                delay_notch: await this.self.newService.witness.delayMonitor.gatherAverages(),
                 signing_keys: {
                     posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                     active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),

@@ -8,7 +8,6 @@ import { CoreService } from "../";
 import { HiveClient } from "../../utils";
 import moment from "moment";
 import { createSafeDivision } from "./multisig";
-import { DelayMonitor } from "./delayMonitor";
 import networks from "../networks";
 
 
@@ -23,11 +22,8 @@ export class WitnessService {
     in_past: boolean
     did: string
   }>
-  delayMonitor: DelayMonitor;
   constructor(self: CoreService) {
     this.self = self
-
-    this.delayMonitor = new DelayMonitor(this.self, this)
   }
 
   async witnessNodes() {
@@ -238,8 +234,5 @@ export class WitnessService {
       }
     }, 15 * 1000)
     // await this.weightedSchedule(60)
-
-    
-    await this.delayMonitor.start()
   }
 }

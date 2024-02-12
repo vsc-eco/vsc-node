@@ -1109,20 +1109,27 @@ export class ChainBridge {
         const diff = (blkNum - this.hiveStream.blockLag) || 0
         blkNum = this.hiveStream.blockLag
         
-        this.self.logger.info(`current block lag ${this.hiveStream.blockLag} ${Math.round(diff / 15)}`)
         const stateHeader = await this.stateHeaders.findOne({
           id: 'hive_head'
         })
         if(stateHeader) {
-          this.self.logger.info(`current parse lag ${this.hiveStream.calcHeight - stateHeader.block_num}`, stateHeader)
+          this.self.logger.info(`blockLag blockLag=${this.self.newService.chainBridge.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.block_num}`)
+        } else {
+          this.self.logger.info(`blockLag`, {
+            blockLag:this.self.newService.chainBridge.blockLag,
+            streamRate: Math.round(diff / 15)
+          })
         }
       }, 15 * 1000)
   
       let producingBlock = false;
       setInterval(async () => {
-        if (this.hiveStream.blockLag < 5) {
+        if(!this.self.newService.chainBridge.streamParser?.stream) {
+          return;
+        }
+        if (this.self.newService.chainBridge.streamParser.stream.blockLag < 5) {
           //Can produce a block
-          const offsetBlock = this.hiveStream.lastBlock //- networks[network_id].genesisDay
+          const offsetBlock = this.self.newService.chainBridge.streamParser.stream.lastBlock //- networks[network_id].genesisDay
           if ((offsetBlock % networks[network_id].roundLength) === 0) {
             if (!producingBlock) {
               const nodeInfo = await this.witnessDb.findOne({

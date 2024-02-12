@@ -13,7 +13,6 @@ import { mongo } from "./db";
 import { ChainBridge } from "./chainBridge";
 import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
-import { ContractWorker } from "./contractWorker";
 import winston from "winston";
 import { getLogger } from "../logger";
 import { LoggerConfig } from "../types";
@@ -41,7 +40,6 @@ export class CoreService extends ModuleContainer {
     chainBridge: ChainBridge;
     contractEngine: ContractEngine;
     p2pService: P2PService;
-    contractWorker: ContractWorker;
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
     // multisig: MultisigCore;
@@ -64,7 +62,7 @@ export class CoreService extends ModuleContainer {
         this.transactionPool = new TransactionPoolService(this)
         this.chainBridge = new ChainBridge(this)
         this.contractEngine = new ContractEngine(this)
-        this.contractWorker = new ContractWorker(this)
+        // this.contractWorker = new ContractWorker(this)
         this.p2pService = new P2PService(this)
         this.nodeInfo = new NodeInfoService(this)
         this.witness = new WitnessService(this)
@@ -75,7 +73,7 @@ export class CoreService extends ModuleContainer {
         this.regModule('TransactionPoolService', this.transactionPool)
         this.regModule('ChainBridge', this.chainBridge)
         this.regModule('ContractEngine', this.contractEngine)
-        this.regModule('ContractWorker', this.contractWorker)
+        // this.regModule('ContractWorker', this.contractWorker)
         this.regModule('P2PService', this.p2pService)
         this.regModule('NodeInfoService', this.nodeInfo)
         this.regModule('WitnessService', this.witness)
@@ -164,7 +162,6 @@ export class CoreService extends ModuleContainer {
     }
 
     async start() {
-        console.log('Starting')
         this.config = new Config(Config.getConfigDir())
         await this.config.open()
         this.ipfs = createIPFSClient({ url: process.env.IPFS_HOST || this.config.get('ipfs.apiAddr')}, this.config.get('ipfs.pinEverything'));
@@ -182,9 +179,6 @@ export class CoreService extends ModuleContainer {
 
         await this.setupKeys();
 
-        console.log('Starting part way')
-
-        
         
 
         const startStack = await this.startModules()

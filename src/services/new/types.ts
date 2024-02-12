@@ -173,18 +173,26 @@ export interface TransactionDbRecordV2 {
     id: string
     // op: string
     required_auths: Array<{
-        type: 'consensus' | 'active' | 'posting',
+        type?: 'payer' | 'active' | 'posting',
         value: string
     }>
     headers: {
-        lock_block: number
+        contract_id?: string
+        lock_block?: number
+        nonce?: number
     }
     data: any | null
-    result: any | null
     local: boolean
     accessible: boolean
     first_seen: Date
     src: 'vsc' | 'hive'
+    //Witness data
+    sig_hash?: string
+}
+
+
+export enum TransactionIntent {
+    'money.spend' = 'money.spend'
 }
 
 export interface TransactionContainerV2 {
@@ -193,15 +201,15 @@ export interface TransactionContainerV2 {
     headers: {
         payer?: string
         lock_block?: string
-        required_auths: Array<{
-            type: 'consensus' | 'active' | 'posting',
-            value: string
-        }>
+        required_auths: Array<string>
+        //Tuple of transaction intent enum and arguments as querystring
+        nonce: number
+        intents?: null | Array<[TransactionIntent, string]> 
+        type: TransactionDbType
     }
     tx: { 
         op: string
         payload: any // cid of ContractInput, ContractOutput or ContractUpdate and so on..
-        type: TransactionDbType
     }
 }
 
@@ -214,10 +222,31 @@ export interface AddrRecord {
 
 
 export interface BlockHeader {
-    hive_ref_block: number
+    end_block: number
     hive_ref_tx: string
     hive_ref_date: Date
     height: number
     proposer: string
     id: string
+}
+
+export interface WitnessDbRecord {
+    account: string
+    ipfs_peer_id: string
+    last_signed: number
+    net_id: string
+    missed_blocks: number
+    accepted_blocks: number
+    signing_keys: {
+        posting: string
+        active: string
+        owner: string
+    }
+}
+
+
+export interface AccountNonceDbRecord {
+    id: string
+    nonce: number
+    key_group?: string
 }

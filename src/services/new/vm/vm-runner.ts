@@ -221,20 +221,29 @@ export class WasmRunner {
 void (async () => {
   console.log('init')
   
-  const contract_id = process.env.contract_id
+  let modules = {}
+  for(let [contract_id, code] of Object.entries<string>(JSON.parse(process.env.modules))) {
+    const binaryData = await ipfs.block.get(IPFS.CID.parse(code))
+    modules[contract_id] = await WebAssembly.compile(binaryData)
+  }
+
+  let state = {}
+  for(let [contract_id, stateCid] of Object.entries<string>(JSON.parse(process.env.state))) {
+    const wasmRunner = new WasmRunner();
+    const stateAccess = await wasmRunner.contractStateRaw(contract_id, stateCid)
+    state[contract_id] = {
+      wasmRunner,
+      stateAccess
+    }
+  }
   
-  const binaryData = await ipfs.block.get(IPFS.CID.parse(process.env.cid))
-  
-  const wasmRunner = new WasmRunner();
-  const stateAccess = await wasmRunner.contractStateRaw(contract_id)
-  
-  const module = await WebAssembly.compile(binaryData)
   
   process.send({
     type: 'ready',
   })
   process.on('message', async (message: any) => {
     if (message.type === 'call') {
+      const contract_id = message.contract_id
       const memory = new WebAssembly.Memory({
         initial: 10,
         maximum: 128,
@@ -243,11 +252,11 @@ void (async () => {
       let IOGas = 0;
       let error;
       const logs = []
-      
+      const {wasmRunner, stateAccess} = state[contract_id]
       
       
       try {
-        const insta = await instantiate(module, {
+        const insta = await instantiate(modules[contract_id], {
           env: {
             memory,
             abort(msg, file, line, colm) {
@@ -375,13 +384,26 @@ void (async () => {
 
     //Finalization when VM is done
     if(message.type === "finish") {
-      for(let [key, value] of wasmRunner.stateCache.entries()) {
-        await stateAccess.client.update(key, JSON.parse(value))
+      let entries = Object.entries<{
+        wasmRunner: any
+        stateAccess: any
+      }>(state)
+      for(let index in entries) {
+        const [contract_id, entry] = entries[index]
+        const {wasmRunner, stateAccess} = entry
+        for(let [key, value] of wasmRunner.stateCache.entries()) {
+          await stateAccess.client.update(key, JSON.parse(value))
+        }
+        console.log('sending result')
+        process.send({
+          type: 'partial-result',
+          contract_id,
+          index,
+          stateMerkle: stateAccess.finish().stateMerkle.toString(),
+        })
       }
-      console.log('sending result')
       process.send({
         type: 'finish-result',
-        stateMerkle: stateAccess.finish().stateMerkle.toString(),
       })
     }
   })

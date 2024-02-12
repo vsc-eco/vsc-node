@@ -33,3 +33,4 @@ export async function waitTxConfirm(id: string, self: CoreService, func) {
         await sleep(5_000)
     }
 }
+

@@ -294,7 +294,7 @@ export class ChainBridgeV2 {
                         //     upsert: true
                         // })
                         
-                        if(opPayload.id === "vsc.propose_block.experiment" && json.net_id === this.self.config.get('network.id') && json.experiment_id === 1) {
+                        if(opPayload.id === "vsc.propose_block.experiment" && json.net_id === this.self.config.get('network.id') && json.experiment_id === 2) {
                             try {
                                 
                                 //Initial checks passed
@@ -327,7 +327,6 @@ export class ChainBridgeV2 {
                                     const circuit = BlsCircuit.deserialize(signedBlock, witnessSet)
     
                                     
-                                    //Oh no, using old formats for circuit serialization! 
                                     let pubKeys = []
                                     for(let pub of circuit.aggPubKeys) {
                                         pubKeys.push(pub[0])
@@ -342,8 +341,18 @@ export class ChainBridgeV2 {
                                     delete signedBlockNoSig.signature
                                     
     
-                                    console.log(circuit)
-                                    console.log('Is block valid by consensus?', await circuit.verify((await encodePayload(signedBlockNoSig)).cid.bytes), signedBlockNoSig)
+                                    const isValid = await circuit.verify((await this.self.ipfs.dag.put(signedBlockNoSig, {
+                                        onlyHash: true
+                                    })).bytes);
+
+                                    if(!isValid) {
+                                        return;
+                                    }
+
+                                    const voteMajority = 2/3
+                                    if(pubKeys.length / witnessSet.length >= voteMajority) {
+                                        return;
+                                    }
                                     
                                     const [startBlock, endBlock] = signedBlock.headers.br
                                     console.log([startBlock, endBlock])
@@ -396,10 +405,18 @@ export class ChainBridgeV2 {
                                                     //TODO: look into properly handling side effects aka on chain actions
                                                     side_effects: txData.side_effects,
                                                     //TODO: future; handle op index (i.e multiple oprations in 1 tx)
-                                                    inputs: txData.inputs.map(e => e.id),
-                                                    logs: txData.logs,
+                                                    inputs: txData.inputs.map(e => {
+                                                        if(e.startsWith('@remote')) {
+                                                            //work on this some more
+                                                            return Number(e.split('/')[1]);
+                                                        } else {
+                                                            return e;
+                                                        }
+                                                    }),
+                                                    results: txData.results,
+                                                    // logs: txData.logs,
                                                     gas: {
-                                                        IO: txData.IOGas
+                                                        IO: txData.io_gas
                                                     }
                                                 }
                                             }, {
@@ -407,9 +424,10 @@ export class ChainBridgeV2 {
                                             })
                                             for(let txInput of txData.inputs) {
                                                 await this.self.transactionPool.txDb.findOneAndUpdate({
-                                                    id: txInput.id
+                                                    id: txInput
                                                 }, {
                                                     $set: {
+                                                        status: TransactionDbStatus.confirmed,
                                                         output: {
                                                             index: txData.inputs.indexOf(txInput),
                                                             id: tx.id,
@@ -483,7 +501,7 @@ export class ChainBridgeV2 {
                                 console.log('Error on index process')
                             }
                             console.log('HALTING')
-                            await halt()
+                            // await halt()
                         }
                     }
                 } catch (ex) {
@@ -633,6 +651,7 @@ export class ChainBridgeV2 {
         this.consensusDb = this.db.collection('consensus')
         this.consensusDataDb = this.db.collection('consensus_data')
         this.blockHeaders = this.db.collection('block_headers')
+        this.contractOutputDb = this.db.collection('contract_outputs')
         
         this.streamParser = new StreamParser({
             events: this.events,

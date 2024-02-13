@@ -260,8 +260,7 @@ void (async () => {
           env: {
             memory,
             abort(msg, file, line, colm) {
-              console.log(insta.exports.__getString(msg), 'LN1', insta.exports.__getString(file), line, colm)
-              console.log('error happened');
+              
               error = {
                 msg: insta.exports.__getString(msg),
                 file: insta.exports.__getString(file),
@@ -270,6 +269,7 @@ void (async () => {
               }
             },
             //Prevent AS loader from allowing any non-deterministic data in.
+            //TODO: Load in VRF seed for use in contract
             seed: () => {
               return 0;
             },

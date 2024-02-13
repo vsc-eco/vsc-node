@@ -194,7 +194,7 @@ export class BlsCircuit {
   async verify(msg) {
     return this.sig.verify(
       this.did.pubKey,
-      (await encodePayload(msg)).cid.bytes,
+      msg,
     )
   }
 

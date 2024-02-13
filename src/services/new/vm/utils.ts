@@ -253,6 +253,7 @@ export class VmContainer {
     modules: {
       [x: string]: string
     }
+    debug?: boolean
   }
   ready: boolean
   events: EventEmitter;
@@ -269,6 +270,7 @@ export class VmContainer {
     modules: {
       [x: string]: string
     }
+    debug?: boolean
   }) {
     this.opts = opts
     this.events = new EventEmitter()
@@ -389,7 +391,8 @@ export class VmContainer {
           modules: JSON.stringify(this.opts.modules)
         } as any,
         // silent: true,
-        detached: false
+        detached: false,
+        silent: this.opts.debug ? !this.opts.debug : true
     });
     this.child = child;
     this.child.on('message', (message: any) => {

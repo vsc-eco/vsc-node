@@ -219,11 +219,30 @@ export class WitnessServiceV2 {
       end_height: number
     }): Promise<BlockContainer> {
       const {end_height, start_height} = args;
+      console.log('Gettting transactions query', {
+        status: TransactionDbStatus.included,
+        'anchored_height': {
+          $lte: end_height,
+          $gte: start_height - 1 //Account for calculated anchored_height. Note: revise this in the future.
+        },
+        $or: [
+          {
+            //Make sure transactions are locked in the future
+            'headers.lock_block': {
+              $gt: start_height
+            }
+          }, {
+            'headers.lock_block': {
+              $exists: false
+            }
+          }
+        ]
+      })
       const transactions = await this.self.transactionPool.txDb.find({
         status: TransactionDbStatus.included,
         'anchored_height': {
           $lte: end_height,
-          $gte: start_height
+          $gte: start_height - 1
         },
         $or: [
           {
@@ -380,9 +399,10 @@ export class WitnessServiceV2 {
             __v: '0.1',
 
             
-
             contract_id: out.contract_id,
-            index_map: results[out.contract_id].map(e => e.id),
+            remote_calls: [],
+            //Either TX ID or @remote/<index>
+            inputs: results[out.contract_id].map(e => e.id),
             results: results[out.contract_id].map(e => e.result),
             state_merkle: out.stateMerkle,
             io_gas: results[out.contract_id].map(e => e.result.IOGas).reduce((a, b) => {
@@ -392,6 +412,7 @@ export class WitnessServiceV2 {
           console.log(outputData, out)
           contractOutputs.push({
             id: (await this.self.ipfs.dag.put(outputData)).toString(),
+            contract_id: outputData.contract_id,
             type: TransactionDbType.output
           })
         }
@@ -600,7 +621,7 @@ export class WitnessServiceV2 {
       // })
       // console.log('circuit aggregate', circuit.aggPubKeys)
       //Did it pass minimum?   
-      // if(circuit.aggPubKeys.size / keysMap.length > voteMajority){
+      if(circuit.aggPubKeys.size / keysMap.length > voteMajority){
         if(process.env.BLOCK_BROADCAST_ENABLED === "yes") {
 
           console.log('Broadcasting block live!')
@@ -612,13 +633,13 @@ export class WitnessServiceV2 {
             required_posting_auths: [],
             json: JSON.stringify({
               //Prevents indexing of older experimental blocks.
-              experiment_id: 1,
+              experiment_id: 2,
               net_id: this.self.config.get('network.id'),
               signed_block: signedBlock
             })
           }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
         }
-      // }
+      }
     }
 
     async verifyBlock() {
@@ -660,24 +681,18 @@ export class WitnessServiceV2 {
         // }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
 
         if(!!scheduleSlot &&  this.self.chainBridge.parseLag < 5) {
-          const lastHeader = await this.blockHeaders.findOne({
+          // const lastHeader = await this.blockHeaders.findOne({
         
-          }, {
-            sort: {
-              hive_ref_block: -1
-            }
-          })
+          // }, {
+          //   sort: {
+          //     hive_ref_block: -1
+          //   }
+          // })
           
     
           //If no other header is available. Use genesis day as range
-          const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
+          // const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
     
-          const blockFull = await this.createBlock({
-            start_height,
-            end_height: block_height,
-          })
-          this._candidateBlocks[block_height] = await blockFull.toHeader()
-
           if(scheduleSlot.account === process.env.HIVE_ACCOUNT) {
             await this.proposeBlock(block_height)
           }
@@ -698,7 +713,7 @@ export class WitnessServiceV2 {
     }
 
     async handleProposeBlockMsg(pubReq) {
-      const {message, drain} = pubReq;
+      const {message, drain, from} = pubReq;
 
       
       let cadBlock = this._candidateBlocks[message.block_height]
@@ -729,6 +744,26 @@ export class WitnessServiceV2 {
       
       //Validate #1
       //Verify witness is in runner
+
+      const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+      const schedule = await this.roundCheck(block_height)
+
+      const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+      
+      const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
+        ipfs_peer_id: from.toString()
+      }))
+      console.log(fromWitness)
+      const witnessSlot = schedule.find(e => {
+          //Ensure witness slot is within slot start and end
+          // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
+          return e.bn === slotHeight && e.account === fromWitness.account
+      })
+
+      if(!witnessSlot) {
+        console.log('Witness.cadBlock validate #1 - witness not in current slot')
+        return;
+      }
 
       //TODO: Add something here
 

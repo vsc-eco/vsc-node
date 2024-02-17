@@ -44,15 +44,19 @@ export class TransactionPoolV2 {
      */
     async onTxAnnounce({message}: MessageHandleOpts) {
         let decodedTx;
+        let rawTx;
         let tx_id;
         let sig_data = message.sig_data; //Must always be defined
         if(message.type === 'ref_tx') {
             tx_id = message.id
-            decodedTx = (await this.self.ipfs.dag.get(tx_id)).value
+            rawTx = (await this.self.ipfs.block.get(tx_id))
+            decodedTx = DAGCbor.util.deserialize(rawTx)
         } else if(message.type = 'direct_tx') {
-            decodedTx = Buffer.from(message.data, 'base64');
-            tx_id = (await this.self.ipfs.dag.put(decodedTx, {
-                onlyHash: true
+            rawTx = Buffer.from(message.data, 'base64url');
+            decodedTx = DAGCbor.util.deserialize(rawTx)
+            tx_id = (await this.self.ipfs.block.put(rawTx, {
+                pin: false,
+                format: 'dag-cbor'
             })).toString()
         } else {
             return;
@@ -68,7 +72,7 @@ export class TransactionPoolV2 {
             
             const jwsList = await convertTxJws({
                 sig: sig_data,
-                tx: Buffer.from(DAGCbor.util.serialize(decodedTx)).toString('base64url')
+                tx: rawTx.toString('base64url')
             })
             const cid = await CID.parse(tx_id)
         
@@ -81,7 +85,7 @@ export class TransactionPoolV2 {
                     const verifyResult = await this.self.identity.verifyJWS(jws.jws)
             
                     signedDid = verifyResult.kid.split('#')[0]
-                } catch {
+                } catch (ex) {
                     return;
                 }
             
@@ -351,8 +355,6 @@ export class TransactionPoolV2 {
         this.self.p2pService.memoryPoolChannel.register('announce_tx', this.onTxAnnounce, {
             loopbackOk: true
         })
-        
-        await this.createDummyTx({where: 'offchain'})
     }
 
     async start() {

@@ -150,8 +150,12 @@ export class WitnessServiceV2 {
           id: 'last_hb_processed'
         })
         const consensusRound = await this.calculateConsensusRound(blockHeight)
-        const witnessNodes = await this.self.chainBridge.getWitnessesAtBlock(blockHeight)
-        
+        let witnessNodes = await this.self.chainBridge.getWitnessesAtBlock(blockHeight)
+        witnessNodes = witnessNodes.sort((a, b) => {
+          return a.account - b.account;
+        })
+
+
         let outSchedule = []
         for (let x = 0; x < totalRounds; x++) {
           if (witnessNodes[x % witnessNodes.length]) {

@@ -308,8 +308,8 @@ export const Resolvers = {
       peer_id: idInfo.id
     }
   },
-  witnessNodes: async () => {
-    return await appContainer.self.witness.witnessNodes()
+  witnessNodes: async (_, args) => {
+    return await appContainer.self.newService.chainBridge.getWitnessesAtBlock(args.height)
   },
   nextWitnessSlot: async (_, args) => {
     let node_id

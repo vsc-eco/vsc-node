@@ -150,7 +150,7 @@ export const schema = `
         getAccountNonce(keyGroup: [String]!): AccountNonceResult
 
         localNodeInfo: LocalNodeInfo
-        witnessNodes: [WitnessNode]
+        witnessNodes(height: Int!): [WitnessNode]
         nextWitnessSlot(local: Boolean): JSON
     }
 `

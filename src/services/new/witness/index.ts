@@ -772,10 +772,6 @@ export class WitnessServiceV2 {
       const witnessSlot = schedule.find(e => {
           //Ensure witness slot is within slot start and end
           // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
-          console.log(e.bn, slotHeight, e.account === fromWitness.account)
-          if(Math.abs(e.bn - slotHeight) < 30) {
-            console.log('Account is', e.account)
-          }
           return e.bn === slotHeight && e.account === fromWitness.account
       })
 

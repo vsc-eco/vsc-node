@@ -632,7 +632,9 @@ export class ChainBridgeV2 {
         }))).filter(e => !!e)
         
         // console.log('filteredWitnesses', filteredWitnesses, filteredWitnesses.length)
-        return filteredWitnesses;
+        return filteredWitnesses.sort((a, b) => {
+            return ('' + a.account).localeCompare(b.account);
+        })
     }
 
     async createConsensusHeader(height: number) {
@@ -667,6 +669,13 @@ export class ChainBridgeV2 {
                 key: -1
             }, {
                 unique: true
+            })
+        } catch {
+
+        }
+        try {
+            await this.events.createIndex({
+                key: -1
             })
         } catch {
 

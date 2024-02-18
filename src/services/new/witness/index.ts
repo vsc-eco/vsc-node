@@ -7,6 +7,8 @@ import { BlsCircuit, BlsDID } from '../utils/crypto/bls-did';
 import { Collection } from 'mongodb';
 import { CID } from 'multiformats';
 import IPLDDag from 'ipld-dag-cbor'
+import ShuffleSeed from 'shuffle-seed'
+
 
 import { BlockHeader, TransactionDbStatus, TransactionDbType } from '../types';
 import { PrivateKey } from '@hiveio/dhive';
@@ -113,8 +115,7 @@ export class BlockContainer {
 export class WitnessServiceV2 {
     self: NewCoreService;
     witnessSchedule: {
-        valid_to?: Number | null
-        valid_from?: Number | null
+        valid_height?: Number | null
         schedule?: Array<any>
     }
     //Precomputed list of blocks
@@ -135,7 +136,7 @@ export class WitnessServiceV2 {
         this.handleProposeBlockMsg = this.handleProposeBlockMsg.bind(this)
 
         this.witnessSchedule = {
-            valid_to: null
+          valid_height: null
         }
         this._candidateBlocks = {
 
@@ -163,7 +164,8 @@ export class WitnessServiceV2 {
           }
         }
     
-        outSchedule = await this.applyBNSchedule(outSchedule, blockHeight)
+        // const shuffledSchedule = ShuffleSeed.shuffle(outSchedule, consensusRound.randomizeHash)
+        outSchedule = await this.applyBNSchedule(ShuffleSeed.shuffle(outSchedule, consensusRound.randomizeHash), blockHeight)
 
         return {
             schedule: outSchedule,
@@ -181,12 +183,19 @@ export class WitnessServiceV2 {
         const modLength = roundLength * totalRounds
         const mod3 = blockNumber % modLength
         const pastRoundHash = blockNumber - mod3
+
+        //Return block id of previous block to round start.
+        //This is used for schedule randomization
+        const blockHeader = await this.self.chainBridge.events.findOne({
+          key: pastRoundHash - 1
+        })
         
     
         return {
           nextRoundHash: blockNumber + (modLength - mod3),
           pastRoundHash,
           currentBlockNumber: blockNumber,
+          randomizeHash: blockHeader ? blockHeader.block_id : null
         }
       }
     
@@ -704,14 +713,16 @@ export class WitnessServiceV2 {
     }
 
     async roundCheck(blockHeight) {
-        if(this.witnessSchedule.valid_to > blockHeight && this.witnessSchedule.valid_from < blockHeight) {
+      const consensusRound = await this.calculateConsensusRound(blockHeight)
+        if(this.witnessSchedule.valid_height === consensusRound.pastRoundHash) {
+          // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
           return this.witnessSchedule.schedule;
         }
         const {schedule, valid_to, valid_from} = await this.weightedSchedule(networks[this.self.config.get('network.id')].totalRounds, blockHeight)
 
         this.witnessSchedule.schedule = schedule
-        this.witnessSchedule.valid_from = valid_from
-        this.witnessSchedule.valid_to = valid_to
+        this.witnessSchedule.valid_height = consensusRound.pastRoundHash
+        
 
         return schedule
     }
@@ -761,6 +772,10 @@ export class WitnessServiceV2 {
       const witnessSlot = schedule.find(e => {
           //Ensure witness slot is within slot start and end
           // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
+          console.log(e.bn, slotHeight, e.account === fromWitness.account)
+          if(Math.abs(e.bn - slotHeight) < 30) {
+            console.log('Account is', e.account)
+          }
           return e.bn === slotHeight && e.account === fromWitness.account
       })
 

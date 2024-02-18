@@ -58,7 +58,7 @@ export async function verifyTx(txData, did: DID) {
  */
 export function sortTransactions(rawTransactions: Array<any>, vrfSeed: string) {
     const preOrder = ShuffleSeed.shuffle(rawTransactions.sort((a, b) => {
-        return a.id - b.id
+        return ('' + a.id).localeCompare(b.id);
     }).map(e => {
         return {
             act: e.act

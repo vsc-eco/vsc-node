@@ -647,7 +647,7 @@ export class WitnessServiceV2 {
             required_posting_auths: [],
             json: JSON.stringify({
               //Prevents indexing of older experimental blocks.
-              replay_id: 1,
+              replay_id: 2,
               net_id: this.self.config.get('network.id'),
               signed_block: signedBlock
             })

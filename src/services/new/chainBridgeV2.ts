@@ -293,7 +293,7 @@ export class ChainBridgeV2 {
                         //     upsert: true
                         // })
                         
-                        if(opPayload.id === "vsc.propose_block" && json.net_id === this.self.config.get('network.id') && json.replay_id === 1) {
+                        if(opPayload.id === "vsc.propose_block" && json.net_id === this.self.config.get('network.id') && json.replay_id === 2) {
                             try {
                                 //Initial checks passed
                                 const blockHeight = blkHeight;

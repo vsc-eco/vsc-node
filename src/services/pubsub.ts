@@ -721,7 +721,6 @@ export class P2PService {
         
         this.memoryPoolChannel = await PeerChannel.connectMulticast(this.self.ipfs, PUBSUB_CHANNELS.memoryPool)
 
-        this.self.transactionPool.channelRegister(this.memoryPoolChannel)
 
         // const msg = {
         //     type: MESSAGE_TYPES.mockSign,

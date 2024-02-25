@@ -8,10 +8,8 @@ import KeyResolver from 'key-did-resolver'
 import { Db } from "mongodb";
 import fs from 'fs/promises'
 import { Config } from "./nodeConfig";
-import { TransactionPoolService } from "./transactionPool";
 import { mongo } from "./db";
 import { ChainBridge } from "./chainBridge";
-import { ContractEngine } from "./contractEngine";
 import { P2PService } from "./pubsub";
 import winston from "winston";
 import { getLogger } from "../logger";
@@ -35,10 +33,8 @@ export class CoreService extends ModuleContainer {
     config: Config;
     identity: DID;
     wallet: DID;
-    transactionPool: TransactionPoolService;
     db: Db;
     chainBridge: ChainBridge;
-    contractEngine: ContractEngine;
     p2pService: P2PService;
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
@@ -59,9 +55,7 @@ export class CoreService extends ModuleContainer {
 
 
 
-        this.transactionPool = new TransactionPoolService(this)
         this.chainBridge = new ChainBridge(this)
-        this.contractEngine = new ContractEngine(this)
         // this.contractWorker = new ContractWorker(this)
         this.p2pService = new P2PService(this)
         this.nodeInfo = new NodeInfoService(this)
@@ -70,9 +64,7 @@ export class CoreService extends ModuleContainer {
         this.discordBot = new DiscordBot(this)
 
 
-        this.regModule('TransactionPoolService', this.transactionPool)
         this.regModule('ChainBridge', this.chainBridge)
-        this.regModule('ContractEngine', this.contractEngine)
         // this.regModule('ContractWorker', this.contractWorker)
         this.regModule('P2PService', this.p2pService)
         this.regModule('NodeInfoService', this.nodeInfo)

@@ -71,9 +71,10 @@ const getDagCborIpfsHashContent = async (cid: CID) => {
 
 export const Resolvers = {
   contractState: async (_, args) => {
-    const data = await appContainer.self.contractEngine.contractDb.findOne({
-      id: args.id,
-    })
+    // const data = await appContainer.self.contractEngine.contractDb.findOne({
+    //   id: args.id,
+    // })
+    const data = null
 
     if(!data) {
       return null;
@@ -199,12 +200,13 @@ export const Resolvers = {
     }
 
 
-    const txs = await appContainer.self.transactionPool.transactionPool.find({
-      ...query
-    }, {
-      limit: 100,
-      skip: 0
-    }).toArray()
+    // const txs = await appContainer.self.transactionPool.transactionPool.find({
+    //   ...query
+    // }, {
+    //   limit: 100,
+    //   skip: 0
+    // }).toArray()
+    const txs = []
 
     return {
       txs: txs.map(e => {
@@ -244,15 +246,16 @@ export const Resolvers = {
     }
 
 
-    let txs = await appContainer.self.transactionPool.transactionPool.find({
-      ...query
-    }, {
-      limit: 100,
-      skip: 0,
-      sort: {
-        first_seen: -1
-      }
-    }).toArray()
+    // let txs = await appContainer.self.transactionPool.transactionPool.find({
+    //   ...query
+    // }, {
+    //   limit: 100,
+    //   skip: 0,
+    //   sort: {
+    //     first_seen: -1
+    //   }
+    // }).toArray()
+    let txs = []
 
     const dedup = {}
     const out = []
@@ -274,29 +277,30 @@ export const Resolvers = {
           ...e,
           first_seen: e.first_seen.toISOString(),
           redeem: async () => {
-            if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
-              return null
-            }
-            const contractInfo = await appContainer.self.contractEngine.contractDb.findOne({
-              id: e.headers.contract_id
-            })
-            console.log(contractInfo)
-            try {
+            // if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
+            //   return null
+            // }
+            // const contractInfo = await appContainer.self.contractEngine.contractDb.findOne({
+            //   id: e.headers.contract_id
+            // })
+            // console.log(contractInfo)
+            // try {
               
-              const redeemId = (e as any).decoded_tx.redeem_id
+            //   const redeemId = (e as any).decoded_tx.redeem_id
               
-              const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
-                path: `redeems/${redeemId}`,
-              })
+            //   const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
+            //     path: `redeems/${redeemId}`,
+            //   })
               
-              return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
-            } catch (ex) {
-              if (!ex.message.includes('no link named')) {
-                console.log(ex)
-              }
-              // console.log(ex)
-              return null
-            }
+            //   return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
+            // } catch (ex) {
+            //   if (!ex.message.includes('no link named')) {
+            //     console.log(ex)
+            //   }
+            //   // console.log(ex)
+            //   return null
+            // }
+            return null
           },
         }
       })
@@ -389,44 +393,11 @@ export const Resolvers = {
       throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
     }
   },
-  submitTransaction: async (_, args) => {
-    console.log(args.payload)
-    const json = JSON.parse(args.payload)
-
-
-    if(json.jws && json.linkedBlock) {
-      const root = await appContainer.self.ipfs.dag.put({
-        ...json.jws,
-        link: CID.parse(json.jws['link'].toString()) //Glich with dag.put not allowing CIDs to link
-      })
-
-      const linkedBlock = await appContainer.self.ipfs.block.put(Buffer.from(json.linkedBlock, 'base64'), {
-        format: 'dag-cbor'
-      })
-      console.log('graphql:linkedBlock', linkedBlock)
-
-      await appContainer.self.transactionPool.processMempoolTX(root.toString())
-
-      await appContainer.self.transactionPool.txDecode(root.toString(), await appContainer.self.transactionPool.transactionPool.findOne({
-        id: root.toString()
-      }))
-
-      await appContainer.self.p2pService.memoryPoolChannel.call('announce_tx', {
-        payload: {
-          id: root.toString()
-        },
-        mode: 'basic'
-      })
-
-      return {
-        tx_id: root.toString()
-      }
-    }
-  },
   submitTransactionV1: async (_, args) => {
     const {id} = await appContainer.self.newService.transactionPool.ingestTx({
       tx: args.tx,
-      sig: args.sig
+      sig: args.sig,
+      broadcast: true
     })
     return {
       id

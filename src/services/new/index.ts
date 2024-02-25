@@ -49,16 +49,19 @@ export class NewCoreService {
             level: this.config.get('logger.level'),
         })
         this.ipfs = IPFS.create({url: process.env.IPFS_HOST || '/ip4/127.0.0.1/tcp/5001'})
+        this.db = createMongoDBClient('new')
+
+        
         this.chainBridge = new ChainBridgeV2(this)
         this.nodeIdentity = new NodeIdentity(this)
         this.witness = new WitnessServiceV2(this)
         this.p2pService = new P2PService(this)
         this.transactionPool = new TransactionPoolV2(this)
         this.contractEngine = new ContractEngineV2(this)
+        this.versionManager = new VersionManager(this)
     }
     
     async init(oldService) {
-        this.db = createMongoDBClient('new')
         this.addrsDb = this.db.collection('addrs')
         this.miscDb = this.db.collection('misc')
         this.nonceMap = this.db.collection('nonce_map')
@@ -72,6 +75,8 @@ export class NewCoreService {
         const did = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
         await did.authenticate()
         this.identity = did
+
+        await this.versionManager.init()
 
         await this.chainBridge.init();
         await this.p2pService.start()

@@ -20,10 +20,10 @@ export class NodeIdentity {
     async reportWitnesses() {
         const currentBlock = await HiveClient.blockchain.getCurrentBlockNum()
 
-        const originalWitneses = (await this.self.oldService.witness.witnessNodes()).map( e => e.account)
+        // const originalWitneses = (await this.self.oldService.witness.witnessNodes()).map( e => e.account)
 
         const witnesses = await this.self.chainBridge.getWitnessesAtBlock(currentBlock)
-        console.log('Witneses at block', witnesses.map(e => e.account).sort(), originalWitneses.sort())
+        console.log('Witneses at block', witnesses.map(e => e.account).sort())
 
     }
 
@@ -33,7 +33,7 @@ export class NodeIdentity {
     
     async start() {
         try {
-            await this.reportWitnesses()
+            // await this.reportWitnesses()
             nodeSchedule.scheduleJob('0 */6 * * *', this.reportWitnesses)
         } catch (ex) {
             console.log(ex)

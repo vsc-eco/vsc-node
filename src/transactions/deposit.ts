@@ -1,5 +1,5 @@
 import {init} from './core'
-import { TransactionPoolService } from '../services/transactionPool';
+// import { TransactionPoolService } from '../services/transactionPool';
 import { isExecutedDirectly } from '../utils';
 
 export async function deposit(setup? : {identity, config, ipfsClient, logger}) {
@@ -32,12 +32,12 @@ export async function deposit(setup? : {identity, config, ipfsClient, logger}) {
         to = toArg.split('=')[1]
     }
 
-    return await TransactionPoolService.deposit({
-        contractId: contractId,
-        amount: +process.argv[process.argv.length - 1],
-        to: to
-    },
-    setup);
+    // return await TransactionPoolService.deposit({
+    //     contractId: contractId,
+    //     amount: +process.argv[process.argv.length - 1],
+    //     to: to
+    // },
+    // setup);
 }
 
 if (isExecutedDirectly(import.meta.url)) {

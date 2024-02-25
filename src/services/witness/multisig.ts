@@ -327,98 +327,98 @@ export class MultisigCore {
     }
 
     async processOutputs() {
-        const outputsWithActions = await this.self.transactionPool.transactionPool.find({
-            output_actions: {$ne: null},
-            'output_actions.tx_id': {$exists: false},
-            'headers.contract_id': {$exists: true}
-        }).toArray()
+        // const outputsWithActions = await this.self.transactionPool.transactionPool.find({
+        //     output_actions: {$ne: null},
+        //     'output_actions.tx_id': {$exists: false},
+        //     'headers.contract_id': {$exists: true}
+        // }).toArray()
        
-        let outputActions = []
-        for(let out of outputsWithActions) {
-            outputActions.push(...out.output_actions.map(e => ({
-                ...e,
-                contract_id: out.headers.contract_id,
-                output_id: out.id
-            })))
-        }
-        for(let action of outputActions) {
-            let tx;
-            if(action.tx[0] === 'custom_json') {
-                tx = ['custom_json', {
-                    required_posting_auths: [process.env.MULTISIG_ACCOUNT],
-                    required_auths: [],
-                    id: "vsc.custom_json",
-                    json: JSON.stringify({
-                        net_id: this.self.config.get('network.id'),
-                        contract_id: action.contract_id,
-                        "vsc_json": typeof action.tx[1].json === 'string' ? JSON.parse(action.tx[1].json) : action.tx[1].json
-                    })
-                }]
-            } else if(action[0] === 'transfer') {
-                tx = action.tx
-            } else {
-                continue;
-            }
+        // let outputActions = []
+        // for(let out of outputsWithActions) {
+        //     outputActions.push(...out.output_actions.map(e => ({
+        //         ...e,
+        //         contract_id: out.headers.contract_id,
+        //         output_id: out.id
+        //     })))
+        // }
+        // for(let action of outputActions) {
+        //     let tx;
+        //     if(action.tx[0] === 'custom_json') {
+        //         tx = ['custom_json', {
+        //             required_posting_auths: [process.env.MULTISIG_ACCOUNT],
+        //             required_auths: [],
+        //             id: "vsc.custom_json",
+        //             json: JSON.stringify({
+        //                 net_id: this.self.config.get('network.id'),
+        //                 contract_id: action.contract_id,
+        //                 "vsc_json": typeof action.tx[1].json === 'string' ? JSON.parse(action.tx[1].json) : action.tx[1].json
+        //             })
+        //         }]
+        //     } else if(action[0] === 'transfer') {
+        //         tx = action.tx
+        //     } else {
+        //         continue;
+        //     }
 
 
-            const bh = await HiveClient.blockchain.getCurrentBlock();
-            const [multisigAccount] = await HiveClient.database.getAccounts([process.env.MULTISIG_ACCOUNT])
-            const transaction: Transaction = {
-                ref_block_num: parseInt(bh.block_id.slice(0, 8), 16) & 0xffff,
-                ref_block_prefix: Buffer.from(bh.block_id, 'hex').readUInt32LE(4),
-                expiration: moment().add('60', 'seconds').toDate().toISOString().slice(0, -5),
-                operations: [
-                    tx,
-                    [
-                        'custom_json',
-                        {
-                            required_posting_auths: [process.env.MULTISIG_ACCOUNT],
-                            required_auths: [],
-                            id: "vsc.multisig_txref",
-                            json: JSON.stringify({
-                                'ref_id': action.output_id
-                            })
-                        }
-                    ]
-                ],
-                extensions: []
-            }
+        //     const bh = await HiveClient.blockchain.getCurrentBlock();
+        //     const [multisigAccount] = await HiveClient.database.getAccounts([process.env.MULTISIG_ACCOUNT])
+        //     const transaction: Transaction = {
+        //         ref_block_num: parseInt(bh.block_id.slice(0, 8), 16) & 0xffff,
+        //         ref_block_prefix: Buffer.from(bh.block_id, 'hex').readUInt32LE(4),
+        //         expiration: moment().add('60', 'seconds').toDate().toISOString().slice(0, -5),
+        //         operations: [
+        //             tx,
+        //             [
+        //                 'custom_json',
+        //                 {
+        //                     required_posting_auths: [process.env.MULTISIG_ACCOUNT],
+        //                     required_auths: [],
+        //                     id: "vsc.multisig_txref",
+        //                     json: JSON.stringify({
+        //                         'ref_id': action.output_id
+        //                     })
+        //                 }
+        //             ]
+        //         ],
+        //         extensions: []
+        //     }
 
-            const signedTx = await HiveClient.broadcast.sign(transaction, PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')))
+        //     const signedTx = await HiveClient.broadcast.sign(transaction, PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')))
 
-            const {drain} = await this.self.p2pService.multicastChannel.call('multisig.sign_posting', {
-                payload: {
-                    transaction
-                },
-                responseOrigin: 'many',
-                streamTimeout: 12000
-            })
+        //     const {drain} = await this.self.p2pService.multicastChannel.call('multisig.sign_posting', {
+        //         payload: {
+        //             transaction
+        //         },
+        //         responseOrigin: 'many',
+        //         streamTimeout: 12000
+        //     })
 
-            let signatures = [...signedTx.signatures]
-            for await(let {payload} of drain) {
-                // console.log('sigData', payload)
-                if(multisigAccount.owner.weight_threshold <= signatures.length) {
-                    break;
-                }
-                signatures.push(payload.signature)
-            }
-            signedTx.signatures = signatures;
+        //     let signatures = [...signedTx.signatures]
+        //     for await(let {payload} of drain) {
+        //         // console.log('sigData', payload)
+        //         if(multisigAccount.owner.weight_threshold <= signatures.length) {
+        //             break;
+        //         }
+        //         signatures.push(payload.signature)
+        //     }
+        //     signedTx.signatures = signatures;
 
 
-            if(!this.sentTest) {
-                const recipt = await HiveClient.broadcast.send(signedTx)
-                console.log(recipt)
-                await this.self.transactionPool.transactionPool.findOneAndUpdate({
-                    id: action.output_id
-                },{
-                    $set: {
-                        [`output_actions.${outputActions.indexOf(action)}.tx_id`]: recipt.id
-                    }
-                })
-            }
+        //     if(!this.sentTest) {
+        //         const recipt = await HiveClient.broadcast.send(signedTx)
+        //         console.log(recipt)
+        //         // await this.self.transactionPool.transactionPool.findOneAndUpdate({
+        //         //     id: action.output_id
+        //         // },{
+        //         //     $set: {
+        //         //         [`output_actions.${outputActions.indexOf(action)}.tx_id`]: recipt.id
+        //         //     }
+        //         // })
+        //     }
 
-            this.sentTest = true;
-        }
+        //     this.sentTest = true;
+        // }
     }
 
     isTagged(key) {

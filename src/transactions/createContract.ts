@@ -3,7 +3,7 @@ import {HiveClient} from '../utils'
 import { PrivateKey } from '@hiveio/dhive'
 import * as fs from 'fs';
 import * as vm from 'vm';
-import { TransactionPoolService } from '../services/transactionPool';
+// import { TransactionPoolService } from '../services/transactionPool';
 
 void (async () => {
     
@@ -29,12 +29,12 @@ void (async () => {
         process.exit(0)
     }
 
-    await TransactionPoolService.createContract({
-            name: name,
-            code: code,
-            description: description
-        },
-        setup);
+    // await TransactionPoolService.createContract({
+    //         name: name,
+    //         code: code,
+    //         description: description
+    //     },
+    //     setup);
     
     process.exit(0)
 })()

@@ -2,6 +2,12 @@ import * as IPFS from 'kubo-rpc-client'
 import { addLink } from '../../../ipfs-utils/add-link'
 import { removeLink } from '../../../ipfs-utils/rm-link'
 import { ContractErrorType, instantiate } from './utils'
+
+
+//Crypto imports
+import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto'
+
+
 const CID = IPFS.CID
 
 const ipfs = IPFS.create({ url: process.env.IPFS_HOST  || 'http://127.0.0.1:5001' })
@@ -254,7 +260,24 @@ void (async () => {
       const logs = []
       const {wasmRunner, stateAccess} = state[contract_id]
       
-      
+      const contractEnv = {
+        'block.included_in': null,
+        'sender.id': null,
+        'sender.type': null
+      }
+
+      /**
+       * Contract System calls
+       */
+      const contractCalls = {
+        'crypto.sha256': (value) => {
+          return sha256(Buffer.from(value, 'hex')).toString('hex')
+        },
+        'crypto.ripemd160': (value) => {
+          return ripemd160(Buffer.from(value, 'hex')).toString('hex')
+        }
+      }
+
       try {
         const insta = await instantiate(modules[contract_id], {
           env: {
@@ -314,8 +337,33 @@ void (async () => {
               IOGas = IOGas + val.length; // Total serialized length of gas
   
   
-              return val
+              return insta.exports.__newString(val)
             },
+            'db.delObject': async (keyPtr) => {
+              const key = (insta as any).exports.__getString(keyPtr)
+              wasmRunner.stateCache.set(key, null)
+            },
+            'system.call': async (callPtr, valPtr) => {
+              const callArg = insta.exports.__getString(callPtr)
+              const valArg = JSON.parse(insta.exports.__getString(valPtr))
+              let resultData;
+              if(typeof contractCalls[callArg] === 'function') {
+                resultData = JSON.stringify({
+                  result: contractCalls[callArg](valArg.arg0)
+                })
+              } else {
+                resultData = JSON.stringify({
+                  err: 'INVALID_CALL'
+                })
+              }
+
+              return insta.exports.__newString(resultData);
+            },
+            'system.getEnv': async (envPtr) => {
+              const envArg = insta.exports.__getString(envPtr)
+              
+              return insta.exports.__newString(contractEnv[envArg])
+            }
           },
         } as any)
   
@@ -358,6 +406,7 @@ void (async () => {
               IOGas,
             });
           } else {
+            console.log(ex)
             process.send({
               type: 'execute-stop',
               ret: null,
@@ -370,7 +419,7 @@ void (async () => {
         }
         
         } catch (ex) {
-          console.log(ex)
+          console.log('failed runtime setup', ex)
           process.send({
             type: 'execute-stop',
             ret: null,
@@ -392,7 +441,17 @@ void (async () => {
         const [contract_id, entry] = entries[index]
         const {wasmRunner, stateAccess} = entry
         for(let [key, value] of wasmRunner.stateCache.entries()) {
-          await stateAccess.client.update(key, JSON.parse(value))
+          //Try catch safety
+          try {
+            if(value === null) {
+              //Assume deleted
+              await stateAccess.client.del(key)
+            } else {
+              await stateAccess.client.update(key, JSON.parse(value))
+            }
+          } catch {
+
+          }
         }
         console.log('sending result')
         process.send({

@@ -596,7 +596,7 @@ export class WitnessServiceV2 {
             })
             
             
-            // console.log('result', result)
+            // console.log('result', pub)
             // console.log('aggregated DID', circuit.did.id)
             //Vote majority is over threshold.
             if(circuit.aggPubKeys.size === keysMap.length ) {
@@ -634,6 +634,7 @@ export class WitnessServiceV2 {
       // })
       // console.log('circuit aggregate', circuit.aggPubKeys)
       //Did it pass minimum?   
+      console.log(circuit.aggPubKeys.size, keysMap.length, keysMap.length * voteMajority)
       if(circuit.aggPubKeys.size / keysMap.length > voteMajority){
         if(process.env.BLOCK_BROADCAST_ENABLED === "yes") {
 
@@ -641,12 +642,12 @@ export class WitnessServiceV2 {
           await this.self.ipfs.dag.put(blockContainer.toObject())
           await this.self.ipfs.dag.put(signedBlock)
           await HiveClient.broadcast.json({
-            id: 'vsc.propose_block.experiment', 
+            id: 'vsc.propose_block', 
             required_auths: [process.env.HIVE_ACCOUNT],
             required_posting_auths: [],
             json: JSON.stringify({
               //Prevents indexing of older experimental blocks.
-              experiment_id: 2,
+              replay_id: 1,
               net_id: this.self.config.get('network.id'),
               signed_block: signedBlock
             })

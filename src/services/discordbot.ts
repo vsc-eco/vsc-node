@@ -51,49 +51,49 @@ import { HiveClient } from '../utils'
         const embedFields:Array<APIEmbedField> = []
          
         console.log(arg)
-        const txData = await this.self.transactionPool.transactionPool.findOne({
-            id: arg
-        })
-        console.log(txData)
-        if(txData) {
-            if(arg2 === "blockinfo") {
-                const blockInfo = await this.self.chainBridge.blockHeaders.findOne({id:txData.included_in})
+        // const txData = await this.self.transactionPool.transactionPool.findOne({
+        //     id: arg
+        // })
+        // console.log(txData)
+        // if(txData) {
+        //     if(arg2 === "blockinfo") {
+        //         const blockInfo = await this.self.chainBridge.blockHeaders.findOne({id:txData.included_in})
 
-                console.log(blockInfo)
-                const tx = await HiveClient.database.getTransaction(blockInfo.hive_ref_tx)
-                const witnessName = tx.operations[0][1].required_posting_auths[0]
-                console.log(witnessName)
+        //         console.log(blockInfo)
+        //         const tx = await HiveClient.database.getTransaction(blockInfo.hive_ref_tx)
+        //         const witnessName = tx.operations[0][1].required_posting_auths[0]
+        //         console.log(witnessName)
 
-                return;
-            }
-            embedFields.push({
-                name: "status",
-                value: txData.status,
-                inline: true
-            })
-            embedFields.push({
-                name: "Sender",
-                value: `\`${txData.account_auth}\``,
-                inline: true
-            })
-            embedFields.push({
-                name: "Op type",
-                value: txData.op,
-                inline: true
-            })
-            embedFields.push({
-                name: "Included in",
-                value: txData.included_in,
-                inline: true
-            })
-            if(txData.headers.contract_id) {
-                embedFields.push({
-                    name: "contract_id",
-                    value: txData.headers.contract_id,
-                    inline: true
-                })
-            }
-        }
+        //         return;
+        //     }
+        //     embedFields.push({
+        //         name: "status",
+        //         value: txData.status,
+        //         inline: true
+        //     })
+        //     embedFields.push({
+        //         name: "Sender",
+        //         value: `\`${txData.account_auth}\``,
+        //         inline: true
+        //     })
+        //     embedFields.push({
+        //         name: "Op type",
+        //         value: txData.op,
+        //         inline: true
+        //     })
+        //     embedFields.push({
+        //         name: "Included in",
+        //         value: txData.included_in,
+        //         inline: true
+        //     })
+        //     if(txData.headers.contract_id) {
+        //         embedFields.push({
+        //             name: "contract_id",
+        //             value: txData.headers.contract_id,
+        //             inline: true
+        //         })
+        //     }
+        // }
         //   console.log(nodeScores)
         //   for(let field in nodeScores) {
         //   }

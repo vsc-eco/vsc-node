@@ -1,6 +1,6 @@
 // do deposit with very low amount of hive
 
-import { withdraw } from "../transactions/withdraw";
+// import { withdraw } from "../transactions/withdraw";
 import { deposit } from "../transactions/deposit";
 import { HiveClient, createMongoDBClient, sleep } from "../utils";
 import { getBalance } from "./test-utils";
@@ -71,10 +71,10 @@ export async function depositWithdrawWorkflowTest(nodeUrl: string) {
     ]
     const resultDeposit = await deposit(setup)
 
-    if (!await waitForDepositConfirmation(resultDeposit.id)) {
-        console.error('depositWithdrawWorkflowTest failed, took too long to finish')
-        return false
-    }
+    // if (!await waitForDepositConfirmation(resultDeposit.id)) {
+    //     console.error('depositWithdrawWorkflowTest failed, took too long to finish')
+    //     return false
+    // }
 
     process.argv = [
         ...originalArgs,
@@ -82,15 +82,15 @@ export async function depositWithdrawWorkflowTest(nodeUrl: string) {
         // '--to=sudokurious',
         '0.001'
     ]
-    const resultWithdraw = await withdraw(setup)
+    // const resultWithdraw = await withdraw(setup)
 
-    if (!await waitForDepositConfirmation(resultWithdraw.id)) {
-        console.error('depositWithdrawWorkflowTest failed, took too long to finish')
-        return false
-    }
+    // if (!await waitForDepositConfirmation(resultWithdraw.id)) {
+    //     console.error('depositWithdrawWorkflowTest failed, took too long to finish')
+    //     return false
+    // }
 
-    // wait until multisig nodes have processed the withdraw request
-    await waitForBalanceDrain(resultWithdraw.id, 0)
+    // // wait until multisig nodes have processed the withdraw request
+    // await waitForBalanceDrain(resultWithdraw.id, 0)
 
     const finalBalance = getBalance()
 

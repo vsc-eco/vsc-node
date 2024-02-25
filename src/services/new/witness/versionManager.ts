@@ -1,7 +1,13 @@
-import networks from "@/services/networks";
+import networks from "../../../services/networks";
 import { NewCoreService } from "..";
 import { HiveClient } from "../../../utils";
+import { Collection } from "mongodb";
 
+
+
+const VersionConfig = {
+    index_reset_id: 1
+}
 
 /**
  * Manages signaling new versions of VSC releases.
@@ -10,8 +16,28 @@ import { HiveClient } from "../../../utils";
  */
 export class VersionManager {
     self: NewCoreService;
+    streamState: Collection;
+    nonceMap: Collection;
+    contracts: Collection;
+    contractOutputs: Collection;
+    blockHeaders: Collection;
+    witnessHistory: Collection;
+    witnessDb: Collection;
+    accountAuths: Collection;
     constructor(self: NewCoreService) {
         this.self = self;
+
+
+        this.streamState = this.self.db.collection('stream_state')
+        this.nonceMap = this.self.db.collection('nonce_map')
+        this.contracts = this.self.db.collection('contracts')
+        this.contractOutputs = this.self.db.collection('contract_outputs')
+        this.blockHeaders = this.self.db.collection('block_headers')
+        this.witnessHistory = this.self.db.collection('witness_history')
+        this.witnessDb = this.self.db.collection('witnesses')
+        this.accountAuths = this.self.db.collection('account_auths')
+
+        this.init = this.init.bind(this)
     }
 
     /**
@@ -41,5 +67,41 @@ export class VersionManager {
                 err: "INVALID"
             }
         }
+    }
+
+    async init() {
+        const resetEntry = await this.streamState.findOne({
+            id: "index_reset"
+        })
+        if(resetEntry === null || resetEntry.val !== VersionConfig.index_reset_id) {
+            console.log('Must reset DB')
+
+            
+            await this.accountAuths.deleteMany({})
+            await this.contractOutputs.deleteMany({})
+            await this.contracts.deleteMany({})
+            await this.witnessDb.deleteMany({})
+            await this.witnessHistory.deleteMany({})
+            await this.nonceMap.deleteMany({})
+            await this.blockHeaders.deleteMany({})
+
+            await this.streamState.deleteOne({
+                id: 'last_hb_processed'
+            })
+
+            await this.streamState.findOneAndUpdate({
+                id: 'index_reset'
+            }, {
+                $set: {
+                    val: VersionConfig.index_reset_id
+                }
+            }, {
+                upsert: true
+            })
+        }
+    }
+
+    async start() {
+
     }
 }

@@ -15,7 +15,7 @@ import assert from '../vendor/bsert'
 import * as merkle from '../vendor/merkle'
 import hash256 from '../vendor/hash256'
 import { waitTxConfirm } from '../utils'
-import { TransactionPoolService } from '../../services/transactionPool'
+// import { TransactionPoolService } from '../../services/transactionPool'
 import { CoreService } from '../../services'
 import { globalConfig } from '../config'
 import { sleep } from '../../utils'
@@ -148,7 +148,7 @@ export class BitcoinWrappingProvider {
   returnAddress: string
   txDb: Collection
   addrDb: Collection
-  transactionPool: TransactionPoolService
+  transactionPool: any
   core: CoreService
 
   async getStateRoot(): Promise<string> {
@@ -600,89 +600,89 @@ export class BitcoinWrappingProvider {
       try {
         let x = 0
         let topBlock = 0
-        while (topBlock < 840_000) {
-          const { state_merkle } = await this.core.contractEngine.contractDb.findOne({
-            id: BTCCR_CONTRACT,
-          })
-          // console.log('state merkle', state_merkle)
-          try {
-            const dag = await this.core.ipfs.dag.resolve(IPFS.CID.parse(state_merkle), {
-              path: 'pre-headers/main',
-            })
+        // while (topBlock < 840_000) {
+        //   const { state_merkle } = await this.core.newService.contractEngine.contractDb.findOne({
+        //     id: BTCCR_CONTRACT,
+        //   })
+        //   // console.log('state merkle', state_merkle)
+        //   try {
+        //     const dag = await this.core.ipfs.dag.resolve(IPFS.CID.parse(state_merkle), {
+        //       path: 'pre-headers/main',
+        //     })
 
-            topBlock =
-              Object.entries((await this.core.ipfs.dag.get(dag.cid)).value)
-                .map((e) => {
-                  return (e[1] as any).height
-                })
-                .sort((a, b) => {
-                  return b - a
-                })[0] || 0
-            // console.log('topBlock', topBlock)
-          } catch (ex) {
-            console.log(ex)
-            topBlock = 0
-          }
-          // console.log(state_merkle, topBlock)
-          const abortController = new AbortController()
-          let headerBulk = [] as any
+        //     topBlock =
+        //       Object.entries((await this.core.ipfs.dag.get(dag.cid)).value)
+        //         .map((e) => {
+        //           return (e[1] as any).height
+        //         })
+        //         .sort((a, b) => {
+        //           return b - a
+        //         })[0] || 0
+        //     // console.log('topBlock', topBlock)
+        //   } catch (ex) {
+        //     console.log(ex)
+        //     topBlock = 0
+        //   }
+        //   // console.log(state_merkle, topBlock)
+        //   const abortController = new AbortController()
+        //   let headerBulk = [] as any
 
-          const transactionPool = this.transactionPool
-          const core = this.core
-          let busyPromise
+        //   const transactionPool = this.transactionPool
+        //   const core = this.core
+        //   let busyPromise
 
-          async function processHeadersTx() {
-            const localCopy = headerBulk
-            headerBulk = []
-            if (localCopy.length < 1) {
-              return
-            }
-            const result = await transactionPool.callContract(BTCCR_CONTRACT, {
-              action: 'processHeaders',
-              payload: {
-                headers: localCopy,
-              },
-            })
-            await sleep(5_000)
-            core.logger.debug('result of contract invokation', result)
-            const date = new Date()
-            await waitTxConfirm(result.id, core, (state) => {
-              if (state === 'INCLUDED') {
-                // console.log('Included after', new Date().getTime() - date.getTime(), 's')
-              }
-            })
-            // console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
-            await sleep(30_000)
-          }
+        //   async function processHeadersTx() {
+        //     const localCopy = headerBulk
+        //     headerBulk = []
+        //     if (localCopy.length < 1) {
+        //       return
+        //     }
+        //     const result = await transactionPool.callContract(BTCCR_CONTRACT, {
+        //       action: 'processHeaders',
+        //       payload: {
+        //         headers: localCopy,
+        //       },
+        //     })
+        //     await sleep(5_000)
+        //     core.logger.debug('result of contract invokation', result)
+        //     const date = new Date()
+        //     await waitTxConfirm(result.id, core, (state) => {
+        //       if (state === 'INCLUDED') {
+        //         // console.log('Included after', new Date().getTime() - date.getTime(), 's')
+        //       }
+        //     })
+        //     // console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
+        //     await sleep(30_000)
+        //   }
 
-          setInterval(() => {
-            busyPromise = processHeadersTx()
-          }, 30_000)
-          // setInterval(() => {
-          //     console.log(headerBulk)
-          // }, 15_000)
+        //   setInterval(() => {
+        //     busyPromise = processHeadersTx()
+        //   }, 30_000)
+        //   // setInterval(() => {
+        //   //     console.log(headerBulk)
+        //   // }, 15_000)
 
-          for await (let header of BTCBlockStream({
-            height: topBlock + 1,
-            signal: abortController.signal,
-            continueHead: true,
-          })) {
-            // break;
-            // console.log(header)
-            headerBulk.push(header.rawData)
-            // console.log('pushing', header.x, header.data.hash)
-            // const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
-            // const prevBlock = reverse(BTCUtils.extractPrevBlockLE(decodeHex));
-            if (headerBulk.length > 144) {
-              busyPromise = processHeadersTx()
-            }
-            if (busyPromise) {
-              await busyPromise
-              busyPromise = null
-              break
-            }
-          }
-        }
+        //   for await (let header of BTCBlockStream({
+        //     height: topBlock + 1,
+        //     signal: abortController.signal,
+        //     continueHead: true,
+        //   })) {
+        //     // break;
+        //     // console.log(header)
+        //     headerBulk.push(header.rawData)
+        //     // console.log('pushing', header.x, header.data.hash)
+        //     // const decodeHex = new Uint8Array(Buffer.from(header, 'hex'))
+        //     // const prevBlock = reverse(BTCUtils.extractPrevBlockLE(decodeHex));
+        //     if (headerBulk.length > 144) {
+        //       busyPromise = processHeadersTx()
+        //     }
+        //     if (busyPromise) {
+        //       await busyPromise
+        //       busyPromise = null
+        //       break
+        //     }
+        //   }
+        // }
       } catch (ex) {
         console.log(ex)
       }
@@ -690,30 +690,31 @@ export class BitcoinWrappingProvider {
   }
 
   async getReplayedBlock(): Promise<number> {
-    let topBlock;
-    const { state_merkle } = await this.core.contractEngine.contractDb.findOne({
-      id: BTCCR_CONTRACT,
-    })
-    // console.log('state merkle', state_merkle)
-    try {
-      const dag = await this.core.ipfs.dag.resolve(IPFS.CID.parse(state_merkle), {
-        path: 'pre-headers/main',
-      })
+    // let topBlock;
+    // const { state_merkle } = await this.core.newService.contractEngine.contractDb.findOne({
+    //   id: BTCCR_CONTRACT,
+    // })
+    // // console.log('state merkle', state_merkle)
+    // try {
+    //   const dag = await this.core.ipfs.dag.resolve(IPFS.CID.parse(state_merkle), {
+    //     path: 'pre-headers/main',
+    //   })
 
-      topBlock =
-        Object.entries((await this.core.ipfs.dag.get(dag.cid)).value)
-          .map((e) => {
-            return (e[1] as any).height
-          })
-          .sort((a, b) => {
-            return b - a
-          })[0] || 0
-      // console.log('topBlock', topBlock)
-    } catch (ex) {
-      console.log(ex)
-      topBlock = 0
-    }
-    return topBlock
+    //   topBlock =
+    //     Object.entries((await this.core.ipfs.dag.get(dag.cid)).value)
+    //       .map((e) => {
+    //         return (e[1] as any).height
+    //       })
+    //       .sort((a, b) => {
+    //         return b - a
+    //       })[0] || 0
+    //   // console.log('topBlock', topBlock)
+    // } catch (ex) {
+    //   console.log(ex)
+    //   topBlock = 0
+    // }
+    // return topBlock
+    return 0
   }
 
   async start() {
@@ -740,13 +741,13 @@ export class BitcoinWrappingProvider {
 
     await core.start()
 
-    const transactionPool = new TransactionPoolService(core)
+    // const transactionPool = new TransactionPoolService(core)
 
-    await transactionPool.start()
+    // await transactionPool.start()
 
     this.core = core
 
-    this.transactionPool = transactionPool
+    // this.transactionPool = transactionPool
 
     NodeSchedule.scheduleJob('*/5 * * * *', async () => {
       try {

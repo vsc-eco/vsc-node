@@ -65,7 +65,8 @@ void (async () => {
         },
         modules: {
           'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556': cid.toString()
-        }
+        },
+        debug: true
       })
   
       await vmContainer.init()

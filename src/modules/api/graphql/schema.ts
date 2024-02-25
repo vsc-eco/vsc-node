@@ -145,7 +145,6 @@ export const schema = `
         findDeposit(id: String): Deposit
         findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
-        submitTransaction(payload: String): TransactionSubmitResult
         submitTransactionV1(tx: String!, sig: String!): TransactionSubmitResult
         getAccountNonce(keyGroup: [String]!): AccountNonceResult
 

@@ -273,7 +273,6 @@ export class ChainBridgeV2 {
                     // console.log(opPayload.json_metadata)
                 }
             } else if (op === 'custom_json') {
-                console.log('custom json data', opPayload)
                 try {
                     if (opPayload.id.startsWith('vsc.')) {
 
@@ -294,9 +293,8 @@ export class ChainBridgeV2 {
                         //     upsert: true
                         // })
                         
-                        if(opPayload.id === "vsc.propose_block.experiment" && json.net_id === this.self.config.get('network.id') && json.experiment_id === 2) {
+                        if(opPayload.id === "vsc.propose_block" && json.net_id === this.self.config.get('network.id') && json.replay_id === 1) {
                             try {
-                                
                                 //Initial checks passed
                                 const blockHeight = blkHeight;
                                 const witnessSet = (await this.getWitnessesAtBlock(blockHeight)).map(e => {
@@ -307,7 +305,7 @@ export class ChainBridgeV2 {
                                 }).sort((a, b) => {
                                     return a.account - b.account;
                                 }).filter(e => !!e).map(e => e.key)
-                                console.log('Asking for schedule at slot', blockHeight)
+                                // console.log('Asking for schedule at slot', blockHeight)
                                 const witnessSchedule = await this.self.witness.roundCheck(blockHeight)
     
                                 
@@ -317,7 +315,11 @@ export class ChainBridgeV2 {
                                     // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
                                     return e.bn === slotHeight && e.account === opPayload.required_auths[0]
                                 })
-    
+                                
+                                /**
+                                 * TODO:
+                                 * - On top of slot validation, double broadcast validation needs to be done to prevent processing the same block
+                                 */
                                 if(witnessSlot) {
                                     const signedBlock = {
                                         ...json.signed_block,
@@ -346,19 +348,39 @@ export class ChainBridgeV2 {
                                     })).bytes);
 
                                     if(!isValid) {
+                                        console.log('singature is NOT valid')
                                         return;
                                     }
 
                                     const voteMajority = 2/3
-                                    if(pubKeys.length / witnessSet.length >= voteMajority) {
-                                        return;
+                                    console.log(pubKeys.length, witnessSet.length, voteMajority, pubKeys.length / witnessSet.length < voteMajority)
+                                    if((pubKeys.length / witnessSet.length) < voteMajority) {
+                                        console.log('Not hitting vote majority')
+                                        await halt()
+                                        return; 
                                     }
-                                    
-                                    const [startBlock, endBlock] = signedBlock.headers.br
-                                    console.log([startBlock, endBlock])
                                     const blockId = (await this.self.ipfs.dag.put(json.signed_block, {
                                         onlyHash: true
                                     })).toString()
+
+                                    const [startBlock, endBlock] = signedBlock.headers.br
+
+                                    const alreadyIncludedBlock = await this.blockHeaders.findOne({
+                                        $or: [
+                                            {
+                                                slot_height: slotHeight
+                                            }, 
+                                            {
+                                                id: blockId
+                                            }
+                                        ]
+                                    })
+ 
+                                    if(!alreadyIncludedBlock) {
+                                        return;
+                                    }
+                                    
+                                    console.log([startBlock, endBlock])
                                     const block_full = (await this.self.ipfs.dag.get(signed_block.block)).value
                                     console.log('full block content', block_full)
                                     
@@ -372,6 +394,7 @@ export class ChainBridgeV2 {
                                             block: signed_block.block.toString(),
                                             start_block: startBlock,
                                             end_block: endBlock,
+                                            slot_height: slotHeight,
                                             stats: {
                                                 size: (await this.self.ipfs.block.get(signed_block.block)).length
                                             }
@@ -501,12 +524,11 @@ export class ChainBridgeV2 {
                                 console.log('Error on index process')
                             }
                             console.log('HALTING')
-                            // await halt()
+                            await halt()
                         }
                     }
                 } catch (ex) {
                     console.log(ex)
-
                 }
             }
         }
@@ -532,7 +554,7 @@ export class ChainBridgeV2 {
                     account: e.account,
                     
                     valid_from: {
-                        $lt: blk
+                        $lte: blk
                     },
                     
                 }
@@ -570,30 +592,23 @@ export class ChainBridgeV2 {
                 // console.log('filtered out 314', e.account, data)
                 return null;
             }
-
-            // console.log(data, {
-            //     account: data.account,
-            //     valid_from: {
-                //         $gt: data.valid_from
-                //     }
-                // })
                 const keys = await this.accountAuths.findOne({
                     account: data.account,
                     valid_from: {
-                        $lte: data.valid_from
+                        $lte: blk
                     },
-                    $or: [
-                        {
-                            valid_to: {$exists: false}
-                        }, {
-                            valid_to: {
-                                $gt: data.valid_from
-                        }
-                    }
-                ]
+                //     $or: [
+                //         {
+                //             valid_to: {$exists: false}
+                //         }, {
+                //             valid_to: {
+                //                 $gt: blk
+                //         }
+                //     }
+                // ]
             }, {
                 sort: {
-                    valid_to: 1
+                    valid_from: -1
                 }
             })
             

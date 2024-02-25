@@ -1,7 +1,7 @@
 import { utils, BTCUtils, ser, ValidateSPV } from '@summa-tx/bitcoin-spv-js'
 import {CID} from 'kubo-rpc-client'
 import { CoreService } from '../services';
-import { TransactionPoolService } from '../services/transactionPool';
+// import { TransactionPoolService } from '../services/transactionPool';
 import { sleep } from '../utils';
 import Axios from 'axios'
 import { waitTxConfirm } from './utils';
@@ -23,29 +23,28 @@ void (async () => {
 
     await core.start()
 
-    const transactionPool = new TransactionPoolService(core)
+    // const transactionPool = new TransactionPoolService(core)
 
     const ipfs = core.ipfs
 
-    await transactionPool.start()
+    // await transactionPool.start()
 
-    const {state_merkle:mint_state} = await core.contractEngine.contractDb.findOne({
-        id: mint_contract
-    })
+    // const {state_merkle:mint_state} = await core.contractEngine.contractDb.findOne({
+    //     id: mint_contract
+    // })
 
    
-    console.log(mint_state)
     let links = []
-    try {
-        const val = (await ipfs.dag.resolve(CID.parse(mint_state), {
-            path: 'outputs'
-        }))
-        console.log(val)
-        console.log(val, (await ipfs.dag.get(val.cid)).value.Links)
-        links = (await ipfs.dag.get(val.cid)).value.Links
-    } catch(ex) {
-        console.log(ex)
-    }
+    // try {
+    //     const val = (await ipfs.dag.resolve(CID.parse(mint_state), {
+    //         path: 'outputs'
+    //     }))
+    //     console.log(val)
+    //     console.log(val, (await ipfs.dag.get(val.cid)).value.Links)
+    //     links = (await ipfs.dag.get(val.cid)).value.Links
+    // } catch(ex) {
+    //     console.log(ex)
+    // }
 
     let [dest, amount] = process.argv.slice(process.argv.length - 2) as any
 
@@ -105,17 +104,17 @@ void (async () => {
         return a + b;
     }))
 
-    const result = await transactionPool.callContract(mint_contract, {
-        action: 'applyTx',
-        payload: TransferOp
-    });
-    const date = new Date();
-    await waitTxConfirm(result.id, core, (state) => {
-        if(state === "INCLUDED") {
-            console.log('Included after', new Date().getTime() - date.getTime(), 's')
-        }
-    })
-    console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
+    // const result = await transactionPool.callContract(mint_contract, {
+    //     action: 'applyTx',
+    //     payload: TransferOp
+    // });
+    // const date = new Date();
+    // await waitTxConfirm(result.id, core, (state) => {
+    //     if(state === "INCLUDED") {
+    //         console.log('Included after', new Date().getTime() - date.getTime(), 's')
+    //     }
+    // })
+    // console.log('Confirmed after', new Date().getTime() - date.getTime(), 's')
 
 
 })()

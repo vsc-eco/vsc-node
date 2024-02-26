@@ -349,15 +349,14 @@ export class ChainBridgeV2 {
 
                                     if(!isValid) {
                                         console.log('singature is NOT valid')
-                                        return;
+                                        throw new Error('Signature is not valid')
                                     }
-
+                                    
                                     const voteMajority = 2/3
                                     console.log(pubKeys.length, witnessSet.length, voteMajority, pubKeys.length / witnessSet.length < voteMajority)
                                     if((pubKeys.length / witnessSet.length) < voteMajority) {
                                         console.log('Not hitting vote majority')
-                                        await halt()
-                                        return; 
+                                        throw new Error('Not hitting vote majority')
                                     }
                                     const blockId = (await this.self.ipfs.dag.put(json.signed_block, {
                                         onlyHash: true
@@ -376,8 +375,8 @@ export class ChainBridgeV2 {
                                         ]
                                     })
  
-                                    if(!alreadyIncludedBlock) {
-                                        return;
+                                    if(alreadyIncludedBlock) {
+                                        throw new Error('Already includedInBlock')
                                     }
                                     
                                     console.log([startBlock, endBlock])
@@ -523,8 +522,6 @@ export class ChainBridgeV2 {
                                 console.log(ex)
                                 console.log('Error on index process')
                             }
-                            console.log('HALTING')
-                            await halt()
                         }
                     }
                 } catch (ex) {

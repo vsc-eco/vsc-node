@@ -6,7 +6,7 @@ import { Collection } from "mongodb";
 
 
 const VersionConfig = {
-    index_reset_id: 1
+    index_reset_id: 2
 }
 
 /**
@@ -24,6 +24,7 @@ export class VersionManager {
     witnessHistory: Collection;
     witnessDb: Collection;
     accountAuths: Collection;
+    txDb: Collection;
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -36,6 +37,7 @@ export class VersionManager {
         this.witnessHistory = this.self.db.collection('witness_history')
         this.witnessDb = this.self.db.collection('witnesses')
         this.accountAuths = this.self.db.collection('account_auths')
+        this.txDb = this.self.db.collection('transaction_pool')
 
         this.init = this.init.bind(this)
     }
@@ -84,6 +86,7 @@ export class VersionManager {
             await this.witnessHistory.deleteMany({})
             await this.nonceMap.deleteMany({})
             await this.blockHeaders.deleteMany({})
+            await this.txDb.deleteMany({})
 
             await this.streamState.deleteOne({
                 id: 'last_hb_processed'

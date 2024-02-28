@@ -5,8 +5,10 @@ import { Collection } from "mongodb";
 
 
 
-const VersionConfig = {
-    index_reset_id: 2
+export const VersionConfig = {
+    index_reset_id: 2,
+    //Match with package.json and tag
+    version_id: 'v0.1.0'
 }
 
 /**

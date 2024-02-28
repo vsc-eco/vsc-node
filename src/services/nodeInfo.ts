@@ -4,6 +4,7 @@ import { getCommitHash, HiveClient, ModuleContainer } from "../utils";
 import { CoreService, } from "./index";
 import moment from "moment";
 import { Collection } from "mongodb";
+import { VersionConfig } from "./new/witness/versionManager";
 
 
 export class NodeInfoService {
@@ -102,6 +103,7 @@ export class NodeInfoService {
             ts: new Date().toISOString(),
             hive_account: hiveAccount,
             git_commit: this.gitCommit,
+            version_id: VersionConfig.version_id,
             witness: {
                 enabled: witnessEnabled,
                 disabled_reason: disableReason,

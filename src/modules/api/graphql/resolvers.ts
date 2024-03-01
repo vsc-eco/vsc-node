@@ -313,6 +313,8 @@ export const Resolvers = {
     }
   },
   witnessNodes: async (_, args) => {
+    //Use getWitnessesAtBlock to get witnesses in general
+    //TODO: Create separate API to include indicate whether a node is in the schedule or not.
     return await appContainer.self.newService.chainBridge.getWitnessesAtBlock(args.height)
   },
   nextWitnessSlot: async (_, args) => {

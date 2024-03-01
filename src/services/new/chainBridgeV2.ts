@@ -225,6 +225,7 @@ export class ChainBridgeV2 {
                         }, {
                             $set: {
                                 net_id: json.vsc_node.unsigned_proof.net_id,
+                                version_id: json.vsc_node.unsigned_proof.version_id,
                                 ipfs_peer_id: json.vsc_node.unsigned_proof.ipfs_peer_id,
                                 signing_keys: json.vsc_node.unsigned_proof.witness.signing_keys,
                                 last_signed: blkHeight
@@ -297,14 +298,15 @@ export class ChainBridgeV2 {
                             try {
                                 //Initial checks passed
                                 const blockHeight = blkHeight;
-                                const witnessSet = (await this.getWitnessesAtBlock(blockHeight)).map(e => {
-                                    return e.keys.find(key => {
-                                      return key.t === 'consensus'
-                                      //TODO finish verification flow
-                                    })
-                                }).sort((a, b) => {
-                                    return a.account - b.account;
-                                }).filter(e => !!e).map(e => e.key)
+                                // const witnessSet = (await this.getWitnessesAtBlock(blockHeight)).map(e => {
+                                //     return e.keys.find(key => {
+                                //       return key.t === 'consensus'
+                                //       //TODO finish verification flow
+                                //     })
+                                // }).sort((a, b) => {
+                                //     return a.account - b.account;
+                                // }).filter(e => !!e).map(e => e.key)
+                                const witnessSet = (await this.self.electionManager.getMembersOfBlock(blockHeight)).map(e => e.key)
                                 // console.log('Asking for schedule at slot', blockHeight)
                                 const witnessSchedule = await this.self.witness.roundCheck(blockHeight)
     
@@ -649,10 +651,7 @@ export class ChainBridgeV2 {
         })
     }
 
-    async createConsensusHeader(height: number) {
-        const consensusList = await this.getWitnessesAtBlock(height)
-
-    }
+    
 
     async init() {
         

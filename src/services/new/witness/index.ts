@@ -151,10 +151,8 @@ export class WitnessServiceV2 {
           id: 'last_hb_processed'
         })
         const consensusRound = await this.calculateConsensusRound(blockHeight)
-        let witnessNodes = await this.self.chainBridge.getWitnessesAtBlock(blockHeight)
-        witnessNodes = witnessNodes.sort((a, b) => {
-          return a.account - b.account;
-        })
+        let witnessNodes = await this.self.electionManager.getMembersOfBlock(blockHeight)
+       
 
 
         let outSchedule = []
@@ -543,17 +541,12 @@ export class WitnessServiceV2 {
         mode: 'stream',
         streamTimeout: 15_000
       })
-      const keys = await this.self.chainBridge.getWitnessesAtBlock(block_height)
       const blockHash = await this.self.ipfs.dag.put(blockHeader);
       console.log('BlsCircuit', blockHeader, blockHash)
       const circuit = new BlsCircuit({
         hash: blockHash.bytes
       })
-      const keysMap = keys.map(e => {
-        return e.keys.find(key => {
-          return key.t === "consensus"
-        })
-      }).filter(e => !!e).map(e => e.key);
+      const keysMap = (await this.self.electionManager.getMembersOfBlock(block_height)).map(e => e.key)
 
       const signedData = await this.self.consensusKey.signRaw(blockHash.bytes);
       console.log('signedData', signedData)

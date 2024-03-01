@@ -7,7 +7,7 @@ import networks from "../../../services/networks";
 import { ParserFuncArgs } from "../utils/streamUtils";
 import BitSet from "bitset";
 import { CID } from "kubo-rpc-client";
-import { HiveClient } from "@/utils";
+import { HiveClient } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 
 

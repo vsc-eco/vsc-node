@@ -101,12 +101,16 @@ function calcVotingWeight(drift: number) {
 export class ElectionManager {
     self: NewCoreService;
     electionDb: Collection<ElectionResult>
+    epochLength: number;
     constructor(self: NewCoreService) {
         this.self = self;
 
         this.btHoldElection = this.btHoldElection.bind(this)
         this.btIndexElection = this.btIndexElection.bind(this)
         this.handlePeerMsg = this.handlePeerMsg.bind(this)
+
+        //Every 6 hours
+        this.epochLength = 20 * 60 * 6
     }
 
     /**
@@ -274,11 +278,13 @@ export class ElectionManager {
     }
 
     async btHoldElection({data:block}) {
-        // const mod = 20 * 60 * 6;
-        const mod = 40;
         const blk = block.key
-        if(blk % mod === 0 && this.self.chainBridge.parseLag < 5) {
-            this.holdElection(blk)
+        const witnessSchedule = await this.self.witness.roundCheck(blk)
+        const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
+        if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
+            if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+                this.holdElection(blk)
+            }
         }
     }
 
@@ -355,10 +361,7 @@ export class ElectionManager {
                 epoch: election.epoch,
                 net_id: this.self.config.get('network.id')
             })).bytes;
-            console.log('signRaw', signRaw, {
-                data: (await this.self.ipfs.dag.put(election)).toString(),
-                epoch: election.epoch
-            })
+            
             const sigData = await this.self.consensusKey.signRaw(signRaw)
             data.drain.push(sigData)
         }

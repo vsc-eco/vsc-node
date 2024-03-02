@@ -17,6 +17,7 @@ import { P2PService } from './p2pService';
 import { AddrRecord } from './types';
 import { ContractEngineV2 } from './contractEngineV2';
 import { VersionManager } from './witness/versionManager';
+import { ElectionManager } from './witness/electionManager';
 
 const CONSTANTS = {
     //Reset block records 
@@ -39,6 +40,7 @@ export class NewCoreService {
     contractEngine: ContractEngineV2;
     miscDb: Collection;
     versionManager: VersionManager
+    electionManager: ElectionManager
     nonceMap: Collection;
     
     constructor() {
@@ -59,6 +61,7 @@ export class NewCoreService {
         this.transactionPool = new TransactionPoolV2(this)
         this.contractEngine = new ContractEngineV2(this)
         this.versionManager = new VersionManager(this)
+        this.electionManager = new ElectionManager(this)
     }
     
     async init(oldService) {
@@ -83,6 +86,7 @@ export class NewCoreService {
         await this.witness.init();
         await this.transactionPool.init()
         await this.contractEngine.init()
+        await this.electionManager.init()
          
     }
 
@@ -91,6 +95,7 @@ export class NewCoreService {
         console.log('running here')
         await this.nodeIdentity.start()
         await this.witness.start()
+        await this.electionManager.start()
     }
 
     async stop() {

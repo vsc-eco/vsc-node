@@ -204,7 +204,7 @@ export class ElectionManager {
             __v: '0.1',
             members: witnessList,
             //Iterate upon each successive consensus epoch
-            epoch: electionResult ? electionResult.epoch : 0,
+            epoch: electionResult ? electionResult.epoch + 1 : 0,
 
             // last_epoch: null,
             //For use when staking is active
@@ -230,7 +230,6 @@ export class ElectionManager {
         }
         
         const signRaw = (await this.self.ipfs.dag.put(electionHeader)).bytes;
-        console.log('signRaw - elector', signRaw, electionHeader)
         const circuit = new BlsCircuit({
             hash: signRaw
         })
@@ -242,10 +241,16 @@ export class ElectionManager {
             },
             streamTimeout: 20_000
         })
-        
+
+        const members = await this.getMembersOfBlock(blk)
         for await(let sigData of drain) {
             const pub = JSON.parse(Buffer.from(sigData.payload.p, 'base64url').toString()).pub
             const sig = sigData.payload?.s
+            if(!members.find(e => {
+                return e.key === pub
+            })) {
+                continue;
+            }
             const verifiedSig = await circuit.verifySig({
                 sig: sig,
                 pub: pub,
@@ -259,7 +264,6 @@ export class ElectionManager {
             }
         }
 
-        const members = await this.getMembersOfBlock(blk)
         const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
         if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch > 0)) {
             //Must be valid
@@ -281,6 +285,8 @@ export class ElectionManager {
         const blk = block.key
         const witnessSchedule = await this.self.witness.roundCheck(blk)
         const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
+        // const drift = blk % this.epochLength;
+        // const slotHeight = blk - drift
         if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
             if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
                 this.holdElection(blk)
@@ -297,6 +303,7 @@ export class ElectionManager {
 
         if(op === 'custom_json') {
             if (opPayload.id === 'vsc.election_result') {
+                
                 const members = await this.getMembersOfBlock(blkHeight)
                 const json: {
                     data: string
@@ -307,7 +314,9 @@ export class ElectionManager {
                         bv: string
                     }
                 } = JSON.parse(opPayload.json)
-                const circuit = BlsCircuit.deserialize(json, (await this.getMembersOfBlock(blkHeight)).map(e => e.key))
+                const slotHeight = blkHeight - (blkHeight % this.epochLength)
+                
+                const circuit = BlsCircuit.deserialize(json, (await this.getMembersOfBlock(slotHeight)).map(e => e.key))
                 let pubKeys = []
                 for(let pub of circuit.aggPubKeys) {
                     pubKeys.push(pub[0])
@@ -319,17 +328,23 @@ export class ElectionManager {
                 //Aggregate pubkeys
                 circuit.setAgg(pubKeys)
 
-                const isValid = await circuit.verify((await this.self.ipfs.dag.put(signedDataNoSig, {
+                const isValid = await circuit.verify((await this.self.ipfs.dag.put({
+                    data: json.data,
+                    epoch: json.epoch,
+                    net_id: json.net_id
+                }, {
                     onlyHash: true
                 })).bytes);
+
                 const electionResult = await this.electionDb.findOne({
                     epoch: json.epoch,
                     net_id: json.net_id
                 })
+                console.log('Validing election result', isValid)
 
                 //Don't require 2/3 consensus for initial startup.
                 const voteMajority = 2/3
-                if(isValid && (((pubKeys.length / members.length) < voteMajority) || json.epoch > 0)) {
+                if(isValid && (((pubKeys.length / members.length) < voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 
@@ -343,6 +358,7 @@ export class ElectionManager {
                                 members: fullContent.members,
                                 block_height: blkHeight,
                                 data: json.data,
+                                proposer: opPayload.required_auths[0],
                             }
                         }, {
                             upsert: true
@@ -387,7 +403,126 @@ export class ElectionManager {
         })
     }
     
-    async start() {
 
+    async runTestCase() {
+        const blk = 83303000
+        const drift = blk % this.epochLength;
+        const slotHeight = blk - drift
+        const electionData = await this.generateElection(blk)
+        
+        const cid = await this.self.ipfs.dag.put(electionData)
+
+        const electionHeader = {
+            data: cid.toString(),
+            epoch: electionData.epoch,
+            net_id: this.self.config.get('network.id')
+        }
+        
+        const signRaw = (await this.self.ipfs.dag.put(electionHeader)).bytes;
+        console.log('signRaw - elector', signRaw, electionHeader)
+        const circuit = new BlsCircuit({
+            hash: signRaw
+        })
+        
+        const {drain} = await this.self.p2pService.multicastChannel.call('hold_election', {
+            mode: 'stream',
+            payload: {
+                block_height: blk
+            },
+            streamTimeout: 20_000
+        })
+        
+        for await(let sigData of drain) {
+            const pub = JSON.parse(Buffer.from(sigData.payload.p, 'base64url').toString()).pub
+            const sig = sigData.payload?.s
+            const verifiedSig = await circuit.verifySig({
+                sig: sig,
+                pub: pub,
+            });
+            console.log('aggregating the signature!', verifiedSig)
+            if(verifiedSig) {
+                await circuit.add({
+                    did: pub,
+                    sig
+                })
+            }
+        }
+
+        const members = await this.getMembersOfBlock(blk)
+        const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
+        if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch < 200)) {
+            //Must be valid
+            
+            const electionResult = {
+                ...electionHeader,
+                signature: circuit.serialize(members.map(e => e.key))
+                
+            }
+            // const electionResult = {
+            //     "data": "bafyreiaaaokvwpkfvim2hafdfx2hsp2zdhih6hy2cr6sh2yuemi7zra4ou",
+            //     "epoch": 0,
+            //     "net_id": "testnet/0bf2e474-6b9e-4165-ad4e-a0d78968d20c",
+            //     "signature": {
+            //         "sig": "kiu6AMgpruGsc3xJNo53W4wj3xxgvRfsU6E6iADnodu79pOWsridipZzCtbgMzY6F6eC6qwuNLZeAcVNFeHYnmLp_gz4_RroZ8OUBNRgG5K3fMTsIZOb2ORmyq5ayE8L",
+            //         "bv": "A9l-aJw"
+            //     }
+            // }
+            
+            const verifierCircuit = BlsCircuit.deserialize(electionResult, (await this.getMembersOfBlock(slotHeight)).map(e => e.key))
+                let pubKeys = []
+                for(let pub of circuit.aggPubKeys) {
+                    pubKeys.push(pub[0])
+                }
+
+                const signedDataNoSig = electionResult;
+                delete signedDataNoSig.signature
+
+                //Aggregate pubkeys
+                verifierCircuit.setAgg(pubKeys)
+
+                console.log('aggs', pubKeys, pubKeys.length, verifierCircuit.did.id)
+
+                const isValid = await verifierCircuit.verify((await this.self.ipfs.dag.put({
+                    data: electionResult.data,
+                    epoch: electionResult.epoch,
+                    net_id: electionResult.net_id
+                }, {
+                    onlyHash: true
+                })).bytes);
+                const existingElectionResult = await this.electionDb.findOne({
+                    epoch: electionResult.epoch,
+                    net_id: electionResult.net_id
+                })
+                console.log('Validing election result', isValid)
+
+                //Don't require 2/3 consensus for initial startup.
+                const voteMajority = 2/3
+                if(isValid && (((pubKeys.length / members.length) < voteMajority) || electionResult.epoch === 0)) {
+                    //Must be valid
+                    const fullContent = (await this.self.ipfs.dag.get(CID.parse(electionResult.data))).value
+
+
+                    if(!existingElectionResult) {
+                        await this.electionDb.findOneAndUpdate({
+                            epoch: fullContent.epoch,
+                            net_id: fullContent.net_id
+                        }, {
+                            $set: {
+                                members: fullContent.members,
+                                block_height: 5,
+                                data: electionResult.data,
+                                proposer: 'test',
+                                signers: pubKeys
+                            }
+                        }, {
+                            upsert: true
+                        })
+                    }
+                }
+        }
+    }
+
+    async start() {
+        // await this.runTestCase()
     }
 }

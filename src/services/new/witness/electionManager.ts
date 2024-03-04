@@ -123,7 +123,7 @@ export class ElectionManager {
             }
         }, {
             sort: {
-                block_height: 1
+                block_height: -1
             }
         })
         return electionResult

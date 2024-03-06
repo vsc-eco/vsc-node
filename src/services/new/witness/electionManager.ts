@@ -9,6 +9,7 @@ import BitSet from "bitset";
 import { CID } from "kubo-rpc-client";
 import { HiveClient } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
+import { VersionConfig } from "./versionManager";
 
 
 interface ElectionResult {
@@ -88,6 +89,14 @@ function calcVotingWeight(drift: number) {
     return 2/3
 }
 
+interface LogEntry {
+    service: string
+    message: string
+    ts: Date
+    index_id: number
+    version_id: string
+}
+
 
 /**
  * Manages elections and upgrades 
@@ -102,8 +111,11 @@ export class ElectionManager {
     self: NewCoreService;
     electionDb: Collection<ElectionResult>
     epochLength: number;
+    mongoLogs: Collection<LogEntry>;
     constructor(self: NewCoreService) {
         this.self = self;
+
+        
 
         this.btHoldElection = this.btHoldElection.bind(this)
         this.btIndexElection = this.btIndexElection.bind(this)
@@ -111,6 +123,17 @@ export class ElectionManager {
 
         //Every 6 hours
         this.epochLength = 20 * 60 * 6
+    }
+
+    async log(message: string, opts?: any) {
+        await this.mongoLogs.insertOne({
+            service: 'electionMgr',
+            message: message,
+            ts: new Date(),
+            ...(opts || {}),
+            index_id: VersionConfig.index_reset_id,
+            version_id: VersionConfig.version_id
+        })
     }
 
     /**
@@ -363,7 +386,17 @@ export class ElectionManager {
                         }, {
                             upsert: true
                         })
+                    } else {
+                        await this.log(`Election result already exists for epoch ${json.epoch}`)
                     }
+                } else {
+                    await this.log(`Election result failed validation for epoch ${json.epoch}`, {
+                        sig: json.signature.sig,
+                        bv: json.signature.bv,
+                        isValid,
+                        totalMembers: members.length,
+                        signedMembers: pubKeys.length
+                    })
                 }
             }
         }
@@ -385,6 +418,7 @@ export class ElectionManager {
 
     async init() {
         this.electionDb = this.self.db.collection('election_result')
+        this.mongoLogs = this.self.db.collection('logs')
 
         this.self.p2pService.multicastChannel.register('hold_election', this.handlePeerMsg, {
             loopbackOk: true

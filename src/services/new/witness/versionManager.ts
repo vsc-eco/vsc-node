@@ -6,9 +6,9 @@ import { Collection } from "mongodb";
 
 
 export const VersionConfig = {
-    index_reset_id: 4,
+    index_reset_id: 5,
     //Match with package.json and tag
-    version_id: 'v0.1.0'
+    version_id: 'v0.1.1'
 }
 
 /**
@@ -27,6 +27,7 @@ export class VersionManager {
     witnessDb: Collection;
     accountAuths: Collection;
     txDb: Collection;
+    electionResults: Collection;
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -40,6 +41,7 @@ export class VersionManager {
         this.witnessDb = this.self.db.collection('witnesses')
         this.accountAuths = this.self.db.collection('account_auths')
         this.txDb = this.self.db.collection('transaction_pool')
+        this.electionResults = this.self.db.collection('election_results')
 
         this.init = this.init.bind(this)
     }
@@ -89,6 +91,7 @@ export class VersionManager {
             await this.nonceMap.deleteMany({})
             await this.blockHeaders.deleteMany({})
             await this.txDb.deleteMany({})
+            await this.electionResults.deleteMany({})
 
             await this.streamState.deleteOne({
                 id: 'last_hb_processed'

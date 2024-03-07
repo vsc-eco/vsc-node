@@ -493,6 +493,8 @@ export class ChainBridgeV2 {
                                                     local: false,
                                                     accessible: true,
                                                     first_seen: new Date(),
+                                                    anchored_height: endBlock,
+                                                    anchored_block: blockId,
                                                     src: "vsc"
                                                 })
                                             }

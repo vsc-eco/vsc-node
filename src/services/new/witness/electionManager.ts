@@ -417,7 +417,7 @@ export class ElectionManager {
     }
 
     async init() {
-        this.electionDb = this.self.db.collection('election_result')
+        this.electionDb = this.self.db.collection('election_results')
         this.mongoLogs = this.self.db.collection('logs')
 
         this.self.p2pService.multicastChannel.register('hold_election', this.handlePeerMsg, {

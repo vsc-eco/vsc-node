@@ -186,6 +186,8 @@ export interface TransactionDbRecordV2 {
     accessible: boolean
     first_seen: Date
     src: 'vsc' | 'hive'
+    anchored_block?: string
+    anchored_height?: number
     //Witness data
     sig_hash?: string
 }

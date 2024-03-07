@@ -404,9 +404,11 @@ export class ElectionManager {
 
     async handlePeerMsg(data) {
         const election = await this.generateElection(data.message.block_height)
-        if(data.message.block_height % 40 === 0) {
+        if(data.message.block_height % this.epochLength === 0 || data.message.block_height % 40 === 0) {
             const signRaw = (await this.self.ipfs.dag.put({
-                data: (await this.self.ipfs.dag.put(election)).toString(),
+                data: (await this.self.ipfs.dag.put(election, {
+                    pin: true
+                })).toString(),
                 epoch: election.epoch,
                 net_id: this.self.config.get('network.id')
             })).bytes;

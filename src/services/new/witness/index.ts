@@ -939,9 +939,12 @@ export class WitnessServiceV2 {
 
       console.log('block_header - before sign', block_header, await this.self.ipfs.dag.put(block_header))
       const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(block_header, {
-        onlyHash: true
+        pin: true
       })).bytes)
       drain.push(signData)
+      await this.self.ipfs.dag.put(block_full, {
+        pin: true
+      })
 
       if(cadBlock) {
         // delete cadBlock.block

@@ -1108,11 +1108,11 @@ export class ChainBridge {
         const diff = (blkNum - this.hiveStream.blockLag) || 0
         blkNum = this.hiveStream.blockLag
         
-        const stateHeader = await this.stateHeaders.findOne({
-          id: 'hive_head'
+        const stateHeader = await this.self.newService.chainBridge.streamState.findOne({
+          id: 'last_hb_processed'
         })
         if(stateHeader) {
-          this.self.logger.info(`blockLag blockLag=${this.self.newService.chainBridge.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.block_num}`)
+          this.self.logger.info(`blockLag blockLag=${this.self.newService.chainBridge.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val}`)
         } else {
           this.self.logger.info(`blockLag`, {
             blockLag:this.self.newService.chainBridge.blockLag,

@@ -288,7 +288,7 @@ export class ElectionManager {
         }
 
         const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch > 0)) {
+        if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
             

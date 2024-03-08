@@ -6,7 +6,7 @@ import { Collection } from "mongodb";
 
 
 export const VersionConfig = {
-    index_reset_id: 5,
+    index_reset_id: 6,
     //Match with package.json and tag
     version_id: 'v0.1.1'
 }

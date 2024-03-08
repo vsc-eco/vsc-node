@@ -546,7 +546,8 @@ export class WitnessServiceV2 {
       const circuit = new BlsCircuit({
         hash: blockHash.bytes
       })
-      const keysMap = (await this.self.electionManager.getMembersOfBlock(block_height)).map(e => e.key)
+      const membersOfBlock = (await this.self.electionManager.getMembersOfBlock(block_height))
+      const keysMap = membersOfBlock.map(e => e.key)
 
       const signedData = await this.self.consensusKey.signRaw(blockHash.bytes);
       console.log('signedData', signedData)
@@ -558,6 +559,7 @@ export class WitnessServiceV2 {
       // console.log('keysMap', keysMap.length, keys.map(e => e.account))
       // console.log('witness.sign', blockHeader)
       // console.log(keysMap)
+      
       
       let voteMajority = 0.67
       for await(let sigMsg of drain) {
@@ -587,7 +589,9 @@ export class WitnessServiceV2 {
               sig,
               did: pub,
             })
-            
+
+            const signerNode = membersOfBlock.find(e => e.key === pub)
+            console.log('signerNode', signerNode, pub)
             
             // console.log('result', pub)
             // console.log('aggregated DID', circuit.did.id)

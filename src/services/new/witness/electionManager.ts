@@ -164,9 +164,9 @@ export class ElectionManager {
             return witnesses.map(e => {
                 return {
                     account: e.account,
-                    key: e.keys.find(b => b.t === 'consensus').key
+                    key: e.keys.find(b => b.t === 'consensus')?.key
                 }
-            })
+            }).filter(e => !!e.key)
         }
     }
 
@@ -367,7 +367,7 @@ export class ElectionManager {
 
                 //Don't require 2/3 consensus for initial startup.
                 const voteMajority = 2/3
-                if(isValid && (((pubKeys.length / members.length) < voteMajority) || json.epoch === 0)) {
+                if(isValid && (((pubKeys.length / members.length) > voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 
@@ -486,7 +486,7 @@ export class ElectionManager {
 
         const members = await this.getMembersOfBlock(blk)
         const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch < 200)) {
+        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch < 200)) {
             //Must be valid
             
             const electionResult = {
@@ -533,7 +533,7 @@ export class ElectionManager {
 
                 //Don't require 2/3 consensus for initial startup.
                 const voteMajority = 2/3
-                if(isValid && (((pubKeys.length / members.length) < voteMajority) || electionResult.epoch === 0)) {
+                if(isValid && (((pubKeys.length / members.length) > voteMajority) || electionResult.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(electionResult.data))).value
 

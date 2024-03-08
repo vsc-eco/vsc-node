@@ -388,7 +388,8 @@ export class VmContainer {
           // cid: this.opts.cid,
           // contract_id: this.opts.contract_id,
           state: JSON.stringify(this.opts.state),
-          modules: JSON.stringify(this.opts.modules)
+          modules: JSON.stringify(this.opts.modules),
+          IPFS_HOST: process.env.IPFS_HOST,
         } as any,
         // silent: true,
         detached: false,

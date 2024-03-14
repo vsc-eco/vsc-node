@@ -208,6 +208,7 @@ export class ElectionManager {
                     //Node is updated!
                     return true;
                 } else {
+                    // console.log('Node is not updated', e.account, e.version_id, topDates[0].tag, topDates[1]?.tag)
                     //All other cases
                     return false;
                 }
@@ -244,6 +245,13 @@ export class ElectionManager {
     async holdElection(blk:number) {
         const electionData = await this.generateElection(blk)
         
+        console.log('electionData - holding election', electionData)
+
+        if(electionData.members.length > 8) {
+            console.log("Minimum network config not met for election. Skipping.")
+            return; 
+        }
+
         const cid = await this.self.ipfs.dag.put(electionData)
 
         const electionHeader = {
@@ -288,7 +296,7 @@ export class ElectionManager {
         }
 
         const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) < voteMajority) || electionHeader.epoch === 0)) {
+        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
             
@@ -310,8 +318,8 @@ export class ElectionManager {
         const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
         // const drift = blk % this.epochLength;
         // const slotHeight = blk - drift
-        if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
-            if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+        if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+            if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
                 this.holdElection(blk)
             }
         }
@@ -344,8 +352,9 @@ export class ElectionManager {
                 for(let pub of circuit.aggPubKeys) {
                     pubKeys.push(pub[0])
                 }
+                
 
-                const signedDataNoSig = json;
+                const signedDataNoSig = JSON.parse(opPayload.json);
                 delete signedDataNoSig.signature
 
                 //Aggregate pubkeys
@@ -390,9 +399,10 @@ export class ElectionManager {
                         await this.log(`Election result already exists for epoch ${json.epoch}`)
                     }
                 } else {
+                    console.log(json)
                     await this.log(`Election result failed validation for epoch ${json.epoch}`, {
-                        sig: json.signature.sig,
-                        bv: json.signature.bv,
+                        sig: json.signature?.sig,
+                        bv: json.signature?.bv,
                         isValid,
                         totalMembers: members.length,
                         signedMembers: pubKeys.length

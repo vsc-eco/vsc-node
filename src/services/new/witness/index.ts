@@ -15,6 +15,7 @@ import { PrivateKey } from '@hiveio/dhive';
 import { DelayMonitor } from './delayMonitor';
 import { simpleMerkleTree } from '../utils/crypto';
 import { computeKeyId, sortTransactions } from '../utils';
+import { MultisigSystem } from './multisig';
 
 const Constants = {
   block_version: 1
@@ -124,12 +125,14 @@ export class WitnessServiceV2 {
     //VSC block headres ref
     blockHeaders: Collection<BlockHeader>
     delayMonitor: DelayMonitor;
+    multisig: MultisigSystem;
 
     constructor(self: NewCoreService) {
         this.self = self;
         
 
         this.delayMonitor = new DelayMonitor(this.self, this)
+        this.multisig = new MultisigSystem(this.self, this)
 
 
         this.blockParser = this.blockParser.bind(this)
@@ -970,6 +973,7 @@ export class WitnessServiceV2 {
 
     async init() {
       this.blockHeaders = this.self.db.collection('block_headers')
+      await this.multisig.init()
 
       // this.self.chainBridge.registerTickHandle('witness.blockTick', this.blockTick, {
       //   type: 'block',

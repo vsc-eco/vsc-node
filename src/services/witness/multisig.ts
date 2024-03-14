@@ -1,7 +1,7 @@
 import { PrivateKey, Transaction } from "@hiveio/dhive";
 import moment from 'moment'
 import hive from '@hiveio/hive-js'
-import hiveTx from 'hive-tx'
+import * as HiveTx from 'hive-tx'
 import { HiveClient, HiveClient2, calcBlockInterval } from "../../utils";
 import { CoreService } from "..";
 import { WitnessService } from ".";
@@ -213,7 +213,7 @@ export class MultisigCore {
         }
         console.log(JSON.stringify(transaction, null, 2))
         
-        const hiveTxData = new hiveTx.Transaction(transaction)
+        const hiveTxData = new HiveTx.Transaction(transaction)
         
         // hive.broadcast.send(transactionTest, [this.self.config.get('identity.signing_keys.owner')], (err, result) => {
         //     console.log(err, result);
@@ -252,9 +252,9 @@ export class MultisigCore {
             })
             if(nodeInfo) {
                 if(multisigAccount.owner.key_auths.map(e => e[0]).includes(nodeInfo.signing_keys.owner)) {
-                    const pubKey = hiveTx.PublicKey.from(nodeInfo.signing_keys.owner)
+                    const pubKey = HiveTx.PublicKey.from(nodeInfo.signing_keys.owner)
         
-                    if(pubKey.verify(hiveTxData.digest().digest, hiveTx.Signature.from(payload.signature))) {
+                    if(pubKey.verify(hiveTxData.digest().digest, HiveTx.Signature.from(payload.signature))) {
                         if(multisigAccount.owner.weight_threshold <= signatures.length) {
                             break;
                         }

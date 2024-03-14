@@ -51,7 +51,7 @@
     "graphql-type-json": "^0.3.2",
     "graphql-yoga": "^3.6.0",
     "hamt-sharding": "^3.0.2",
-    "hive-tx": "^4.3.0",
+    "hive-tx": "^5.3.8",
     "ipld-dag-cbor": "^1.0.1",
     "ipld-hashmap": "^3.0.4",
     "it-pushable": "^1.4.2",

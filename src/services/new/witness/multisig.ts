@@ -1,11 +1,13 @@
-import { PrivateKey, Transaction } from "@hiveio/dhive";
+import { Operation, PrivateKey, Transaction } from "@hiveio/dhive";
 import moment from 'moment'
 import hive from '@hiveio/hive-js'
-import hiveTx from 'hive-tx'
+import * as HiveTx from 'hive-tx'
 
 import { HiveClient, HiveClient2, calcBlockInterval } from "../../../utils";
 import { NewCoreService } from "..";
 import { WitnessServiceV2 } from ".";
+import networks from "../../networks";
+import { ParserFuncArgs } from "../utils";
 
 
 
@@ -37,21 +39,57 @@ export function createSafeDivision(options: {
   }
 }
 
+const orderAlphabetically = (
+    auths: [string, number][],
+  ): [string, number][] => {
+    const names = auths.map((auth) => auth[0]).sort();
+    const sortedArr: [string, number][] = [];
+    for (let i = 0; i < names.length; i++) {
+      const index = auths.findIndex((e) => e[0] === names[i]);
+      const element: [string, number] = [
+        auths[index][0].toString(),
+        auths[index][1],
+      ];
+      sortedArr.push(element);
+    }
+    return sortedArr;
+  };
+
 export class MultisigSystem {
     multisigOptions: { 
       //Multisig interval in hrs
-      rotationInterval: string; 
+      rotationInterval: number; 
     };
     self: NewCoreService;
     witness: WitnessServiceV2;
+    epochLength: number;
     constructor(self: NewCoreService, witness: WitnessServiceV2) {
 
         this.self = self;
         this.witness = witness
         
+        this.epochLength = 20 * (6 * 60) //6 hours
+    }
 
-        this.multisigOptions = {
-            rotationInterval: '6'
+    /**
+     * Constucts a signable hive transaction with deterministic expiration ref_block_num and ref_block_prefix for a given block height.
+     * 
+     * @param operations 
+     * @param block_height 
+     * @param expiration Default of 300 seconds
+     * @returns 
+     */
+    async constructHiveTx(operations: Operation[], block_height: number, expiration: number = moment.duration(300, 'seconds').asMilliseconds()): Promise<Transaction> {
+        const bh = await HiveClient.database.getBlock(block_height)
+
+        const timestamp = moment(new Date(bh.timestamp + 'Z'))
+
+        return {
+            ref_block_num: parseInt(bh.block_id.slice(0, 8), 16) & 0xffff,
+            ref_block_prefix: Buffer.from(bh.block_id, 'hex').readUInt32LE(4),
+            expiration: timestamp.add(expiration, 'millisecond').toISOString().slice(0, -5),
+            operations: operations,
+            extensions: []
         }
     }
 
@@ -87,155 +125,217 @@ export class MultisigSystem {
 
     
     async runKeyRotation(block_height: number) {
-        const consensusRound = await this.self.witness.calculateConsensusRound(block_height)
-        const candidateNodes = await this.self.chainBridge.getWitnessesAtBlock(block_height)
+        // const consensusRound = await this.self.witness.calculateConsensusRound(block_height)
+
+        const electionResult = await this.self.electionManager.getValidElectionOfblock(block_height)
+        const members = electionResult.members
+
+
+        const candidateNodes = []
+        for(let member of members) { 
+            const witness = await this.self.chainBridge.witnessDb.findOne({
+                account: member.account
+            })
+            if(witness) {
+                candidateNodes.push(witness)
+            }
+        }
 
         const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
-        const activeKeys = candidateNodes.map(e => e.signing_keys.active)
-        const postingKeys = candidateNodes.map(e => e.signing_keys.posting)
-        
-
-        // console.log({
-        //     ownerKeys,
-        //     postingKeys,
-        //     activeKeys
-        // })
         
         const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
-        // console.log(multisigConf)
 
-        const bh = await HiveClient.blockchain.getCurrentBlock();
-        const [multisigAccount] = await HiveClient.database.getAccounts([process.env.MULTISIG_ACCOUNT])
+        const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
        
-        const orderAlphabetically = (
-            auths: [string, number][],
-          ): [string, number][] => {
-            const names = auths.map((auth) => auth[0]).sort();
-            const sortedArr: [string, number][] = [];
-            for (let i = 0; i < names.length; i++) {
-              const index = auths.findIndex((e) => e[0] === names[i]);
-              const element: [string, number] = [
-                auths[index][0].toString(),
-                auths[index][1],
-              ];
-              sortedArr.push(element);
-            }
-            return sortedArr;
-          };
-        const transaction: Transaction = {
-            ref_block_num: parseInt(bh.block_id.slice(0, 8), 16) & 0xffff,
-            ref_block_prefix: Buffer.from(bh.block_id, 'hex').readUInt32LE(4),
-            expiration: moment().add('60', 'seconds').toDate().toISOString().slice(0, -5),
-            operations: [
-                ['account_update', {
-                    account: process.env.MULTISIG_ACCOUNT,
-                    owner: {
-                        account_auths: [['vaultec', multisigConf.threshold]],
-                        key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
-                        // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
-                        //     return [(e as any).signing_keys.owner,1]
-                        // })],
-                        
-                        weight_threshold: multisigConf.threshold
-                    },
-                    active: {
-                        account_auths: multisigAccount.owner.account_auths,
-                        key_auths: orderAlphabetically(activeKeys.map(e => [e, 1])),
-                        // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
-                        //     return [(e as any).signing_keys.owner,1]
-                        // })],
-                        
-                        weight_threshold: multisigConf.threshold
-                    },
-                    posting: {
-                        account_auths: multisigAccount.owner.account_auths,
-                        key_auths: orderAlphabetically(postingKeys.map(e => [e, 1])),
-                        // key_auths: [...multisigAccount.owner.key_auths, ...(await candidateNodes).map(e => {
-                        //     return [(e as any).signing_keys.owner,1]
-                        // })],
-                        
-                        weight_threshold: multisigConf.threshold
-                    },
-                    memo_key: multisigAccount.memo_key,
-                    json_metadata: '{"message": "This is a VSC multisig account ROTATION 2"}'
-                }]
-            ],
-            extensions: []
+        
+        const transaction: Transaction = await this.constructHiveTx([
+            ['account_update', {
+                account: networks[this.self.config.get('network.id')].multisigAccount,
+                owner: {
+                    //Backup account for now. It will be removed in future versions
+                    account_auths: [['vsc.network', multisigConf.threshold]],
+                    key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
+                    
+                    weight_threshold: multisigConf.threshold
+                },
+                active: {
+                    account_auths: [],
+                    key_auths: [],
+                    
+                    weight_threshold: multisigConf.threshold
+                },
+                posting: {
+                    account_auths: [['vsc.network', multisigConf.threshold]],
+                    key_auths: [],
+                    
+                    weight_threshold: multisigConf.threshold
+                },
+                memo_key: multisigAccount.memo_key,
+                json_metadata: JSON.stringify({
+                    message: "VSC Multsig Account",
+                    epoch: electionResult.epoch
+                })
+            }]
+        ], block_height)
+
+        
+        console.log(JSON.stringify(transaction, null, 2), ownerKeys, ownerKeys.length)
+        if(transaction.operations[0][1].owner.key_auths.length < 3) { 
+            return
         }
-        console.log(JSON.stringify(transaction, null, 2))
-        
-        const hiveTxData = new hiveTx.Transaction(transaction)
-        
-        // hive.broadcast.send(transactionTest, [this.self.config.get('identity.signing_keys.owner')], (err, result) => {
-        //     console.log(err, result);
-        //   })
-        // console.log(JSON.stringify(transaction, null, 2))
-        // const signedTestTx = await hive.broadcast._prepareTransaction({
-        //     operations: transaction.operations,
-        //     extensions: transaction.extensions
-        // })
-        // console.log(signedTestTx)
+        const hiveTxData = new HiveTx.Transaction(transaction)
+
+        let signingKey;
+        let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();
+        console.log(pubKey)
+        if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === pubKey)){ 
+            signingKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner'))
+        } else if(process.env.MULTISIG_STARTUP_OWNER) {
+            signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+        } else {
+            console.log('Error: No signing key found - Not in signing list')
+            return;
+        }
+
         const what = hive.auth.signTransaction({
             ...transaction
-        }, [this.self.config.get('identity.signing_keys.owner')]);
-        console.log(what)
+        }, [signingKey.toString()]);
+        
         // console.log(what)
         // // const signedTx = await HiveClient.broadcast.sign(transaction, PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')))
         // // console.log(JSON.stringify(signedTx, null, 2))
 
         const {drain} = await this.self.p2pService.multicastChannel.call('multisig.request_rotate', {
             payload: {
-                transaction,
-                authority_type: 'owner'
+                block_height,
             },
             mode: 'stream',
             streamTimeout: 12000,
             responseOrigin: 'many'
         })
+        const key_auths = multisigAccount.owner.key_auths.map(e => e[0])
 
 
         let signatures = [...what.signatures]
-        for await(let data of drain) {
-          const {payload} = data
-          console.log('sigData',signatures.length, payload, data)
-          const nodeInfo = await this.self.chainBridge.witnessDb.findOne({
-              peer_id: data.from.toString()
-          })
-          if(nodeInfo) {
-              if(multisigAccount.owner.key_auths.map(e => e[0]).includes(nodeInfo.signing_keys.owner)) {
-                  const pubKey = hiveTx.PublicKey.from(nodeInfo.signing_keys.owner)
-      
-                  if(pubKey.verify(hiveTxData.digest().digest, hiveTx.Signature.from(payload.signature))) {
-                      if(multisigAccount.owner.weight_threshold <= signatures.length) {
-                          break;
-                      }
-                      signatures.push(payload.signature)
-                  }
-              }
-          }
+        for await (let data of drain) {
+            const { payload } = data
+            const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(new HiveTx.Transaction(transaction).digest().digest).toString()
+            if (key_auths.includes(derivedPublicKey)) {
+                signatures.push(payload.signature)
+                if (multisigAccount.owner.weight_threshold <= signatures.length) {
+                    break
+                }
+            }
         }
         
 
         what.signatures = signatures
-        
-        // // console.log('signature end', signatures, PrivateKey.from(this.self.config.get('identity.signing_keys.owner')).createPublic().toString())
-        // // signedTx.signatures.push(...signatures)
-        // // console.log(signedTx.signatures)
-        console.log('fully signed', what)
-        try {
-            const txConfirm = await HiveClient2.broadcast.send(what)
-            console.log(txConfirm)
-        } catch (ex) {
-            console.log(ex)
+        if(signatures.length >= multisigAccount.owner.weight_threshold) { 
+            console.log('fully signed', what)
+            try {
+                const txConfirm = await HiveClient2.broadcast.send(what)
+                console.log(txConfirm)
+            } catch (ex) {
+                console.log(ex)
+            }
+        } else {
+            console.log('not fully signed')
         }
-        // hive.api.broadcastTransactionSynchronous(signedTx, function(err, result) {
-        //     console.log(err, result);
-        //   });
-          
     }
     
     async init() {
+        this.self.p2pService.multicastChannel.register('multisig.request_rotate', async (data) => {
+            const {message, drain} = data
+            const block_height = message.block_height
+            console.log('multisig.request_rotate - block_height', block_height)
+
+            const electionResult = await this.self.electionManager.getValidElectionOfblock(block_height)
+            const members = electionResult.members
+
+            
+            const candidateNodes = []
+            for(let member of members) { 
+                const witness = await this.self.chainBridge.witnessDb.findOne({
+                    account: member.account
+                })
+                if(witness) {
+                    candidateNodes.push(witness)
+                }
+            }
+
+            const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
+
+            const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
+
+            const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
         
+            
+            const transaction: Transaction = await this.constructHiveTx([
+                ['account_update', {
+                    account: networks[this.self.config.get('network.id')].multisigAccount,
+                    owner: {
+                        //Backup account for now. It will be removed in future versions
+                        account_auths: [['vsc.network', multisigConf.threshold]],
+                        key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
+                        
+                        weight_threshold: multisigConf.threshold
+                    },
+                    active: {
+                        account_auths: [],
+                        key_auths: [],
+                        
+                        weight_threshold: multisigConf.threshold
+                    },
+                    posting: {
+                        account_auths: [['vsc.network', multisigConf.threshold]],
+                        key_auths: [],
+                        
+                        weight_threshold: multisigConf.threshold
+                    },
+                    memo_key: multisigAccount.memo_key,
+                    json_metadata: JSON.stringify({
+                        message: "VSC Multsig Account",
+                        epoch: electionResult.epoch
+                    })
+                }]
+            ], block_height)
+
+                
+            let signingKey;
+            let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();
+            console.log(pubKey)
+            if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === pubKey)){ 
+                signingKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner'))
+            } else if(process.env.MULTISIG_STARTUP_OWNER) {
+                signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+            } else {
+                console.log('Error: No signing key found - Not in signing list')
+                return;
+            }
+
+
+            const signedTx = hive.auth.signTransaction({
+                ...transaction
+            }, [signingKey.toString()]);
+            
+            drain.push({
+                signature: signedTx.signatures[0]
+            })
+        }, {
+            loopbackOk: true
+        })
+        await this.self.chainBridge.streamParser.addParser({
+            type: "block",
+            priority: "after",
+            func: async (data: ParserFuncArgs) => { 
+                const block = data.data
+                const block_height = block.key
+
+                if(block_height % this.epochLength === 0) {
+                    await this.runKeyRotation(block_height)
+                }
+            }
+        })
     }
 
     async start() {

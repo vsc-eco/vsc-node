@@ -31,7 +31,11 @@ const CONFIG = {
     WP_PUB: '034240ccd025374e0531945a65661aedaac5fff1b2ae46197623e594e0129e8b13',
     DECIMAL_PLACES: "100000000",
     ACCEPTABLE_FEE: 1, //1% to cover exchange costs % 
-    MAX_GAS_FEE: 16_000 //Maximum allowed gas fee for redeem transactions
+    MAX_GAS_FEE: 16_000, //Maximum allowed gas fee for redeem transactions
+    //Minimum height a transaction should be created at. 
+    //Prevents possible attacks of replaying previous TXs prior to contract being deployed. 
+    //Deploy contract on or before block height
+    REPLAY_HEIGHT: 818769
 }
 
 interface Transfer {
@@ -131,7 +135,7 @@ function verifyLock(controller, params?:{hashLockImage?: string}): boolean {
 }
 
 function compileScript(pubKey: string, addrKey: string) {
-    return Buffer.from(`21${pubKey}ad20${addrKey}`)
+    return Buffer.from(`21${pubKey}ad20${addrKey}`, 'hex')
 }
 
 actions.applyHtlc = async (tx: HtlcTransfer) => {
@@ -353,7 +357,7 @@ actions.redeem = async (tx: Transfer) => {
         address: tx.dest,
 
         balance: totalRefBal,
-        rblance: 0,
+        rbalance: 0,
         asset_type: "TOKEN:WBTC",
 
         inputs: tx.inputs,
@@ -380,6 +384,11 @@ actions.redeemProof = async (args) => {
 
     const {proof} = args
     const tx_id = utils.bitcoin.reverseBytes(proof.tx_id)
+
+    //See above notes.
+    if(proof.confirming_height < CONFIG.REPLAY_HEIGHT) {
+        return
+    }
 
     const bundleHeaders = await relayState.pull(`headers/${calcKey(proof.confirming_height)}`) || {}
 
@@ -417,7 +426,7 @@ actions.redeemProof = async (args) => {
                 const btcOutput1 = utils.bitcoin.BTCUtils.extractOutputAtIndex(utils.bitcoin.SPVUtils.deserializeHex((proof as any).vout),txIndex+1)
                 const outHash = utils.bitcoin.BTCUtils.extractHash(btcOutput0)
                 const val = utils.bitcoin.BTCUtils.extractValue(btcOutput0)
-                const opReturnData = utils.bitcoin.BTCUtils.extractOpReturnData(btcOutput1)
+                const opReturnData = utils.bitcoin.BTCUtils.extractOpReturn(btcOutput1)
             
                 var a = new BigDecimal(val.toString());
                 var b = new BigDecimal(CONFIG.DECIMAL_PLACES);
@@ -426,18 +435,18 @@ actions.redeemProof = async (args) => {
         
                 console.log(redeemedAmount)
         
-                const hex = utils.bitcoin.ser.serializeHex(opReturnData)
+                const hex = utils.bitcoin.SPVUtils.serializeHex(opReturnData)
                 log('out hex', hex)
-                const redeem = await state.pull(`redeems/${hex}`) as any
+                const redeem = await state.pull(`redeems/${hex.slice(2)}`) as any
                 if(redeem) {
                     const hashBreak = utils.base58.decode(redeem.address)
                     if(redeem.status === "pending" && utils.base58.encode(outHash) === utils.base58.encode(hashBreak.slice(1))) {
                         redeem.status = 'complete'
                         redeem.tx_id = tx_id
                         redeem.out_index = txIndex
-                        redeem.rbalance = redeem.rbalance + redeemedAmount
+                        redeem.rbalance = (redeem.rbalance || 0) + redeemedAmount
         
-                        await state.update(`redeems/${hex}`, redeem)
+                        await state.update(`redeems/${hex.slice(2)}`, redeem)
                     }
                 }
             } catch (ex) {
@@ -463,6 +472,11 @@ actions.mint = async (args: {
 
     const {proof} = args
     const tx_id = utils.bitcoin.reverseBytes(proof.tx_id)
+
+    //See above notes.
+    if(proof.confirming_height < CONFIG.REPLAY_HEIGHT) {
+        return
+    }
 
     const bundleHeaders = await relayState.pull(`headers/${calcKey(proof.confirming_height)}`) || {}
 

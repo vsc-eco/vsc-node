@@ -9,6 +9,7 @@ import { CID } from "kubo-rpc-client";
 import { verifyTx } from "./utils";
 import { convertTxJws } from "@vsc.eco/client/dist/utils";
 import DAGCbor from 'ipld-dag-cbor'
+import NodeSchedule from 'node-schedule'
 
 interface TxAnnounceMsg {
     //ref_tx = only CID of TX useful for TXs under 2kb
@@ -354,6 +355,29 @@ export class TransactionPoolV2 {
         })
         this.self.p2pService.memoryPoolChannel.register('announce_tx', this.onTxAnnounce, {
             loopbackOk: true
+        })
+        NodeSchedule.scheduleJob('*/5 * * * *', async () => { 
+            const unconfirmedTxs = await this.txDb.find({
+                status: TransactionDbStatus.unconfirmed
+            }).toArray()
+    
+            for(let tx of unconfirmedTxs) {
+                console.log('rebroadcasting tx', tx.id, {
+                    type: 'direct_tx',
+                    data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.id))).toString('base64url'),
+                    //Fill in
+                    sig_data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.sig_hash))).toString('base64url')
+                })
+                await this.self.p2pService.memoryPoolChannel.call('announce_tx', {
+                    payload: {
+                        type: 'direct_tx',
+                        data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.id))).toString('base64url'),
+                        //Fill in
+                        sig_data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.sig_hash))).toString('base64url')
+                    },
+                    mode: 'basic'
+                })
+            }
         })
     }
 

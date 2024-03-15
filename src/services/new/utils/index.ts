@@ -120,9 +120,6 @@ export function convertTxJws(args: {
         ]
     }
 
-    
-
-
     let jwsDag = {
         jws: {
             signatures: [

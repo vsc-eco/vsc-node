@@ -247,7 +247,7 @@ export class ElectionManager {
         
         console.log('electionData - holding election', electionData)
 
-        if(electionData.members.length > 8) {
+        if(electionData.members.length < 8) {
             console.log("Minimum network config not met for election. Skipping.")
             return; 
         }
@@ -314,11 +314,11 @@ export class ElectionManager {
 
     async btHoldElection({data:block}) {
         const blk = block.key
-        const witnessSchedule = await this.self.witness.roundCheck(blk)
-        const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
         // const drift = blk % this.epochLength;
         // const slotHeight = blk - drift
         if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+            const witnessSchedule = await this.self.witness.getBlockSchedule(blk)
+            const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
             if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
                 this.holdElection(blk)
             }

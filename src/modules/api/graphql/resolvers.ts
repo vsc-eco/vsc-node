@@ -317,15 +317,31 @@ export const Resolvers = {
     //TODO: Create separate API to include indicate whether a node is in the schedule or not.
     return await appContainer.self.newService.chainBridge.getWitnessesAtBlock(args.height)
   },
+  activeWitnessNodes: async (_, args) => {
+    if(!args.height) { 
+      args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
+    }
+    return await appContainer.self.newService.electionManager.getMembersOfBlock(args.height)
+  },
+  witnessSchedule: async (_, args) => {
+    if(!args.height) { 
+      args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
+    }
+    return await appContainer.self.newService.witness.getBlockSchedule(args.height)
+  },
   nextWitnessSlot: async (_, args) => {
-    let node_id
-    if(args.local) {
-      node_id = appContainer.self.identity.id;
-    } 
+    let account
+    if(args.self) {
+      account = process.env.HIVE_ACCOUNT
+    }
 
-    const nextSlot = appContainer.self.witness.witnessSchedule.find(e => {
-      if(node_id) {
-        return e.in_past === false && e.did === node_id;
+    if(!args.height) { 
+      args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
+    }
+
+    const nextSlot = (await appContainer.self.newService.witness.getBlockSchedule(args.height)).find(e => {
+      if(account) {
+        return e.in_past === false && e.account === account;
       } else {
         return e.in_past === false;
       }

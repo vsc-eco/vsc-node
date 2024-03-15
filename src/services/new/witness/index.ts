@@ -116,7 +116,8 @@ export class BlockContainer {
 export class WitnessServiceV2 {
     self: NewCoreService;
     witnessSchedule: {
-        valid_height?: Number | null
+        valid_height?: number | null
+        valid_epoch?: number | null
         schedule?: Array<any>
     }
     //Precomputed list of blocks
@@ -139,7 +140,8 @@ export class WitnessServiceV2 {
         this.handleProposeBlockMsg = this.handleProposeBlockMsg.bind(this)
 
         this.witnessSchedule = {
-          valid_height: null
+          valid_height: null,
+          valid_epoch: null
         }
         this._candidateBlocks = {
 
@@ -155,6 +157,7 @@ export class WitnessServiceV2 {
         })
         const consensusRound = await this.calculateConsensusRound(blockHeight)
         let witnessNodes = await this.self.electionManager.getMembersOfBlock(blockHeight)
+        let electionResult = await this.self.electionManager.getValidElectionOfblock(blockHeight)
        
 
 
@@ -171,7 +174,8 @@ export class WitnessServiceV2 {
         return {
             schedule: outSchedule,
             valid_from: outSchedule[0]?.bn || 0,
-            valid_to: outSchedule[outSchedule.length - 1]?.bn || 1
+            valid_to: outSchedule[outSchedule.length - 1]?.bn || 1,
+            valid_epoch: electionResult ? electionResult.epoch : null
         }
       }
     
@@ -183,18 +187,19 @@ export class WitnessServiceV2 {
     
         const modLength = roundLength * totalRounds
         const mod3 = blockNumber % modLength
-        const pastRoundHash = blockNumber - mod3
+        const pastRoundHeight = blockNumber - mod3
 
         //Return block id of previous block to round start.
         //This is used for schedule randomization
         const blockHeader = await this.self.chainBridge.events.findOne({
-          key: pastRoundHash - 1
+          key: pastRoundHeight - 1
         })
         
     
+        
         return {
-          nextRoundHash: blockNumber + (modLength - mod3),
-          pastRoundHash,
+          nextRoundHeight: blockNumber + (modLength - mod3),
+          pastRoundHeight,
           currentBlockNumber: blockNumber,
           randomizeHash: blockHeader ? blockHeader.block_id : null
         }
@@ -210,9 +215,9 @@ export class WitnessServiceV2 {
         return schedule.map((e, index) => {
           return {
             ...e,
-            bn: consensusRound.pastRoundHash + index * roundLength,
-            bn_works: (consensusRound.pastRoundHash + index * roundLength) % roundLength === 0,
-            in_past: consensusRound.pastRoundHash + index * roundLength < consensusRound.currentBlockNumber,
+            bn: consensusRound.pastRoundHeight + index * roundLength,
+            bn_works: (consensusRound.pastRoundHeight + index * roundLength) % roundLength === 0,
+            in_past: consensusRound.pastRoundHeight + index * roundLength < consensusRound.currentBlockNumber,
           }
         })
       }
@@ -222,8 +227,8 @@ export class WitnessServiceV2 {
       const roundLength = networks[this.self.config.get('network.id')].roundLength;
   
       return {
-        slot_start: consensusRound.pastRoundHash + blockHeight % roundLength,
-        slot_end: (consensusRound.pastRoundHash + blockHeight % roundLength) + roundLength,
+        slot_start: consensusRound.pastRoundHeight + blockHeight % roundLength,
+        slot_end: (consensusRound.pastRoundHeight + blockHeight % roundLength) + roundLength,
       }
     }
 
@@ -635,8 +640,9 @@ export class WitnessServiceV2 {
       // console.log('circuit aggregate', circuit.aggPubKeys)
       //Did it pass minimum?   
       console.log(circuit.aggPubKeys.size, keysMap.length, keysMap.length * voteMajority)
-      if(circuit.aggPubKeys.size / keysMap.length > voteMajority){
-        if(process.env.BLOCK_BROADCAST_ENABLED === "yes") {
+      if(circuit.aggPubKeys.size / keysMap.length > voteMajority) {
+        //Disable block broadcast if required by local configuration
+        if(process.env.BLOCK_BROADCAST_DISABLED !== "yes") {
 
           console.log('Broadcasting block live!')
           await this.self.ipfs.dag.put(blockContainer.toObject())
@@ -662,70 +668,46 @@ export class WitnessServiceV2 {
 
     async blockParser({data:block}) {
         const block_height = block.key;
-        const schedule = await this.roundCheck(block_height) || []
 
-        const scheduleSlot = schedule.find(e => e.bn === block_height)
-        // console.log(this.self.chainBridge.parseLag, schedule, this.self.chainBridge.parseLag < 5)
-
-
-        // await HiveClient.broadcast.json({
-        //   id: 'vsc.propose_block.ignoretest', 
-        //   required_auths: [process.env.HIVE_ACCOUNT],
-        //   required_posting_auths: [],
-        //   json: JSON.stringify({
-        //     net_id: this.self.config.get('network.id'),
-        //     signed_block: {
-        //       "__t": "vsc-bh",
-        //       "__v": "0.1",
-        //       "headers": {
-        //           "prevb": null,
-        //           "br": [
-        //               81614028,
-        //               82204790
-        //           ]
-        //       },
-        //       "merkle_root": null,
-        //       "block": "bafyreibjdz7araqovreovmofe3rdfi3liviijow5hapb3eyu234fh4zpby",
-        //       "signature": {
-        //           "sig": "h1jNPb_JsLFJrtjeEIdWpDq98RffkYfT36iVgQL5myTatIiP0Thtw7EFQBtT_1TiFGlPdOxpNE9lZDQoKBySWmdHaRAx5VNBD3kRyk406ThE8snyKYwiVgjYmcFbS0HA",
-        //           "bv": "AQ"
-        //       }
-        //   }
-        //   })
-        // }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
-
-        if(!!scheduleSlot &&  this.self.chainBridge.parseLag < 5) {
-          // const lastHeader = await this.blockHeaders.findOne({
-        
-          // }, {
-          //   sort: {
-          //     hive_ref_block: -1
-          //   }
-          // })
-          
+        //Do parseLag before all other checks to prevent using unnecessary CPU when fetching blockSchedule.
+        if(this.self.chainBridge.parseLag < 5) {
+          const schedule = await this.getBlockSchedule(block_height) || []
     
-          //If no other header is available. Use genesis day as range
-          // const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
+          const scheduleSlot = schedule.find(e => e.bn === block_height)
     
-          if(scheduleSlot.account === process.env.HIVE_ACCOUNT) {
-            await this.proposeBlock(block_height)
+          if(!!scheduleSlot) {
+      
+            //If no other header is available. Use genesis day as range
+            // const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
+      
+            if(scheduleSlot.account === process.env.HIVE_ACCOUNT) {
+              await this.proposeBlock(block_height)
+            }
           }
         }
-    }
+      }
 
-    async roundCheck(blockHeight) {
+    /**
+     * Get block producer schedule
+     * @param blockHeight 
+     * @returns 
+     */
+    async getBlockSchedule(blockHeight) {
       const consensusRound = await this.calculateConsensusRound(blockHeight)
-        if(this.witnessSchedule.valid_height === consensusRound.pastRoundHash) {
-          // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
-          return this.witnessSchedule.schedule;
-        }
-        const {schedule, valid_to, valid_from} = await this.weightedSchedule(networks[this.self.config.get('network.id')].totalRounds, blockHeight)
+      const electionResult = await this.self.electionManager.getValidElectionOfblock(blockHeight)
+      console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
+      if(this.witnessSchedule.valid_height === consensusRound.pastRoundHeight && electionResult.epoch === this.witnessSchedule.valid_epoch) {
+        // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
+        return this.witnessSchedule.schedule;
+      }
+      const {schedule, valid_to, valid_from, valid_epoch} = await this.weightedSchedule(networks[this.self.config.get('network.id')].totalRounds, blockHeight)
 
-        this.witnessSchedule.schedule = schedule
-        this.witnessSchedule.valid_height = consensusRound.pastRoundHash
-        
+      this.witnessSchedule.schedule = schedule
+      this.witnessSchedule.valid_height = consensusRound.pastRoundHeight
+      this.witnessSchedule.valid_epoch = valid_epoch
+      
 
-        return schedule
+      return schedule
     }
 
     async handleProposeBlockMsg(pubReq) {
@@ -762,7 +744,7 @@ export class WitnessServiceV2 {
       //Verify witness is in runner
 
       const block_height = this.self.chainBridge.streamParser.stream.lastBlock
-      const schedule = await this.roundCheck(block_height)
+      const schedule = await this.getBlockSchedule(block_height)
 
       const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
       

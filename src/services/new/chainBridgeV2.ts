@@ -311,7 +311,7 @@ export class ChainBridgeV2 {
                                 // }).filter(e => !!e).map(e => e.key)
                                 const witnessSet = (await this.self.electionManager.getMembersOfBlock(blockHeight)).map(e => e.key)
                                 // console.log('Asking for schedule at slot', blockHeight)
-                                const witnessSchedule = await this.self.witness.roundCheck(blockHeight)
+                                const witnessSchedule = await this.self.witness.getBlockSchedule(blockHeight)
     
                                 
                                 const slotHeight = (blockHeight - (blockHeight % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
@@ -544,6 +544,15 @@ export class ChainBridgeV2 {
 
     }
 
+    async getLatestBlock(): Promise<number> { 
+        const block = await this.events.findOne({}, {
+            sort: {
+                key: -1
+            }
+        })
+        return Number(block.key)
+    }
+
     async getWitnessesAtBlock(blk: number) {
         //This is not safe as it can vary with historical records
         const witnesses = await this.witnessDb.find({
@@ -561,22 +570,6 @@ export class ChainBridgeV2 {
                         $lte: blk
                     },
                     
-                }
-                sort = {
-                    valid_from: -1
-                }
-            } else {
-                query = {
-                    type: "witness.toggle",
-                    account: e.account,
-    
-                    $or: [{
-                        valid_to: {
-                            $exists: false
-                        }
-                    }, {
-                        valid_to: null
-                    }]
                 }
                 sort = {
                     valid_from: -1
@@ -599,7 +592,7 @@ export class ChainBridgeV2 {
                 const keys = await this.accountAuths.findOne({
                     account: data.account,
                     valid_from: {
-                        $lte: blk
+                        $lt: blk
                     },
                 //     $or: [
                 //         {

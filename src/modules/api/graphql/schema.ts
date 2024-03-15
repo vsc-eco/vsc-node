@@ -150,6 +150,8 @@ export const schema = `
 
         localNodeInfo: LocalNodeInfo
         witnessNodes(height: Int!): [WitnessNode]
-        nextWitnessSlot(local: Boolean): JSON
+        activeWitnessNodes: JSON
+        witnessSchedule(height: Int): JSON
+        nextWitnessSlot(self: Boolean): JSON
     }
 `

@@ -233,7 +233,7 @@ export class MultisigSystem {
         if(signatures.length >= multisigAccount.owner.weight_threshold) { 
             console.log('fully signed', what)
             try {
-                const txConfirm = await HiveClient2.broadcast.send(what)
+                const txConfirm = await HiveClient.broadcast.send(what)
                 console.log(txConfirm)
             } catch (ex) {
                 console.log(ex)
@@ -331,8 +331,14 @@ export class MultisigSystem {
                 const block = data.data
                 const block_height = block.key
 
-                if(block_height % this.epochLength === 0) {
-                    await this.runKeyRotation(block_height)
+                if(block_height % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+                    const slotInfo = await this.self.witness.calculateConsensusRound(block_height)
+                    const schedule = await this.self.witness.getBlockSchedule(block_height)
+                    const slot = schedule.find(e => e.bn >= block_height)
+                    
+                    if(slot.account === process.env.HIVE_ACCOUNT) {
+                        await this.runKeyRotation(block_height)
+                    }
                 }
             }
         })

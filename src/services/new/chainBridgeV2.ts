@@ -104,7 +104,7 @@ export class ChainBridgeV2 {
                     }
                 }
             } else if(op === 'transfer') {
-                if(opPayload.to === multisigAccount || opPayload.from === multisigAccount) {
+                if(opPayload.to === multisigAccount || opPayload.from === multisigAccount || opPayload.to.includes('vsc.') || opPayload.from.includes('vsc.')) {
                     return {
                         pass: true
                     }

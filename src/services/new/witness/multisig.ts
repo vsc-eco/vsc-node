@@ -68,7 +68,7 @@ export class MultisigSystem {
         this.self = self;
         this.witness = witness
         
-        this.epochLength = 20 * (6 * 60) //6 hours
+        this.epochLength = 20 * (1 * 60) //1 hours
     }
 
     /**
@@ -79,7 +79,7 @@ export class MultisigSystem {
      * @param expiration Default of 300 seconds
      * @returns 
      */
-    async constructHiveTx(operations: Operation[], block_height: number, expiration: number = moment.duration(300, 'seconds').asMilliseconds()): Promise<Transaction> {
+    async constructHiveTx(operations: Operation[], block_height: number, expiration: number = moment.duration(30, 'minutes').asMilliseconds()): Promise<Transaction> {
         const bh = await HiveClient.database.getBlock(block_height)
 
         const timestamp = moment(new Date(bh.timestamp + 'Z'))

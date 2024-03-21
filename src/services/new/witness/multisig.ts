@@ -221,7 +221,9 @@ export class MultisigSystem {
             const { payload } = data
             const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(new HiveTx.Transaction(transaction).digest().digest).toString()
             if (key_auths.includes(derivedPublicKey)) {
-                signatures.push(payload.signature)
+                if(!signatures.includes(payload.signature)) {
+                    signatures.push(payload.signature)
+                }
                 if (multisigAccount.owner.weight_threshold <= signatures.length) {
                     break
                 }
@@ -337,6 +339,8 @@ export class MultisigSystem {
                     const slot = schedule.find(e => e.bn >= block_height)
                     
                     if(slot.account === process.env.HIVE_ACCOUNT) {
+                        const limit = block_height % this.epochLength;
+        
                         await this.runKeyRotation(block_height)
                     }
                 }

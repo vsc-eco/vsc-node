@@ -299,45 +299,56 @@ export class TransactionPoolV2 {
      * @returns 
      */
     protected async blockParser(args) {
-        const {tx, blkHeight} = args.data
-        // console.log('picked up TX', tx, fullTx)
-        if(tx.id === 'vsc.announce_tx' || tx.id === 'vsc.tx') {
-            const json = JSON.parse(tx.json)
+        try {
 
-            if(json.net_id !== this.self.config.get('network.id')) {
-                return;
-            }
+             
+            const {tx, blkHeight} = args.data
 
-            const required_auths = []
-            required_auths.push(...tx.required_posting_auths.map(e => {
-                return `${e}?type=posting`
-            }))
-            required_auths.push(...tx.required_auths.map(e => {
-                return `${e}?type=active`
-            }))
-            const txData = {
-                status: TransactionDbStatus.included,
-                id: tx.transaction_id,
-                required_auths,
-                anchored_height: blkHeight,
-                anchored_index: tx.index,
-                headers: {
-                    // lock_block: fullTx.block_height + 120,
-                    contract_id: json.data.contract_id
-                },
-                data: {
-                    op: json.data.op,
-                    payload: json.data.payload,
-                    action: json.data.action,
-                },
-                result: null,
-                local: false,
-                first_seen: new Date(),
-                accessible: true,
-                src: "hive" as any,
+            for(let [op, opBody] of tx.operations) {
+                console.log('parsing', [op, opBody])
+                if(op === 'custom_json') {
+                    // console.log('picked up TX', tx, fullTx)
+                    if(opBody.id === 'vsc.announce_tx' || opBody.id === 'vsc.tx') {
+                        const json = JSON.parse(opBody.json)
+            
+                        if(json.net_id !== this.self.config.get('network.id')) {
+                            return;
+                        }
+            
+                        const required_auths = []
+                        required_auths.push(...opBody.required_posting_auths.map(e => {
+                            return `${e}?type=posting`
+                        }))
+                        required_auths.push(...opBody.required_auths.map(e => {
+                            return `${e}?type=active`
+                        }))
+                        const txData = {
+                            status: TransactionDbStatus.included,
+                            id: tx.transaction_id,
+                            required_auths,
+                            anchored_height: blkHeight,
+                            anchored_index: tx.index,
+                            headers: {
+                                // lock_block: fullTx.block_height + 120,
+                            },
+                            data: {
+                                contract_id: json.tx.contract_id,
+                                op: json.tx.op,
+                                payload: json.tx.payload,
+                                action: json.tx.action,
+                            },
+                            result: null,
+                            local: false,
+                            first_seen: new Date(),
+                            accessible: true,
+                            src: "hive" as any,
+                        }
+                        await this.txDb.insertOne(txData)
+                    }
+                }
             }
-            console.log('txData', txData)
-            await this.txDb.insertOne(txData)
+        } catch (ex) {
+            console.log(ex)
         }
     }
     

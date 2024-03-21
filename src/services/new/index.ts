@@ -19,10 +19,7 @@ import { ContractEngineV2 } from './contractEngineV2';
 import { VersionManager } from './witness/versionManager';
 import { ElectionManager } from './witness/electionManager';
 
-const CONSTANTS = {
-    //Reset block records 
-    tb_reset_key: '1'
-}
+
 export class NewCoreService {
     config: Config;
     consensusKey: BlsDID;

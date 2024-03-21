@@ -16,6 +16,7 @@ import { DelayMonitor } from './delayMonitor';
 import { simpleMerkleTree } from '../utils/crypto';
 import { computeKeyId, sortTransactions } from '../utils';
 import { MultisigSystem } from './multisig';
+import { BalanceKeeper } from './balanceKeeper';
 
 const Constants = {
   block_version: 1
@@ -127,6 +128,7 @@ export class WitnessServiceV2 {
     blockHeaders: Collection<BlockHeader>
     delayMonitor: DelayMonitor;
     multisig: MultisigSystem;
+    balanceKeeper: BalanceKeeper;
 
     constructor(self: NewCoreService) {
         this.self = self;
@@ -134,6 +136,7 @@ export class WitnessServiceV2 {
 
         this.delayMonitor = new DelayMonitor(this.self, this)
         this.multisig = new MultisigSystem(this.self, this)
+        this.balanceKeeper = new BalanceKeeper(this.self)
 
 
         this.blockParser = this.blockParser.bind(this)
@@ -345,15 +348,15 @@ export class WitnessServiceV2 {
       }
 
       if(onchainTxs.length > 0) {
-        const txIds = onchainTxs.map(e => CID.parse(e.id).bytes);
+        const txIds = onchainTxs.map(e => Buffer.from(e.id, 'hex'));
         const root = simpleMerkleTree(txIds)
         // console.log(root)
         // const proof = tree.getProof(SHA256(txIds[0]))
         // console.log(proof)
         // console.log('onchainTxs', onchainTxs.map(e => e.id))
-        hiveMerkleProof.id = await this.self.ipfs.dag.put({
+        hiveMerkleProof.id = (await this.self.ipfs.dag.put({
           txs: txIds
-        })
+        })).toString()
         hiveMerkleProof.data = root;
       }
 
@@ -695,7 +698,7 @@ export class WitnessServiceV2 {
     async getBlockSchedule(blockHeight) {
       const consensusRound = await this.calculateConsensusRound(blockHeight)
       const electionResult = await this.self.electionManager.getValidElectionOfblock(blockHeight)
-      console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
+      // console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
       if(this.witnessSchedule.valid_height === consensusRound.pastRoundHeight && electionResult.epoch === this.witnessSchedule.valid_epoch) {
         // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
         return this.witnessSchedule.schedule;
@@ -956,6 +959,7 @@ export class WitnessServiceV2 {
     async init() {
       this.blockHeaders = this.self.db.collection('block_headers')
       await this.multisig.init()
+      await this.balanceKeeper.init()
 
       // this.self.chainBridge.registerTickHandle('witness.blockTick', this.blockTick, {
       //   type: 'block',

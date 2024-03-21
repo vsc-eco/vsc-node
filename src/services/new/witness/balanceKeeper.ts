@@ -232,7 +232,7 @@ export class BalanceKeeper {
             ...transaction
         }, []);
         what.signatures = signatures
-        console.log('sending tx confirm')
+        // console.log('sending tx confirm')
         // if(multisigAccount.owner.weight_threshold <= signatures.length  ) { 
             try {
                 const txConfirm = await HiveClient2.broadcast.send(what)
@@ -332,20 +332,22 @@ export class BalanceKeeper {
 
     async handleBlockTick(args) { 
         const {key:blkHeight} = args.data;
-        if(blkHeight % 20 === 0) { 
-            console.log('blocking tick RUN!', blkHeight)
-            this.runBatchOperation(blkHeight).catch(() => {})
+        if(blkHeight % 20 === 0 && this.self.chainBridge.parseLag < 5) {
+            const witnessSchedule = await this.self.witness.getBlockSchedule(blkHeight)
+            const scheduleSlot = witnessSchedule.find(e => e.bn >= blkHeight)
+            if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
+                this.runBatchOperation(blkHeight).catch(() => {})
+            }
         }
     }
 
 
     async handleMessage(args) {
-        console.log(args)
         const {block_height} = args.message
         
-        console.log('withdraw action', block_height)
+        // console.log('withdraw action', block_height)
         if(block_height > this.self.chainBridge.streamParser.stream.lastBlock - 20 && block_height % 20 === 0) {
-            console.log('withdraw action RUN', block_height)
+            // console.log('withdraw action RUN', block_height)
             try {
                 const withdrawTx = await this.createWithdrawTx(block_height)
                 const hiveTx = new HiveTx.Transaction(withdrawTx).sign(

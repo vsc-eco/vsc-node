@@ -305,7 +305,6 @@ export class TransactionPoolV2 {
             const {tx, blkHeight} = args.data
 
             for(let [op, opBody] of tx.operations) {
-                console.log('parsing', [op, opBody])
                 if(op === 'custom_json') {
                     // console.log('picked up TX', tx, fullTx)
                     if(opBody.id === 'vsc.announce_tx' || opBody.id === 'vsc.tx') {

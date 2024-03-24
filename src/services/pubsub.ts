@@ -274,24 +274,27 @@ export class PeerChannel {
     }> {
         const drain = pushable()
         const req_id = Crypto.randomBytes(8).toString('base64url');
-        if(options.streamTimeout) {
-            setTimeout(() => {
-                drain.end()
-            }, options.streamTimeout)
-        }
-        this.events.on('message', (msg) => {
+        const func = (msg) => {
 
             if(req_id === msg.req_id) {
                 if(msg.flags && msg.flags.includes('end')) {
                     if(options.responseOrigin === 'many') {
                         return;
                     }
+                    this.events.off('message', func) 
                     drain.end()
                 } else {
                     drain.push(msg)
                 }
             }
-        })
+        }
+        if(options.streamTimeout) {
+            setTimeout(() => {
+                drain.end()
+                this.events.off('message', func) 
+            }, options.streamTimeout)
+        }
+        this.events.on('message', func)
         await this.send({
             type: id,
             req_id,

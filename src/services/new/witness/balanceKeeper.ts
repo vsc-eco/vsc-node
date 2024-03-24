@@ -185,7 +185,7 @@ export class BalanceKeeper {
                 {
                     from: this.multisigAccount,
                     to: e.dest,
-                    amount: `${e.amount / 1_000}.000 ${e.unit}`,
+                    amount: `${(e.amount / 1_000).toFixed(3)} ${e.unit}`,
                     memo: 'Withdrawal from VSC network'
                 }
             ]

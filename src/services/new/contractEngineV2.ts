@@ -117,6 +117,9 @@ export class ContractEngineV2 {
                     })).cid
         
                     const bech32Addr = bech32.encode('vs4', bech32.toWords(contractIdHash.bytes));
+
+                    console.log('pinning contract CID', json.code);
+                    await this.self.ipfs.pin.add(json.code)
         
                     console.log('smart contract addr', bech32Addr)
                     await this.contractDb.findOneAndUpdate({

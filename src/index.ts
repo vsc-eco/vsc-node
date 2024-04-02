@@ -15,6 +15,17 @@ async function startup(): Promise<void> {
   
   const api = new ApiModule(1337, core)
   await api.listen()
+
+
+  const cleanup = async (code: number) => {
+    await core.stop()
+    await coreNew.stop()
+    await api.stop()
+  };
+
+  process.on("SIGINT", () => cleanup(0));
+  process.on("SIGTERM", () => cleanup(0));
+  process.on("beforeExit", cleanup);
 }
 
 void startup()

@@ -1,5 +1,5 @@
 
-import { Module } from '@nestjs/common'
+import { INestApplication, Module } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { createSchema, createYoga } from 'graphql-yoga'
 import { IPFSHTTPClient } from 'kubo-rpc-client'
@@ -24,6 +24,7 @@ class ControllerModule {}
  * see api requirements here https://github.com/3speaknetwork/research/discussions/3
  */
 export class ApiModule {
+  app: INestApplication
   constructor(
     private readonly listenPort: number,
     private readonly self: CoreService
@@ -32,7 +33,8 @@ export class ApiModule {
   }
 
   public async listen() {
-    const app = await NestFactory.create(ControllerModule)
+    this.app = await NestFactory.create(ControllerModule)
+    const app = this.app
 
     // Bring back API docs when needed. Mostly use already documented graphql
     // const swaggerconfig = new DocumentBuilder().setTitle('VSC API').build()
@@ -77,5 +79,9 @@ export class ApiModule {
     app.enableCors();
 
     await app.listen(this.listenPort)
+  }
+
+  async stop() {
+    await this.app.close()
   }
 }

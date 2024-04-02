@@ -334,12 +334,12 @@ export class ElectionManager {
         }
     }
 
-    async btIndexElection(args: ParserFuncArgs) {
+    async btIndexElection(args: ParserFuncArgs<'tx'>) {
         const {data} = args;
 
         const {tx, blkHeight} = data;
 
-        let [op, opPayload] = tx.operations[0]
+        const [op, opPayload] = tx.operations[0]
 
         if(op === 'custom_json') {
             if (opPayload.id === 'vsc.election_result') {

@@ -9,7 +9,8 @@ export interface EventRecord {
     id: "hive_block"
     key: string | number
     transactions: HiveTransactionDbRecord[]
-    [k: string]: any
+    block_id: string
+    timestamp: Date
 }
 
 type FilterFunction = (txData: {
@@ -19,20 +20,26 @@ type FilterFunction = (txData: {
 }
 
 
-export type ParserFuncArgs = {
+export type ParserFuncArgs<Type extends 'block' | 'tx'> = {
     halt: () => Promise<void>
-} &( {
+} &( Type extends 'block'? {
     type: 'block'
     data: WithId<EventRecord>
-} | {
+} : {
     type: 'tx'
     data:     {
         tx: EventRecord['transactions'][0]
         blkHeight: number
-    }
+    } & Pick<EventRecord, 'block_id' | 'timestamp'>
 })
 
-export type ParserFunc = (args: ParserFuncArgs) => Promise<void>
+export type ParserFunc<Type extends 'block' | 'tx'> = (args: ParserFuncArgs<Type>) => Promise<void>
+
+type Parser<Type extends 'block' | 'tx'> = {
+  priority: 'before' | 'after' | number
+  type: Type
+  func: ParserFunc<Type>
+}
 
 /**
  * Wrapping util for handling the separation between business logic <--> StreamParser <--> Hive stream
@@ -44,11 +51,7 @@ export class StreamParser {
     genesisDay: number;
 
 
-    parsers: Array<{
-        priority: "before" | "after" | number
-        type: "block" | 'tx'
-        func: ParserFunc
-    }>
+    parsers: Array<Parser<'block' | 'tx'>>
     filters: Array<{
         func: FilterFunction
     }>
@@ -89,10 +92,10 @@ export class StreamParser {
         this.filters.push(args)
     }
 
-    addParser(args: {
+    addParser<ParserType extends 'block' | 'tx'>(args: {
         priority: "before" | "after" | number
-        type: "block" | 'tx'
-        func: ParserFunc
+        type: ParserType
+        func: ParserFunc<ParserType>
         name?: string
     }) {
         this.parsers.push(args)

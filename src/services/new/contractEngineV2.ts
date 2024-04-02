@@ -139,7 +139,7 @@ export class ContractEngineV2 {
                         try {
                             const cid = CID.parse(json.codeStorageProof.hash)
                             const {value: msg} = await this.self.ipfs.dag.get(cid)
-                            if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availablity') {
+                            if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availability') {
                                 continue;
                             }
                             if (msg.cid !== json.code) {

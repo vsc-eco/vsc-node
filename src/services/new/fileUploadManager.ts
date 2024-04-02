@@ -119,7 +119,7 @@ function ignoreMessagesFromSelf(
   }
 }
 
-export class FileUploadManger {
+export class FileUploadManager {
   constructor(private core: NewCoreService) {}
 
   async start() {
@@ -182,7 +182,7 @@ export class FileUploadManger {
         if (cid.equals(request.cid)) {
           // start BLS signing to generate a signature
           const sigCid = await ipfs.dag.put({
-            type: 'data-availablity',
+            type: 'data-availability',
             cid: cid.toString(),
           })
           await ipfs.pin.add(sigCid, { recursive: false })
@@ -279,7 +279,7 @@ export class FileUploadManger {
             const sig = circuit.serialize(bls.circuit.circuitMap)
             const data = await ipfs.dag.put(
               {
-                type: 'data-availablity',
+                type: 'data-availability',
                 cid: respInfo.cid,
               },
               { onlyHash: true },
@@ -301,5 +301,12 @@ export class FileUploadManger {
         }),
       ),
     )
+  }
+
+  async stop() {
+    const { ipfs, config } = this.core
+    await ipfs.pubsub.unsubscribe(`${config.get('network.id')}-${REQUEST_TOPIC}`)
+    await ipfs.pubsub.unsubscribe(`${config.get('network.id')}-${REQUEST_DATA_TOPIC}`)
+    await ipfs.pubsub.unsubscribe(`${config.get('network.id')}-${RESPONSE_TOPIC}`)
   }
 }

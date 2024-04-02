@@ -4,6 +4,7 @@ import { AddrRecord, TransactionContainerV2, TransactionDbRecordV2 } from "./typ
 import { encodePayload } from 'dag-jose-utils'
 import { bech32 } from "bech32";
 import { VmContainer } from "./vm/utils";
+import { ParserFuncArgs } from "./utils/streamUtils";
 
 
 enum ContractErrors {
@@ -105,8 +106,7 @@ export class ContractEngineV2 {
         this.blockParser = this.blockParser.bind(this)
     }
     
-    protected async blockParser(args) {
-        const {tx} = args.data
+    protected async blockParser(args: ParserFuncArgs & {type: 'tx'}) {
 
         for(let index in tx.operations) {
             const [opName, op] = tx.operations[index]

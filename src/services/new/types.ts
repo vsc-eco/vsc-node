@@ -1,3 +1,56 @@
+import type {
+  AccountCreateOperation,
+  AccountCreateWithDelegationOperation,
+  AccountUpdateOperation,
+  AccountWitnessProxyOperation,
+  AccountWitnessVoteOperation,
+  CancelTransferFromSavingsOperation,
+  ChangeRecoveryAccountOperation,
+  ClaimRewardBalanceOperation,
+  ClaimAccountOperation,
+  CommentOperation,
+  CommentOptionsOperation,
+  ConvertOperation,
+  CreateClaimedAccountOperation,
+  CustomOperation,
+  CustomBinaryOperation,
+  CustomJsonOperation,
+  DeclineVotingRightsOperation,
+  DelegateVestingSharesOperation,
+  DeleteCommentOperation,
+  EscrowApproveOperation,
+  EscrowDisputeOperation,
+  EscrowReleaseOperation,
+  EscrowTransferOperation,
+  FeedPublishOperation,
+  LimitOrderCancelOperation,
+  LimitOrderCreateOperation,
+  LimitOrderCreate2Operation,
+  PowOperation,
+  Pow2Operation,
+  RecoverAccountOperation,
+  ReportOverProductionOperation,
+  RequestAccountRecoveryOperation,
+  ResetAccountOperation,
+  SetResetAccountOperation,
+  SetWithdrawVestingRouteOperation,
+  TransferOperation,
+  TransferFromSavingsOperation,
+  TransferToSavingsOperation,
+  TransferToVestingOperation,
+  VoteOperation,
+  WithdrawVestingOperation,
+  WitnessUpdateOperation,
+  WitnessSetPropertiesOperation,
+  AccountUpdate2Operation,
+  CreateProposalOperation,
+  UpdateProposalVotesOperation,
+  RemoveProposalOperation,
+  UpdateProposalOperation,
+  CollateralizedConvertOperation,
+  RecurrentTransferOperation,
+} from "@hiveio/dhive";
+
 import { CID } from "kubo-rpc-client/dist/src"
 
 
@@ -273,3 +326,65 @@ interface LedgerOut {
     dest?: string
 }
 export type LedgerType = LedgerIn | LedgerOut
+
+export type HiveTransactionDbRecord = {
+    transaction_id: string
+    index: number
+    operations: AnyOperation[]
+}
+
+export type AnyOperation = IndexedKeysToTuple<ListOfOperations> & ListOfOperations
+
+type IndexedKeysToTuple<T extends {0: any; 1: any}> = [T[0], T[1]]
+
+type ListOfOperations =
+  | AccountCreateOperation
+  | AccountCreateWithDelegationOperation
+  | AccountUpdateOperation
+  | AccountWitnessProxyOperation
+  | AccountWitnessVoteOperation
+  | CancelTransferFromSavingsOperation
+  | ChangeRecoveryAccountOperation
+  | ClaimRewardBalanceOperation
+  | ClaimAccountOperation
+  | CommentOperation
+  | CommentOptionsOperation
+  | ConvertOperation
+  | CreateClaimedAccountOperation
+  | CustomOperation
+  | CustomBinaryOperation
+  | CustomJsonOperation
+  | DeclineVotingRightsOperation
+  | DelegateVestingSharesOperation
+  | DeleteCommentOperation
+  | EscrowApproveOperation
+  | EscrowDisputeOperation
+  | EscrowReleaseOperation
+  | EscrowTransferOperation
+  | FeedPublishOperation
+  | LimitOrderCancelOperation
+  | LimitOrderCreateOperation
+  | LimitOrderCreate2Operation
+  | PowOperation
+  | Pow2Operation
+  | RecoverAccountOperation
+  | ReportOverProductionOperation
+  | RequestAccountRecoveryOperation
+  | ResetAccountOperation
+  | SetResetAccountOperation
+  | SetWithdrawVestingRouteOperation
+  | TransferOperation
+  | TransferFromSavingsOperation
+  | TransferToSavingsOperation
+  | TransferToVestingOperation
+  | VoteOperation
+  | WithdrawVestingOperation
+  | WitnessUpdateOperation
+  | WitnessSetPropertiesOperation
+  | AccountUpdate2Operation
+  | CreateProposalOperation
+  | UpdateProposalVotesOperation
+  | RemoveProposalOperation
+  | UpdateProposalOperation
+  | CollateralizedConvertOperation
+  | RecurrentTransferOperation;

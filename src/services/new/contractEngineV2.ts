@@ -110,7 +110,7 @@ export class ContractEngineV2 {
         this.blockParser = this.blockParser.bind(this)
     }
     
-    protected async blockParser(args: ParserFuncArgs & {type: 'tx'}) {
+    protected async blockParser(args: ParserFuncArgs<'tx'>) {
         const {tx, blkHeight} = args.data
 
         const proofRequired = blkHeight >= CONTRACT_DATA_AVAILABLITY_PROOF_REQUIRED_HEIGHT

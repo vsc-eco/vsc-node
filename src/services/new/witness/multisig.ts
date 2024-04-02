@@ -329,7 +329,7 @@ export class MultisigSystem {
         await this.self.chainBridge.streamParser.addParser({
             type: "block",
             priority: "after",
-            func: async (data: ParserFuncArgs & {type: 'block'}) => { 
+            func: async (data: ParserFuncArgs<'block'>) => { 
                 const block = data.data
                 const block_height = Number(block.key)
 

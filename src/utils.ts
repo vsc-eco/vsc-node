@@ -23,7 +23,6 @@ export const HiveClient = new Client(process.env.HIVE_HOST || [HIVE_API, 'https:
 export const HiveClient2 = new Client('https://api.hive.blog')
 
 HiveClient.options.agent = keepAliveAgent;
-export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
 /**
  * Fast Hive streaming API
@@ -138,12 +137,7 @@ export class fastStream {
   async startStream() {
 
     this.headTracker = setInterval(async () => {
-      const currentBlock = await HiveClient.blockchain.getCurrentBlock()
-      // console.log(`headTracker: currentBlock=${typeof currentBlock === 'object' ? parseInt(currentBlock.block_id.slice(0, 8), 16) : currentBlock}`)
-      if (currentBlock) {
-        this.headHeight = parseInt(currentBlock.block_id.slice(0, 8), 16)
-      }
-
+      this.headHeight = await HiveClient.blockchain.getCurrentBlockNum()
     }, 3000)
 
     let activeLength = 0
@@ -308,7 +302,7 @@ export async function* liveHiveBlocks(API, opts: {
     } catch {
 
     }
-  }, 1000)
+  }, 3000)
 
   opts.signal.addEventListener('abort', () => {
     clearInterval(headUpdater)
@@ -316,7 +310,7 @@ export async function* liveHiveBlocks(API, opts: {
 
 
   for (; ;) {
-    if (count < 1) {
+    if (count < 1 || bh === last_block) {
       await sleep(50)
       continue;
     }

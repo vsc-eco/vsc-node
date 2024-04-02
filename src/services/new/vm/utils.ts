@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import EventEmitter from 'events'
 import Crypto from 'crypto'
 import Pushable from 'it-pushable';
+import { MONGODB_URL } from '../../db';
+import { LedgerType } from '../types';
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -254,6 +256,7 @@ export class VmContainer {
       [x: string]: string
     }
     debug?: boolean
+    timeout?: number
   }
   ready: boolean
   events: EventEmitter;
@@ -271,6 +274,7 @@ export class VmContainer {
       [x: string]: string
     }
     debug?: boolean
+    timeout?: number
   }) {
     this.opts = opts
     this.events = new EventEmitter()
@@ -280,6 +284,16 @@ export class VmContainer {
     contract_id: string
     action: string
     payload: string
+    env: {
+      'anchor.id': string
+      'anchor.block': string
+      'anchor.timestamp': number
+      'anchor.height': number
+
+      'msg.sender': string
+      'msg.required_auths': Array<string>
+      'tx.origin': string
+    }
   }) {
     let reqId = Crypto.randomBytes(8).toString('base64url')
     this.reqId = reqId
@@ -288,6 +302,7 @@ export class VmContainer {
       type: "call",
       action: args.action,
       payload: args.payload,
+      env: args.env,
       contract_id: args.contract_id,
       reqId
     });
@@ -298,7 +313,7 @@ export class VmContainer {
           type: 'timeout'
         })
       }
-    }, 1)
+    }, this.opts.timeout || 2)
     const executeStop = await new Promise<{
       type: string
       ret: string | null
@@ -328,6 +343,7 @@ export class VmContainer {
       })
       const result = await new Promise<{
         stateMerkle: string
+        ledgerResults: LedgerType
       }>((resolve, reject) => {
         this.events.once('finish-result', (result0) => {
           console.log('finish-result', this.child.connected)
@@ -374,7 +390,7 @@ export class VmContainer {
     const val = await this.finish()
     this.cleanup()
 
-    return val.stateMerkle;
+    return val;
   }
 
   async init() {
@@ -390,6 +406,7 @@ export class VmContainer {
           state: JSON.stringify(this.opts.state),
           modules: JSON.stringify(this.opts.modules),
           IPFS_HOST: process.env.IPFS_HOST,
+          MONGODB_URL,
         } as any,
         // silent: true,
         detached: false,

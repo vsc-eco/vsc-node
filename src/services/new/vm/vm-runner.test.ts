@@ -8,6 +8,7 @@ import {fork} from 'child_process'
 import Crypto from 'crypto'
 import { VmContainer } from './utils';
 import { sleep } from '../../../utils';
+import { bech32 } from 'bech32';
 
 
 const ipfs = IPFS.create({url: process.env.IPFS_HOST || 'http://127.0.0.1:5001'})
@@ -19,6 +20,8 @@ const __dirname = dirname(__filename);
 void (async () => {
     const scriptPath = path.join(__dirname, 'script.tsa')
 
+
+    
 
     var stdout = asc.createMemoryStream();
     const compileResult = await asc.main([
@@ -66,7 +69,8 @@ void (async () => {
         modules: {
           'vs41q9c3yg8estwk8q9yjrsu2hk6chgk5aelwlf8uj3amqfgywge8w3cul438q9tx556': cid.toString()
         },
-        debug: true
+        debug: true,
+        timeout: 100
       })
   
       await vmContainer.init()
@@ -80,7 +84,20 @@ void (async () => {
           payload: JSON.stringify({
             to: "test1",
             from: 'test2',
-          })
+          }),
+          env: {
+            'anchor.id': 'bafyreicyk3o2maukvczy2376m3mn3tblfyglfghc2pwshsda6axnisiwca',
+            'anchor.block': '05021b0f31ca836fd90513ac2684b9f203e0491a',
+            //Anchor height on chain
+            'anchor.height': 84_024_079,
+            //Timestamp in epoch ms
+            //It should always be 000 for ms offset as blocks are produced exactly in 3 second intervals
+            'anchor.timestamp': 1_711_589_394_000,
+            //Hive account, or DID or contract address or smart address
+            'tx.origin': 'hive:testaccount',
+            'msg.sender': 'hive:testaccount',
+            'msg.required_auths': ['hive:testaccount'],
+          }
         })
         console.log(result)
       }    
@@ -88,9 +105,13 @@ void (async () => {
       for await(let it of vmContainer.finishIterator()) {
         console.log(it)
       }
+      await vmContainer.finish()
+
     } catch(ex) {
       console.log(ex)
     }
+
+    await sleep(5_000)
 
     process.exit(0)
 

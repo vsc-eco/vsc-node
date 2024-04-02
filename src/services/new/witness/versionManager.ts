@@ -28,6 +28,8 @@ export class VersionManager {
     accountAuths: Collection;
     txDb: Collection;
     electionResults: Collection;
+    withdrawDb: Collection;
+    ledgerDb: Collection;
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -42,6 +44,8 @@ export class VersionManager {
         this.accountAuths = this.self.db.collection('account_auths')
         this.txDb = this.self.db.collection('transaction_pool')
         this.electionResults = this.self.db.collection('election_results')
+        this.withdrawDb = this.self.db.collection('withdrawals')
+        this.ledgerDb = this.self.db.collection('bridge_ledger')
 
         this.init = this.init.bind(this)
     }
@@ -92,6 +96,8 @@ export class VersionManager {
             await this.blockHeaders.deleteMany({})
             await this.txDb.deleteMany({})
             await this.electionResults.deleteMany({})
+            await this.withdrawDb.deleteMany({})
+            await this.ledgerDb.deleteMany({})
 
             await this.streamState.deleteOne({
                 id: 'last_hb_processed'

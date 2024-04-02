@@ -13,40 +13,20 @@ import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils
 import { CID } from 'multiformats';
 
 
-
-
-interface ProcessingDepthMap {
-    hive_block_parser: number
-    vsc_block_parser: number
-    vsc_block_verification: number
-}
-
-
-
-
-
-
-
-/**
- * Tracks account metadata
- * 
- */
-export class AccountTracer {
-
-    async txTick() {
-        
+interface BlockHeaderDbRecord {
+    id: string
+    proposer: string
+    merkle_root: string
+    sig_root: string
+    block: string
+    start_block: number
+    end_block: number
+    slot_height: number
+    stats: {
+        size: number
     }
-
-    async trace(args: {
-        
-    }) {
-
-    }
+    ts: Date
 }
-
-
-
-
 
 
 export class ChainBridgeV2 {
@@ -59,7 +39,7 @@ export class ChainBridgeV2 {
     witnessHistoryDb: Collection
     consensusDb: Collection
     consensusDataDb: Collection
-    blockHeaders: Collection<BlockHeader>
+    blockHeaders: Collection<BlockHeaderDbRecord>
     contractOutputDb: Collection
     pinQueue: PQueue;
     self: NewCoreService;
@@ -121,7 +101,7 @@ export class ChainBridgeV2 {
     protected async blockParser(args: ParserFuncArgs) {
         const {data, halt} = args;
 
-        const {tx, blkHeight} = data;
+        const {tx, blkHeight, block_id, timestamp} = data;
 
         for(let [op, opPayload] of tx.operations) {
 
@@ -363,7 +343,7 @@ export class ChainBridgeV2 {
                                         console.log('Not hitting vote majority')
                                         throw new Error('Not hitting vote majority')
                                     }
-                                    const blockId = (await this.self.ipfs.dag.put(json.signed_block, {
+                                    const anchorId = (await this.self.ipfs.dag.put(json.signed_block, {
                                         onlyHash: true
                                     })).toString()
 
@@ -375,7 +355,7 @@ export class ChainBridgeV2 {
                                                 slot_height: slotHeight
                                             }, 
                                             {
-                                                id: blockId
+                                                id: anchorId
                                             }
                                         ]
                                     })
@@ -389,7 +369,7 @@ export class ChainBridgeV2 {
                                     console.log('full block content', block_full)
                                     
                                     await this.blockHeaders.findOneAndUpdate({
-                                        id: blockId
+                                        id: anchorId
                                     }, {
                                         $set: {
                                             proposer: opPayload.required_auths[0],
@@ -401,7 +381,8 @@ export class ChainBridgeV2 {
                                             slot_height: slotHeight,
                                             stats: {
                                                 size: (await this.self.ipfs.block.get(signed_block.block)).length
-                                            }
+                                            },
+                                            ts: timestamp
                                         }
                                     }, {
                                         upsert: true
@@ -426,7 +407,8 @@ export class ChainBridgeV2 {
                                             }, {
                                                 $set: {
                                                     anchored_height: blkHeight,
-                                                    anchored_block: blockId,
+                                                    anchored_id: anchorId,
+                                                    anchored_block: block_id,
                                                     contract_id: txData.contract_id,
                                                     state_merkle: txData.state_merkle,
                                                     //TODO: look into properly handling side effects aka on chain actions
@@ -462,6 +444,39 @@ export class ChainBridgeV2 {
                                                     }
                                                 })
                                             }
+                                            if(txData.ledger_results) {
+                                                for(let idx in txData.ledger_results) {
+                                                    const ledgerEntry = txData.ledger_results[idx]
+                                                    if(ledgerEntry.to === "#withdraw") {
+                                                        //Safety for when replaying
+                                                        const withdrawRecord = await this.self.witness.balanceKeeper.withdrawDb.findOne({
+                                                            id: `${tx.id}-${idx}`
+                                                        })
+                                                        if(!withdrawRecord) {
+                                                            await this.self.witness.balanceKeeper.withdrawDb.insertOne({ 
+                                                                id: `${tx.id}-${idx}`,
+                                                                amount: ledgerEntry.amount,
+                                                                from: ledgerEntry.from,
+                                                                dest: ledgerEntry.dest,
+                                                                type: "CONTRACT_WITHDRAW"
+                                                            })
+                                                        }
+                                                    } 
+                                                    await this.self.witness.balanceKeeper.ledgerDb.findOneAndUpdate({
+                                                        id: `${tx.id}-${idx}`
+                                                    }, {
+                                                        $set: {
+                                                            amount: ledgerEntry.amount,
+                                                            from: ledgerEntry.from,
+                                                            to: ledgerEntry.to,
+                                                            dest: ledgerEntry.dest,
+                                                            owner: ledgerEntry.owner,
+                                                        }
+                                                    }, {
+                                                        upsert: true
+                                                    })
+                                                }
+                                            }
                                         } else if(tx.type === TransactionDbType.input) {
 
                                             const txRecord = await this.self.transactionPool.txDb.findOne({
@@ -478,7 +493,8 @@ export class ChainBridgeV2 {
                                                     $set: {
                                                         status: TransactionDbStatus.included,
                                                         anchored_height: endBlock,
-                                                        anchored_block: blockId,
+                                                        anchored_block: block_id,
+                                                        anchored_id: anchorId,
                                                     }
                                                 })
                                             } else {
@@ -497,7 +513,8 @@ export class ChainBridgeV2 {
                                                     accessible: true,
                                                     first_seen: new Date(),
                                                     anchored_height: endBlock,
-                                                    anchored_block: blockId,
+                                                    anchored_block: block_id,
+                                                    anchored_id: block_id, //Same for Hive
                                                     src: "vsc"
                                                 })
                                             }

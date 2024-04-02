@@ -115,13 +115,13 @@ export class StreamParser {
             }
         }
         
-        
         await this.events.updateOne({
             id: 'hive_block',
             key: block_height
         }, {
             $set: {
                 block_id: block.block_id,
+                timestamp: new Date(block.timestamp + 'Z'),
                 transactions
             }
         }, {
@@ -197,6 +197,9 @@ export class StreamParser {
         //     afterTxExec
         // })
 
+        const parser1 = [...priorityBlockExec, ...afterBlockExec]
+        const parser2 =  [...priorityTxExec, ...afterTxExec]
+
         while (true) {
             const blocks = await this.events.find({
                 id: 'hive_block',
@@ -205,7 +208,7 @@ export class StreamParser {
                 sort: {
                     key: 1
                 },
-                limit: 120
+                limit: 1_000
             }).toArray()
             
 
@@ -213,7 +216,7 @@ export class StreamParser {
                 await sleep(2_000)
             }
             for (let blk of blocks) {
-                for(let parser of [...priorityBlockExec, ...afterBlockExec]) {
+                for(let parser of parser1) {
                     try { 
                         await parser.func({
                             type: 'block',
@@ -227,13 +230,16 @@ export class StreamParser {
                 }
 
                 for (let tx of blk.transactions) {
-                    for(let parser of [...priorityTxExec, ...afterTxExec]) {
+                    for(let parser of parser2) {
                         try {
                             await parser.func({
                                 type: 'tx',
                                 data: {
                                     tx,
-                                    blkHeight: Number(blk.key)
+                                    //Fix: to underscore case.
+                                    blkHeight: Number(blk.key),
+                                    block_id: blk.block_id,
+                                    timestamp: blk.timestamp
                                 },
                                 halt: this.halt
                             })
@@ -246,15 +252,28 @@ export class StreamParser {
                 
                 lastBlock = blk.key
                 this.lastParsed = lastBlock;
-                await this.streamState.updateOne({
-                    id: 'last_hb_processed'
-                }, {
-                    $set: {
-                        val: lastBlock
-                    }
-                }, {
-                    upsert: true
-                })
+                if(lastBlock % 100 === 0) {
+                    await this.streamState.updateOne({
+                        id: 'last_hb_processed'
+                    }, {
+                        $set: {
+                            val: lastBlock
+                        }
+                    }, {
+                        upsert: true
+                    })
+
+                } else if(this.lastParsed + 20 > this.stream.headHeight) {
+                    await this.streamState.updateOne({
+                        id: 'last_hb_processed'
+                    }, {
+                        $set: {
+                            val: lastBlock
+                        }
+                    }, {
+                        upsert: true
+                    })
+                }
             }
             //TODO: handle commiting after X has completed
         }

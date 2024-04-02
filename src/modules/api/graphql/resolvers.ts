@@ -37,38 +37,6 @@ export const DebugResolvers = {
   }
 }
 
-// called recursively, as the object might consist of a nested JWS structure 
-const getDagCborIpfsHashContent = async (cid: CID) => {
-  let content = await appContainer.self.ipfs.dag.get(cid) as any;
-
-  if (typeof content === 'object' && content) {
-    // check if ipfs object is in JWS format, if so we need to go one layer below
-    const data = content.value;
-    if ('payload' in data && 'signatures' in data) {
-      const nestedCid: CID = (data as any).link as CID;
-      if (nestedCid.toString() === cid.toString()) {
-        return 'the ipfs object is in JWS format, but the link points to itself, this is not allowed!';
-      }
-
-      content = await getDagCborIpfsHashContent(nestedCid);
-      if (typeof content === 'object') {
-        content.link = data.link.toString()
-        content.payload = data.payload
-        content.signatures = data.signatures
-      } else {
-        content = {
-          data: content,
-          link: data.link.toString(),
-          payload: data.payload,
-          signatures: data.signatures
-        }
-      }
-    }
-  }
-
-  return content;
-}
-
 export const Resolvers = {
   contractState: async (_, args) => {
     // const data = await appContainer.self.contractEngine.contractDb.findOne({
@@ -347,69 +315,6 @@ export const Resolvers = {
       }
     })
     return nextSlot;
-  },
-
-  // finds and tags vsc-tx/ vsc-blocks via ipfs CID's, unidentifiable CID's are tagged with the type 'null'
-  findCID: async (_, args) => {
-    if (appContainer.self.config.get('ipfs.pinEverything')) {
-      const ipfsHash = args.id;
-  
-      let cid = null;
-      try {
-        cid = CID.parse(ipfsHash)
-      } catch {
-        throw new GraphQLError('Invalid CID format!')
-      }
-
-      // get ipfs content for cid
-      let content = null;
-      if (cid.code === 0x70) {
-        // dag-pd
-        const stream = appContainer.self.ipfs.cat(cid);
-        const chunks = [];
-
-        for await (const chunk of stream) {
-          chunks.push(chunk);
-        }
-
-        const buffer = Buffer.concat(chunks);
-        let dataRaw = buffer.toString(); 
-
-        try {
-          content = JSON.parse(dataRaw);
-        } catch (e) {
-          content = dataRaw;
-        }
-      } else if (cid.code === 0x71) {
-        // dag-cbor
-        content = await getDagCborIpfsHashContent(cid);
-      }
-  
-      // determine the type of vsc data structure that was found e.g.: vsc-tx/ blocks
-      let type = null;
-      if (content && typeof content.value === 'object' && content.value.__t && ['vsc-tx', 'vsc-block'].includes(content.value.__t)) {
-        type = content.value.__t
-      }
-
-      let result: {
-        type: string,
-        data: any,
-        link?: string,
-        payload?: string,
-        signatures?: {
-          protected: string,
-          signature: string
-        }[]
-      } = { type: type, data: content.value }
-      if (content.payload && content.signatures && content.link) {
-        result.payload = content.payload
-        result.signatures = content.signatures
-        result.link = content.link
-      }
-      return result
-    } else {
-      throw new GraphQLError("Current node configuration does not allow for this endpoint to be used.")
-    }
   },
   submitTransactionV1: async (_, args) => {
     const {id} = await appContainer.self.newService.transactionPool.ingestTx({

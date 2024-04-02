@@ -137,12 +137,13 @@ export class PeerChannel {
                     let drain = pushable()
                     let sink = pushable()
                     void (async () => {
-                        const events = this.events.on('message', (message) => {
+                        const func = (message) => {
                             //TODO make this feed the handler
                             if(json_payload.req_id === message.req_id) {
                                 sink.push(message.payload)
                             }
-                        })
+                        }
+                        this.events.on('message', func)
                         // this.logger.debug('peer events', events)
                         for await (let item of drain) {
                             this.logger.debug('Channel Response', item)
@@ -157,6 +158,7 @@ export class PeerChannel {
                             req_id: json_payload.req_id,
                             flags: ['end']
                         })
+                        this.events.removeListener('message', func)
                     })()
                     this._handles[json_payload.type].handler({from: msg.from.toString(), message: json_payload.payload, drain, sink})
                 }

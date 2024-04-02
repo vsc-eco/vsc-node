@@ -372,12 +372,6 @@ export class TransactionPoolV2 {
             }).toArray()
     
             for(let tx of unconfirmedTxs) {
-                console.log('rebroadcasting tx', tx.id, {
-                    type: 'direct_tx',
-                    data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.id))).toString('base64url'),
-                    //Fill in
-                    sig_data: Buffer.from(await this.self.ipfs.block.get(CID.parse(tx.sig_hash))).toString('base64url')
-                })
                 await this.self.p2pService.memoryPoolChannel.call('announce_tx', {
                     payload: {
                         type: 'direct_tx',

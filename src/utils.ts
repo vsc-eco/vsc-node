@@ -23,7 +23,6 @@ export const HiveClient = new Client(process.env.HIVE_HOST || [HIVE_API, 'https:
 export const HiveClient2 = new Client('https://api.hive.blog')
 
 HiveClient.options.agent = keepAliveAgent;
-export const OFFCHAIN_HOST = process.env.OFFCHAIN_HOST || "https://us-01.infra.3speak.tv/v1/graphql"
 
 /**
  * Fast Hive streaming API

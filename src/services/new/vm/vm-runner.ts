@@ -6,6 +6,7 @@ import { ContractErrorType, instantiate } from './utils'
 
 //Crypto imports
 import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto'
+import { LedgerType } from '../types'
 
 const CID = IPFS.CID
 
@@ -229,7 +230,8 @@ class VmRunner {
   balanceDb: Collection
   ledgerDb: Collection
 
-  ledgerStack: any[]
+  ledgerStack: LedgerType[]
+  ledgerStackTemp: LedgerType[]
   outputStack: any[]
   balanceSnapshots: Map<string, any>
 
@@ -239,14 +241,32 @@ class VmRunner {
   constructor(args) {
     this.state = args.state
     this.modules = args.modules
+
+    this.ledgerStack = []
+    //Temporary ledger stack for use in contract execution. Pushed to ledgerStack for permanent storage
+    this.ledgerStackTemp = []
+    this.outputStack = []
+    this.balanceSnapshots = new Map()
   }
 
-  async getBalanceSnapshot(account: string, block_height: number) {
+  /**
+   * Gets direct original balance snapshot without applied transfers
+   * DO NOT USE this in contract execution directly
+   * @param account 
+   * @param block_height 
+   * @returns 
+   */
+  private async getBalanceSnapshotDirect(args: {
+    account: string
+    tag?: string
+  }, block_height: number) {
+    const {account, tag} = args
     const lastBalance = await this.balanceDb.findOne({ account: account })
 
     const balanceTemplate = lastBalance
       ? {
           account: account,
+          tag: tag,
           tokens: {
             HIVE: lastBalance.tokens.HIVE,
             HBD: lastBalance.tokens.HBD,
@@ -255,6 +275,7 @@ class VmRunner {
         }
       : {
           account: account,
+          tag: tag,
           tokens: {
             HIVE: 0,
             HBD: 0,
@@ -266,7 +287,8 @@ class VmRunner {
       .find(
         {
           unit: 'HIVE',
-          from: account,
+          owner: account,
+          tag: tag,
         },
         {
           sort: {
@@ -280,7 +302,8 @@ class VmRunner {
       .find(
         {
           unit: 'HBD',
-          from: account,
+          owner: account,
+          tag: tag,
         },
         {
           sort: {
@@ -313,14 +336,93 @@ class VmRunner {
   }
 
   /**
+   * 
+   * @param account 
+   * @param block_height 
+   * @returns 
+   */
+  async getBalanceSnapshot(account: string, block_height: number) { 
+    if(this.balanceSnapshots.has(account)) { 
+      const balance = this.balanceSnapshots.get(account)
+      const combinedLedger = [...this.ledgerStack, ...this.ledgerStackTemp]
+      const hbdBal = combinedLedger.filter(e => e.amount && e.unit === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.token['HBD'])
+      const hiveBal = combinedLedger.filter(e => e.amount && e.unit === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.token['HIVE'])
+
+      return {
+        account: account,
+        tokens: {
+          HIVE: hiveBal,
+          HBD: hbdBal
+        },
+        block_height: block_height,
+      }
+    } else {
+      const balanceSnapshot = await this.getBalanceSnapshotDirect({account}, block_height);
+      this.balanceSnapshots.set(account, balanceSnapshot)
+      return balanceSnapshot
+    }
+  }
+
+  applyLedgerOp(op: LedgerType) {
+    console.log('applyLedgerOp', op)
+    this.ledgerStackTemp.push(op)
+  }
+
+  /**
+   * Saves ledger to perm memory
+   * TODO: create updated balance snapshot
+   */
+  saveLedger() {
+    this.ledgerStack.push(...this.ledgerStackTemp)
+    this.ledgerStackTemp = []
+  }
+
+  /**
+   * Create a shortened ledger for indexing purposes
+   */
+  // shortenLedger() {
+  //   let collected = this.ledgerStack.reduce((acc, cur) => { 
+  //     if(acc[cur.account]) {
+  //       acc[cur.account] = null
+  //     } else {
+  //       acc[cur.account] = null
+  //     }
+  //     return acc
+  //   }, {})
+  //   const ownerList = Object.keys(collected)
+  //   let shortenedLedger = []
+  //   for(let owner of ownerList) {
+  //     const hiveDiff = this.ledgerStack.filter(e => e.account === owner && e.token === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, 0)
+  //     const hbdDiff = this.ledgerStack.filter(e => e.account === owner && e.token === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, 0)
+  //     if(hbdDiff === 0) {
+  //       shortenedLedger.push({
+  //         account: owner,
+  //         amount: hbdDiff,
+  //         token: 'HBD'
+  //       })
+  //     }
+  //     if(hiveDiff) {
+  //       shortenedLedger.push({
+  //         account: owner,
+  //         amount: hiveDiff,
+  //         token: 'HIVE'
+  //       })
+  //     }
+  //   }
+  //   return shortenedLedger
+  // }
+
+
+
+  /**
    * Init should only be called once
    */
   async init() {
-    // const connection = new MongoClient(process.env.MONGO_URI)
-    // await connection.connect()
-    // const db = connection.db('vsc-new')
-    // this.balanceDb = db.collection('bridge_balances')
-    // this.ledgerDb = db.collection('bridge_ledeger')
+    const connection = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017')
+    await connection.connect()
+    const db = connection.db('vsc-new')
+    this.balanceDb = db.collection('bridge_balances')
+    this.ledgerDb = db.collection('bridge_ledger')
 
     let modules = {}
     for (let [contract_id, code] of Object.entries<string>(this.modules)) {
@@ -344,7 +446,22 @@ class VmRunner {
   /**
    * Executes a smart contract operation
    */
-  async executeCall(args: { contract_id: string; action: string; payload: string }) {
+  async executeCall(args: { 
+    contract_id: string; 
+    action: string; 
+    payload: string 
+    env: {
+      'anchor.id': string
+      'anchor.block': string
+      'anchor.timestamp': number
+      'anchor.height': number
+
+      'msg.sender': string
+      'msg.required_auths': Array<string>
+      'tx.origin': string
+    }
+    block_height: number
+  }) {
     const contract_id = args.contract_id
     const memory = new WebAssembly.Memory({
       initial: 10,
@@ -357,9 +474,8 @@ class VmRunner {
     const { wasmRunner, stateAccess } = this.state[contract_id]
 
     const contractEnv = {
-      'block.included_in': null,
-      'sender.id': null,
-      'sender.type': null,
+      ...args.env
+      //Fill in with custom args or anything else in the future.
     }
 
     /**
@@ -372,6 +488,111 @@ class VmRunner {
       'crypto.ripemd160': (value) => {
         return ripemd160(Buffer.from(value, 'hex')).toString('hex')
       },
+      //Gets current balance of contract account or tag
+      //Cannot be used to get balance of other accounts (or generally shouldn't)
+      'hive.getbalance': async (value) => { 
+        const args: {
+          account: string
+          tag?: string
+        } = JSON.parse(value)
+        const snapshot = await this.getBalanceSnapshot(`${args.account}${args.tag ? '#' + args.tag.replace('#', '') : ''}`, 84021084)
+
+        return {
+          result: snapshot.tokens
+        }
+      },
+      //Pulls token balance from user transction
+      'hive.draw': async (value) => { 
+        const args:{
+          from: string
+          amount: number
+          asset: "HIVE" | "HBD"
+        } = JSON.parse(value)
+        const snapshot = await this.getBalanceSnapshotDirect({
+          account: args.from
+        }, 84021084)
+        console.log('snapshot result', snapshot)
+
+        if(snapshot.tokens[args.asset] >= args.amount) {
+          this.applyLedgerOp({
+            owner: args.from,
+            to: contract_id,
+            amount: -args.amount,
+            unit: args.asset
+          })
+          this.applyLedgerOp({
+            from: args.from,
+            owner: contract_id,
+            amount: args.amount,
+            unit: args.asset
+          })
+          console.log(this.ledgerStackTemp)
+          return {
+            result: "SUCCESS"
+          }
+        } else {
+          return {
+            result: "INSUFFICIENT_FUNDS"
+          }
+        }
+      },
+      //Transfer tokens owned by contract to another user or 
+      'hive.transfer': async(value) => { 
+        const args: {
+          dest: string
+          amount: number
+          asset: "HIVE" | "HBD"
+        } = JSON.parse(value)
+        const snapshot = await this.getBalanceSnapshotDirect({
+          account: contract_id
+        }, 84021084)
+        if(snapshot.tokens[args.asset] >= args.amount) { 
+
+
+        } else {
+          return {
+            result: "INSUFFICIENT_FUNDS"
+          }
+        }
+        
+      },
+      //Triggers withdrawal of tokens owned by contract
+      'hive.withdraw': async (value) => { 
+        const args:{
+          dest: string
+          amount: number
+          asset: "HIVE" | "HBD"
+        } = JSON.parse(value)
+        const snapshot = await this.getBalanceSnapshotDirect({
+          account: contract_id
+        }, 84021084)
+        console.log('snapshot result', snapshot)
+
+        if(snapshot.tokens[args.asset] >= args.amount) {
+          this.applyLedgerOp({
+            owner: contract_id,
+            to: '#withdraw',
+            amount: -args.amount,
+            unit: args.asset,
+            dest: args.dest
+          })
+          // this.applyLedgerOp({
+          //   from: contract_id,
+          //   to: '#withdraw',
+          //   dest: args.dest,
+          //   amount: args.amount,
+          //   unit: args.asset
+          // })
+          console.log(this.ledgerStackTemp)
+          return {
+            result: "SUCCESS"
+          }
+        } else {
+          return {
+            result: "INSUFFICIENT_FUNDS"
+          }
+        }
+      }
     }
 
     try {
@@ -396,6 +617,9 @@ class VmRunner {
         Date: {},
         Math: {},
         sdk: {
+          'revert': () => {
+            //Revert entire TX and any lower level function calls
+          },
           'console.log': (keyPtr) => {
             const logMsg = (insta as any).exports.__getString(keyPtr)
             logs.push(logMsg)
@@ -439,10 +663,12 @@ class VmRunner {
           'system.call': async (callPtr, valPtr) => {
             const callArg = insta.exports.__getString(callPtr)
             const valArg = JSON.parse(insta.exports.__getString(valPtr))
+
             let resultData
             if (typeof contractCalls[callArg] === 'function') {
               resultData = JSON.stringify({
-                result: contractCalls[callArg](valArg.arg0),
+                //Await should be there if function is async. Otherwise it's fine
+                result: await contractCalls[callArg](valArg.arg0),
               })
             } else {
               resultData = JSON.stringify({
@@ -455,7 +681,9 @@ class VmRunner {
           'system.getEnv': async (envPtr) => {
             const envArg = insta.exports.__getString(envPtr)
 
-            return insta.exports.__newString(contractEnv[envArg])
+            return insta.exports.__newString(
+              typeof contractEnv[envArg] === 'string' ? contractEnv[envArg] : JSON.stringify(contractEnv[envArg])
+            )
           },
         },
       } as any)
@@ -469,7 +697,6 @@ class VmRunner {
           // reqId: message.reqId,
           IOGas: 0,
         }
-        return
       }
       let ptr
       try {
@@ -478,13 +705,19 @@ class VmRunner {
         )
 
         const str = (insta as any).exports.__getString(ptr)
-        process.send({
+
+        //Assume successful, save any ledger results.
+        this.saveLedger()
+
+        //For testing determining use..
+
+        return {
           type: 'execute-stop',
           ret: str,
           logs,
           // reqId: message.reqId,
           IOGas,
-        })
+        }
       } catch (ex) {
         if (ex.name === 'RuntimeError' && ex.message === 'unreachable') {
           console.log(`RuntimeError: unreachable ${JSON.stringify(error)}`, error)
@@ -546,10 +779,11 @@ class VmRunner {
         contract_id,
         index,
         stateMerkle: stateAccess.finish().stateMerkle.toString(),
+        ledgerResults: this.ledgerStack
       }
     }
     yield {
-      type: 'finish-result',
+      type: 'finish-result'
     }
   }
 }
@@ -571,7 +805,10 @@ void (async () => {
       const executeResult = await vmRunner.executeCall({
         contract_id: message.contract_id,
         payload: message.payload,
-        action: message.action
+        action: message.action,
+        //Fill these in soon
+        env: message.env,
+        block_height: 84021084
       })
       process.send({
         ...executeResult,

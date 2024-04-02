@@ -105,6 +105,8 @@ export const schema = `
     interface DepositDrain {
         deposit_id: String
         amount: Float
+        token: String
+        owner: String
     }
     interface BlockRef {
         block_ref: String
@@ -125,6 +127,17 @@ export const schema = `
         contract_id: String
         controllers_hash: String
     }
+    type GetBalanceTokens {
+        HBD: Float
+        HIVE: Float
+    }
+    type GetBalanceResult {
+        account: String
+        block_height: Int
+
+
+        tokens: GetBalanceTokens
+    }
     type FindtransactionResult {
         txs: [Transaction]
     }
@@ -140,11 +153,18 @@ export const schema = `
     type Query {
         contractState(id: String): ContractState
         findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindtransactionResult
-        findContract(id: String): FindContractResult
-        findCID(id: String): findCIDResult
         findDeposit(id: String): Deposit
         findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
+        getAccountBalance(account: String): GetBalanceResult
+        
+        # Need Revision
+        
+        findContract(id: String): FindContractResult
+        findCID(id: String): findCIDResult
+
+        # End Need Revision
+        
         submitTransactionV1(tx: String!, sig: String!): TransactionSubmitResult
         getAccountNonce(keyGroup: [String]!): AccountNonceResult
 

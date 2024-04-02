@@ -68,11 +68,17 @@ class VmContext {
             throw new Error('Contract ID not registered with VmContext')
         }
         
+        console.log(tx)
+
+       
 
        const callOutput = await this.vm.call({
             contract_id,
             action: tx.data.action,
-            payload: JSON.stringify(tx.data.payload)
+            payload: JSON.stringify(tx.data.payload),
+            env: {
+                
+            } as any
         })
 
         return callOutput
@@ -175,10 +181,36 @@ export class ContractEngineV2 {
         const txResults = []
 
         for(let tx of args.txs) {
+            const blockHeader = await this.self.chainBridge.blockHeaders.findOne({
+                id: tx.anchored_id
+            })
+            const requiredAuths = tx.required_auths.map(e => e.value).map(e => {
+                if(tx.src === 'hive') {
+                    //Format should be human readable
+                    return `hive:${e}`
+                } else {
+                    //i.e did:key:123etcetc
+                    return e
+                }
+            })
             const result = await vm.call({
                 contract_id: args.contract_id,
                 action: tx.data.action,
-                payload: JSON.stringify(tx.data.payload)
+                payload: JSON.stringify(tx.data.payload),
+                env: {
+                    'anchor.id': tx.anchored_id,
+                    'anchor.height': tx.anchored_height,
+                    'anchor.block': tx.anchored_block,
+                    'anchor.timestamp': blockHeader.ts.getTime(),
+
+
+                    'msg.sender': requiredAuths[0],
+                    //Retain the type info as well.
+                    //TODO: properly parse and provide authority type to contract
+                    //Such as ACTIVE vs POSTING auth
+                    'msg.required_auths': tx.required_auths,
+                    'tx.origin': requiredAuths[0],
+                } as any
             })
 
             
@@ -204,13 +236,14 @@ export class ContractEngineV2 {
                 ...(result.IOGas > 0 ? {gas: result.IOGas} : {})
             })
         }
-        const state_merkle = await vm.finishAndCleanup()
+        const {stateMerkle, ledgerResults} = await vm.finishAndCleanup()
         console.log('finishing and cleaning up')
         
         const returnObj = {
             input_map: args.txs.map(e => e.id),
-            state_merkle,
-            results: txResults
+            state_merkle: stateMerkle,
+            results: txResults,
+            ledger_results: ledgerResults
         }
 
         console.log('returnObj', returnObj)

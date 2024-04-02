@@ -186,6 +186,9 @@ export interface TransactionDbRecordV2 {
     accessible: boolean
     first_seen: Date
     src: 'vsc' | 'hive'
+    //ID of anchor record
+    anchored_id?: string
+    //Full block ID of Hive block including anchor record
     anchored_block?: string
     anchored_height?: number
     //Witness data
@@ -252,3 +255,21 @@ export interface AccountNonceDbRecord {
     nonce: number
     key_group?: string
 }
+
+
+
+interface LedgerIn {
+    amount: number
+    from: string
+    owner: string
+    unit: "HBD" | "HIVE"
+    dest?: string
+}
+interface LedgerOut {
+    amount: number
+    owner: string
+    to: string
+    unit: "HBD" | "HIVE"
+    dest?: string
+}
+export type LedgerType = LedgerIn | LedgerOut

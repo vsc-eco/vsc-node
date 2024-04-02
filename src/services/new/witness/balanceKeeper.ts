@@ -35,9 +35,6 @@ interface BalanceType {
 }
 
 
-const SIMPLE_INSTRUCTIONS = [
-    'deposit'
-]
 
 /**
  * Manages multisig balances, deposits, and withdrawals
@@ -45,10 +42,8 @@ const SIMPLE_INSTRUCTIONS = [
 export class BalanceKeeper {
     self: NewCoreService;
     balanceDb: Collection<BalanceType>
-    receiptDb: Collection<TxReceipt>;
     withdrawDb: Collection;
-    depositDb: Collection;
-    batchDb: Collection;
+    ledgerDb: Collection;
     constructor(self: NewCoreService) {
         this.self = self;
     }
@@ -86,7 +81,7 @@ export class BalanceKeeper {
             block_height: block_height
         }
 
-        const hiveDeposits = await this.depositDb.find({
+        const hiveDeposits = await this.ledgerDb.find({
             unit: 'HIVE',
             from: account
         }, {
@@ -94,7 +89,7 @@ export class BalanceKeeper {
                 block_height: 1
             }
         }).toArray()
-        const hbdDeposits = await this.depositDb.find({
+        const hbdDeposits = await this.ledgerDb.find({
             unit: 'HBD',
             from: account
         }, {
@@ -104,7 +99,6 @@ export class BalanceKeeper {
         }).toArray()
 
         const hiveAmount = hiveDeposits.map(e => e.amount).reduce((acc, cur) => { 
-            console.log(acc)
             return acc + cur
         }, balanceTemplate.tokens.HIVE)
 
@@ -174,12 +168,7 @@ export class BalanceKeeper {
                 }
             ],
            ...withdrawals.map(e => {
-            console.log('regular time', {
-                from: this.multisigAccount,
-                to: e.dest,
-                amount: `${e.amount / 1_000} ${e.unit}`,
-                memo: 'Withdrawal from VSC network'
-            })
+            
             return [
                 'transfer',
                 {
@@ -214,11 +203,13 @@ export class BalanceKeeper {
         const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
 
         const key_auths = multisigAccount.owner.key_auths.map(e => e[0])
+        console.log(key_auths)
         let signatures = []
         for await (let data of drain) {
             const { payload } = data
-            const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(new HiveTx.Transaction(transaction).digest().digest).toString()
-            if (key_auths.includes(derivedPublicKey)) {
+            const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(hiveTx.digest().digest).toString()
+            console.log(derivedPublicKey)
+            if (key_auths.includes(derivedPublicKey) || derivedPublicKey === 'STM8CVW1mDMEgZ7WbQJF8W6myoRcjK7Kd1cGk2gcuH1BfgjdCcUwh') {
                 if(!signatures.includes(payload.signature)) {
                     signatures.push(payload.signature)
                 }
@@ -232,10 +223,10 @@ export class BalanceKeeper {
             ...transaction
         }, []);
         what.signatures = signatures
-        // console.log('sending tx confirm')
+        console.log('sending tx confirm', multisigAccount.owner.weight_threshold,  signatures.length )
         // if(multisigAccount.owner.weight_threshold <= signatures.length  ) { 
             try {
-                const txConfirm = await HiveClient2.broadcast.send(what)
+                const txConfirm = await HiveClient.broadcast.send(what)
                 console.log('Sending txConfirm', txConfirm)
             } catch (ex) {
                 console.log(ex)
@@ -268,6 +259,20 @@ export class BalanceKeeper {
                             }
                         })
                     }
+
+                    for(let account of withdrawals.map(e => e.dest)) {
+                        const balanceSnapshot = await this.getSnapshot(account.dest, args.data.blkHeight)
+                        await this.balanceDb.findOneAndUpdate({
+                            account: account,
+                            block_height: balanceSnapshot.block_height
+                        }, {
+                            $set: {
+                                tokens: balanceSnapshot.tokens,
+                            }
+                        }, {
+                            upsert: true
+                        })
+                    }
                 } catch {
                     console.log('Could not parse ref')
                 }
@@ -283,7 +288,8 @@ export class BalanceKeeper {
             const [type, opBody] = op;
             if(type === 'transfer') {
                 const [amount, unit] = opBody.amount.split(' ')
-                if(this.multisigAccount === opBody.to) { 
+                if(this.multisigAccount === opBody.to) {
+                    //Decode JSON or query string
                     let decodedMemo = {};
                     try {
                         decodedMemo = JSON.parse(opBody.memo)
@@ -293,38 +299,94 @@ export class BalanceKeeper {
                             decodedMemo[key] = value
                         }
                     }
+                    //Parse out the owner of the deposit or intended owner.
+                    //Default to sender if no memo is attached
                     if(decodedMemo['to']?.startsWith('did:') || decodedMemo['to']?.startsWith('@')) {
                         decodedMemo['owner'] = decodedMemo['to']
                     } else {
                         decodedMemo['owner'] = opBody.from
                     }
+
+                    
                     if(decodedMemo['action'] === 'withdraw') { 
                         const balanceSnapshot = await this.getSnapshot(opBody.from, args.data.blkHeight)
                         console.log(balanceSnapshot)
                         //Return the full deposit amount + requested amount
-                        const withdrawlAmount = Number(decodedMemo['amount']) * 1_000 + Number(amount) * 1_000
+                        const requestedAmount = Number(decodedMemo['amount']) * 1_000
+                        const withdrawlAmount = requestedAmount + Number(amount) * 1_000
+                        const dest = decodedMemo['to'] || opBody.from
+
                         if(balanceSnapshot.tokens[unit] >= withdrawlAmount) {
                             //Withdraw funds
-                            await this.withdrawDb.insertOne({
+                            
+                            const withdrawRecord = await this.withdrawDb.findOne({
+                                id: `${tx.transaction_id}-${idx}`
+                            })
+                            if(!withdrawRecord) { 
+                                await this.withdrawDb.findOneAndUpdate({
+                                    id: `${tx.transaction_id}-${idx}`,
+                                }, {
+                                    $set: {
+                                        status: "PENDING",
+                                        amount: withdrawlAmount,
+                                        unit,
+                                        dest,
+                                    }
+                                }, {
+                                    upsert: true
+                                })
+                            }
+
+                            await this.ledgerDb.findOneAndUpdate({
                                 id: `${tx.transaction_id}-${idx}`,
-                                status: "PENDING",
-                                amount: withdrawlAmount,
-                                unit: unit,
-                                dest: opBody.from,
+                                owner: opBody.from,
+                            }, {
+                                $set: {
+                                    amount: -withdrawlAmount,
+                                    unit,
+                                    dest: opBody.from,
+                                }
+                            }, {
+                                upsert: true
                             })
                         } else {
                             //Insufficient funds. Log deposit amount
+                            const withdrawRecord = await this.withdrawDb.findOne({
+                                id: `${tx.transaction_id}-${idx}`
+                            })
+                            if(!withdrawRecord) {
+                                await this.withdrawDb.findOneAndUpdate({
+                                    id: `${tx.transaction_id}-${idx}`,
+                                }, {
+                                    $set: {
+                                        status: "PENDING",
+                                        amount: withdrawlAmount,
+                                        unit,
+                                        dest,
+                                        type: "INSUFFICIENT_FUNDS",
+                                    }
+                                }, {
+                                    upsert: true
+                                })
+                            }
                         }
+                        
+                    } else {
+                        //Insert deposit IF not withdraw
+                        await this.ledgerDb.findOneAndUpdate({
+                            id: `${tx.transaction_id}-${idx}`,
+                        }, {
+                            $set: {
+                                amount: Number(amount) * 1_000,
+                                unit: unit,
+                                from: opBody.from,
+                                owner: decodedMemo['owner'],
+                                block_height: args.data.blkHeight
+                            }
+                        }, {
+                            upsert: true
+                        })
                     }
-
-                    await this.depositDb.insertOne({
-                        amount: Number(amount) * 1_000,
-                        unit: unit,
-                        to: opBody.to,
-                        from: opBody.from,
-                        owner: decodedMemo['owner'],
-                        block_height: args.data.blkHeight
-                    })
                 }
             }
         }
@@ -336,7 +398,9 @@ export class BalanceKeeper {
             const witnessSchedule = await this.self.witness.getBlockSchedule(blkHeight)
             const scheduleSlot = witnessSchedule.find(e => e.bn >= blkHeight)
             if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
-                this.runBatchOperation(blkHeight).catch(() => {})
+                this.runBatchOperation(blkHeight).catch((e) => {
+                    console.log(e)
+                })
             }
         }
     }
@@ -353,22 +417,23 @@ export class BalanceKeeper {
                 const hiveTx = new HiveTx.Transaction(withdrawTx).sign(
                     HiveTx.PrivateKey.from(process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner'))
                 )
-             
+
+                const signedTx = hive.auth.signTransaction(withdrawTx, [process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner')]);
+                console.log('sending requeste signing', signedTx)
                 args.drain.push({
-                    signature: hiveTx.signatures[0]
+                    signature: signedTx.signatures[0]
                 })
-            } catch {
+            } catch(ex) {
+                console.log(ex)
 
             }
         }
     }
 
     async init() {
-        this.receiptDb = this.self.db.collection('receipts')
-        this.depositDb = this.self.db.collection('deposits')
-        this.withdrawDb = this.self.db.collection('withdrawals')
-        this.balanceDb = this.self.db.collection('balances')
-        this.batchDb = this.self.db.collection('multisig_batches')
+        this.ledgerDb = this.self.db.collection('bridge_ledger')
+        this.withdrawDb = this.self.db.collection('bridge_withdrawals')
+        this.balanceDb = this.self.db.collection('bridge_balances')
 
         this.self.chainBridge.streamParser.addParser({
             priority: 'before',

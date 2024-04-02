@@ -115,13 +115,13 @@ export class StreamParser {
             }
         }
         
-        
         await this.events.updateOne({
             id: 'hive_block',
             key: block_height
         }, {
             $set: {
                 block_id: block.block_id,
+                timestamp: new Date(block.timestamp + 'Z'),
                 transactions
             }
         }, {
@@ -236,7 +236,10 @@ export class StreamParser {
                                 type: 'tx',
                                 data: {
                                     tx,
-                                    blkHeight: Number(blk.key)
+                                    //Fix: to underscore case.
+                                    blkHeight: Number(blk.key),
+                                    block_id: blk.block_id,
+                                    timestamp: blk.timestamp
                                 },
                                 halt: this.halt
                             })

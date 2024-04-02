@@ -699,7 +699,7 @@ export class WitnessServiceV2 {
       const consensusRound = await this.calculateConsensusRound(blockHeight)
       const electionResult = await this.self.electionManager.getValidElectionOfblock(blockHeight)
       // console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
-      if(this.witnessSchedule.valid_height === consensusRound.pastRoundHeight && electionResult.epoch === this.witnessSchedule.valid_epoch) {
+      if(this.witnessSchedule.valid_height === consensusRound.pastRoundHeight && electionResult?.epoch === this.witnessSchedule.valid_epoch) {
         // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
         return this.witnessSchedule.schedule;
       }

@@ -1,12 +1,14 @@
-import { Collection, Filter } from 'mongodb'
+import { Collection, WithId } from 'mongodb'
 
 import { fastStream, sleep } from "../../../utils";
+import { HiveTransactionDbRecord } from '../types';
 
 
 
 export interface EventRecord {
     id: "hive_block"
     key: string | number
+    transactions: HiveTransactionDbRecord[]
     [k: string]: any
 }
 
@@ -17,14 +19,18 @@ type FilterFunction = (txData: {
 }
 
 
-export interface ParserFuncArgs {
-    type: 'block' | 'tx', 
-    data: any | {
-        tx: any
+export type ParserFuncArgs = {
+    halt: () => Promise<void>
+} &( {
+    type: 'block'
+    data: WithId<EventRecord>
+} | {
+    type: 'tx'
+    data:     {
+        tx: EventRecord['transactions'][0]
         blkHeight: number
     }
-    halt: () => Promise<void>
-}
+})
 
 export type ParserFunc = (args: ParserFuncArgs) => Promise<void>
 

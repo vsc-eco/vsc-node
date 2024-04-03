@@ -21,6 +21,7 @@ async function startup(): Promise<void> {
     await core.stop()
     await coreNew.stop()
     await api.stop()
+    process.exit(code)
   };
 
   process.on("SIGINT", () => cleanup(0));

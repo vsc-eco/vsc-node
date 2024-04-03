@@ -129,15 +129,15 @@ export class ContractEngineV2 {
                     if (proofRequired) {
                         // validate proof
                         if (
-                            typeof json.codeStorageProof?.hash !== 'string' ||
-                            typeof json.codeStorageProof?.signature !== 'object' ||
-                            typeof json.codeStorageProof?.signature?.sig !=='string' ||
-                            typeof json.codeStorageProof?.signature?.bv !=='string'
+                            typeof json.storage_proof?.hash !== 'string' ||
+                            typeof json.storage_proof?.signature !== 'object' ||
+                            typeof json.storage_proof?.signature?.sig !=='string' ||
+                            typeof json.storage_proof?.signature?.bv !=='string'
                         ) {
                             continue;
                         }
                         try {
-                            const cid = CID.parse(json.codeStorageProof.hash)
+                            const cid = CID.parse(json.storage_proof.hash)
                             const {value: msg} = await this.self.ipfs.dag.get(cid)
                             if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availability') {
                                 continue;
@@ -147,7 +147,7 @@ export class ContractEngineV2 {
                             }
                             members ??= (await this.self.electionManager.getMembersOfBlock(blkHeight))
                                 .map((m) => m.key);
-                            const isValid = await BlsCircuit.deserialize({hash: cid.bytes, signature: json.codeStorageProof.signature}, members)
+                            const isValid = await BlsCircuit.deserialize({hash: cid.bytes, signature: json.storage_proof.signature}, members)
                                                             .verify(cid.bytes);
                             if (!isValid) {
                                 this.self.logger.info(

@@ -7,7 +7,7 @@ const REQUEST_TOPIC = 'file-upload-request'
 const REQUEST_DATA_TOPIC = 'file-upload-request-data'
 const RESPONSE_TOPIC = 'file-upload-response'
 
-const AUTO_REMOVE_REQUEST_TIMEOUT_MS = 10000
+const AUTO_REMOVE_REQUEST_TIMEOUT_MS = 100000
 
 const REQUIRED_VERIFIERS = 6
 
@@ -240,6 +240,17 @@ export class FileUploadManager {
           }
 
           if (respInfo.type === 'proof') {
+            const data = await ipfs.dag.put(
+              {
+                type: 'data-availability',
+                cid: respInfo.cid,
+              },
+              { onlyHash: true },
+            )
+            if (data.toString() !== respInfo.data) {
+              console.log('invalid signing data')
+              return
+            }
             const msg = CID.parse(respInfo.data).bytes
             const proof = BlsCircuit.deserialize(
               {

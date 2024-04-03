@@ -98,12 +98,12 @@ export class ChainBridgeV2 {
         }
     }
 
-    protected async blockParser(args: ParserFuncArgs) {
+    protected async blockParser(args: ParserFuncArgs<'tx'>) {
         const {data, halt} = args;
 
         const {tx, blkHeight, block_id, timestamp} = data;
 
-        for(let [op, opPayload] of tx.operations) {
+        for(const [op, opPayload] of tx.operations) {
 
             // console.log('The teleporter is broken!', op, opPayload)
 

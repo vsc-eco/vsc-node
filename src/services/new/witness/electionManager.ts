@@ -10,6 +10,7 @@ import { CID } from "kubo-rpc-client";
 import { HiveClient } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { VersionConfig } from "./versionManager";
+import EventEmitter from 'node:events';
 
 
 interface ElectionResult {
@@ -112,6 +113,14 @@ export class ElectionManager {
     electionDb: Collection<ElectionResult>
     epochLength: number;
     mongoLogs: Collection<LogEntry>;
+    public readonly eventEmitter: EventEmitter<{
+        'new-epoch': [{ 
+            hive_block: number;
+            epoch: number; 
+            net_id: string; 
+            members: Array<{ account: string; key: string }>;
+        }]
+    }> = new EventEmitter();
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -325,12 +334,12 @@ export class ElectionManager {
         }
     }
 
-    async btIndexElection(args: ParserFuncArgs) {
+    async btIndexElection(args: ParserFuncArgs<'tx'>) {
         const {data} = args;
 
         const {tx, blkHeight} = data;
 
-        let [op, opPayload] = tx.operations[0]
+        const [op, opPayload] = tx.operations[0]
 
         if(op === 'custom_json') {
             if (opPayload.id === 'vsc.election_result') {
@@ -395,6 +404,7 @@ export class ElectionManager {
                         }, {
                             upsert: true
                         })
+                        this.eventEmitter.emit('new-epoch', { hive_block: blkHeight, epoch: json.epoch, net_id: json.net_id, members })
                     } else {
                         await this.log(`Election result already exists for epoch ${json.epoch}`)
                     }

@@ -23,6 +23,7 @@ import { Ed25519Provider } from 'key-did-provider-ed25519';
 import { DID } from 'dids';
 import KeyResolver from 'key-did-resolver'
 import { createJwsMultsign, verifyMultiJWS } from '../../utils';
+import type { Message } from '@libp2p/interface-pubsub'
 
 
 
@@ -117,7 +118,10 @@ export class PeerChannel {
     
     
 
-    private async onMessageReceive(msg: any) {
+    private async onMessageReceive(msg: Message) {
+        if (msg.type !== 'signed') {
+            return;
+        }
         const raw_payload = Buffer.from(msg.data).toString()
         const json_payload = JSON.parse(raw_payload)
        
@@ -126,7 +130,7 @@ export class PeerChannel {
             return;
         }
 
-        if(msg.from === this.target || this._multicast === true) {
+        if(msg.from.toString() === this.target || this._multicast === true) {
             if(!this.connectionAlive) {
                 this.connectionAlive = true;
                 this.events.emit('connection_established')
@@ -163,7 +167,7 @@ export class PeerChannel {
                     this._handles[json_payload.type].handler({from: msg.from.toString(), message: json_payload.payload, drain, sink})
                 }
             } else {
-                await this.events.emit('message', {
+                this.events.emit('message', {
                    from: msg.from,
                    type: json_payload.type, 
                    req_id: json_payload.req_id,

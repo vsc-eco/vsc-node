@@ -4,6 +4,9 @@ import { AddrRecord, TransactionContainerV2, TransactionDbRecordV2 } from "./typ
 import { encodePayload } from 'dag-jose-utils'
 import { bech32 } from "bech32";
 import { VmContainer } from "./vm/utils";
+import { CID } from "kubo-rpc-client";
+import { ParserFuncArgs } from "./utils/streamUtils";
+import { BlsCircuit } from "./utils/crypto/bls-did";
 
 
 enum ContractErrors {
@@ -93,6 +96,8 @@ class VmContext {
     }
 }
 
+const CONTRACT_DATA_AVAILABLITY_PROOF_REQUIRED_HEIGHT =  84162592;
+
 export class ContractEngineV2 {
     self: NewCoreService;
     addrsDb: Collection<AddrRecord>;
@@ -105,8 +110,12 @@ export class ContractEngineV2 {
         this.blockParser = this.blockParser.bind(this)
     }
     
-    protected async blockParser(args) {
-        const {tx} = args.data
+    protected async blockParser(args: ParserFuncArgs<'tx'>) {
+        const {tx, blkHeight} = args.data
+
+        const proofRequired = blkHeight >= CONTRACT_DATA_AVAILABLITY_PROOF_REQUIRED_HEIGHT
+
+        let members: string[] | undefined = undefined
 
         for(let index in tx.operations) {
             const [opName, op] = tx.operations[index]
@@ -117,15 +126,50 @@ export class ContractEngineV2 {
     
                 console.log('OPPAYLOAD DATA INSERT', op, opName)
                 if(op.id === "vsc.create_contract") {
+                    if (proofRequired) {
+                        // validate proof
+                        if (
+                            typeof json.storage_proof?.hash !== 'string' ||
+                            typeof json.storage_proof?.signature !== 'object' ||
+                            typeof json.storage_proof?.signature?.sig !=='string' ||
+                            typeof json.storage_proof?.signature?.bv !=='string'
+                        ) {
+                            continue;
+                        }
+                        try {
+                            const cid = CID.parse(json.storage_proof.hash)
+                            const {value: msg} = await this.self.ipfs.dag.get(cid)
+                            if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availability') {
+                                continue;
+                            }
+                            if (msg.cid !== json.code) {
+                                continue;
+                            }
+                            members ??= (await this.self.electionManager.getMembersOfBlock(blkHeight))
+                                .map((m) => m.key);
+                            const isValid = await BlsCircuit.deserialize({hash: cid.bytes, signature: json.storage_proof.signature}, members)
+                                                            .verify(cid.bytes);
+                            if (!isValid) {
+                                this.self.logger.info(
+                                `contract storage proof is invalid for op ${index} tx ${tx.transaction_id}`,
+                                )
+                                continue
+                            }
+                        } catch (e) {
+                            this.self.logger.error(`failed to verify contract storage proof for op ${index} tx ${tx.transaction_id}: ${e}`)
+                            continue;
+                        }
+                    }
+
+                    console.log('pinning contract CID', json.code);
+                    await this.self.ipfs.pin.add(json.code)
+
                     const contractIdHash = (await encodePayload({
                         ref_id: tx.transaction_id,
                         index //Note index in TX
                     })).cid
         
                     const bech32Addr = bech32.encode('vs4', bech32.toWords(contractIdHash.bytes));
-
-                    console.log('pinning contract CID', json.code);
-                    await this.self.ipfs.pin.add(json.code)
         
                     console.log('smart contract addr', bech32Addr)
                     await this.contractDb.findOneAndUpdate({

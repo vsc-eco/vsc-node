@@ -76,13 +76,6 @@ export const schema = `
         enabled_at: Int
         trusted: Boolean
     }
-    type findCIDResult {
-        type: String
-        data: JSON
-        link: String
-        payload: String
-        signatures: JSON
-    }
     interface BalanceController {
         type: BalanceControllerType
         authority: String
@@ -161,7 +154,6 @@ export const schema = `
         # Need Revision
         
         findContract(id: String): FindContractResult
-        findCID(id: String): findCIDResult
 
         # End Need Revision
         

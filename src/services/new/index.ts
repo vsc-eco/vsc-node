@@ -18,6 +18,7 @@ import { AddrRecord } from './types';
 import { ContractEngineV2 } from './contractEngineV2';
 import { VersionManager } from './witness/versionManager';
 import { ElectionManager } from './witness/electionManager';
+import { FileUploadManager } from './fileUploadManager';
 
 
 export class NewCoreService {
@@ -38,6 +39,7 @@ export class NewCoreService {
     miscDb: Collection;
     versionManager: VersionManager
     electionManager: ElectionManager
+    fileUploadManager: FileUploadManager;
     nonceMap: Collection;
     
     constructor() {
@@ -59,6 +61,7 @@ export class NewCoreService {
         this.contractEngine = new ContractEngineV2(this)
         this.versionManager = new VersionManager(this)
         this.electionManager = new ElectionManager(this)
+        this.fileUploadManager = new FileUploadManager(this)
     }
     
     async init(oldService) {
@@ -93,9 +96,10 @@ export class NewCoreService {
         await this.nodeIdentity.start()
         await this.witness.start()
         await this.electionManager.start()
+        await this.fileUploadManager.start()
     }
 
     async stop() {
-
+        await this.fileUploadManager.stop()
     }
 }

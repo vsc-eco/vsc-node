@@ -329,9 +329,9 @@ export class MultisigSystem {
         await this.self.chainBridge.streamParser.addParser({
             type: "block",
             priority: "after",
-            func: async (data: ParserFuncArgs) => { 
+            func: async (data: ParserFuncArgs<'block'>) => { 
                 const block = data.data
-                const block_height = block.key
+                const block_height = Number(block.key)
 
                 if(block_height % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
                     const slotInfo = await this.self.witness.calculateConsensusRound(block_height)

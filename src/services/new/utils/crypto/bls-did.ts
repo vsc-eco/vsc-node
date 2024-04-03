@@ -17,7 +17,7 @@ import { SignaturePacked, SignatureType } from '../../types'
  * G1 BLS curves
  */
 export class BlsDID {
-  private privKey: SecretKey
+  private privKey: SecretKey | undefined
   pubKey: PublicKey
 
   constructor({ privKey, pubKey }: { privKey?: SecretKey; pubKey: PublicKey }) {
@@ -37,22 +37,22 @@ export class BlsDID {
     return `did:key:z${u8a.toString(bytes, 'base58btc')}`
   }
 
-  async verify({ msg, sig }) {
+  async verify({ msg, sig }: { msg: Uint8Array | string; sig: Uint8Array | string }) {
     let signature: Signature
     if (typeof sig === 'string') {
       signature = bls.Signature.fromBytes(decodeBase64(sig))
     } else {
       signature = bls.Signature.fromBytes(sig)
     }
-    if (typeof sig === 'string') {
-      msg = decodeBase64(sig)
+    if (typeof msg === 'string') {
+      msg = decodeBase64(msg)
     } else {
       msg = msg
     }
     return signature.verify(this.pubKey, msg)
   }
 
-  async sign(msg) {
+  async sign(msg: Record<string, any>): Promise<string> {
     if (!this.privKey) {
       throw new Error('No private key!')
     }
@@ -70,7 +70,7 @@ export class BlsDID {
     }
   }
   
-  async signPacked(msg) {
+  async signPacked(msg: Record<string, any>) {
     if (!this.privKey) {
       throw new Error('No private key!')
     }
@@ -84,7 +84,7 @@ export class BlsDID {
     }
   }
   
-  async signObject(msg): Promise<SignaturePacked> {
+  async signObject<Message extends Record<string, any>>(msg: Message): Promise<Message & SignaturePacked> {
     if (!this.privKey) {
       throw new Error('No private key!')
     }
@@ -129,13 +129,10 @@ export class BlsDID {
 export class BlsCircuit {
   did: BlsDID
   sig: Signature
-  msg: {
-    data: Uint8Array
-    hash: Uint8Array
-  }
+  msg: { hash: Uint8Array;} | { data: string }
   aggPubKeys: Map<string, boolean>
   // bitSet: BitSet
-  constructor(msg) {
+  constructor(msg: { hash: Uint8Array;} | { data: string }) {
     this.msg = msg
 
     this.aggPubKeys = new Map()
@@ -153,12 +150,12 @@ export class BlsCircuit {
       const did = BlsDID.fromString(e.did)
       let sig = bls.Signature.fromBytes(Buffer.from(e.sig, 'base64url'))
 
-      let msg;
-      if(this.msg.hash) {
+      let msg: Uint8Array;
+      if('hash' in this.msg) {
         msg = this.msg.hash
         console.log('this.msg.hash', this.msg.hash)
       } else {
-        msg = (await encodePayload(this.msg.data)).cid.bytes
+        msg = (await encodePayload(this.msg.data as any)).cid.bytes
       }
       if (sig.verify(did.pubKey, msg)) {
         this.aggPubKeys.set(did.id, true)
@@ -191,19 +188,19 @@ export class BlsCircuit {
     }
   }
 
-  async verify(msg) {
+  async verify(msg: Uint8Array) {
     return this.sig.verify(
       this.did.pubKey,
       msg,
     )
   }
 
-  async verifySig(data: {sig: string, pub}) {
-    let msg;
-    if(this.msg.hash) {
+  async verifySig(data: {sig: string, pub: string}) {
+    let msg: Uint8Array;
+    if('hash' in this.msg) {
       msg = this.msg.hash
     } else {
-      msg = (await encodePayload(this.msg.data)).cid.bytes
+      msg = (await encodePayload(this.msg.data as any)).cid.bytes
     }
     const did = BlsDID.fromString(data.pub)
     return bls.Signature.fromBytes(Buffer.from(data.sig, 'base64url')).verify(
@@ -258,7 +255,8 @@ export class BlsCircuit {
     }
   }
 
-  static deserialize(signedPayload, keyset: Array<string>) {
+  static deserialize(signedPayload: ({ hash: Uint8Array;} | { data: string }) & {signature: {bv: string; sig: string}}, 
+  keyset: Array<string>) {
     const signature = signedPayload.signature
     delete signedPayload.signature
 
@@ -267,18 +265,91 @@ export class BlsCircuit {
 
     console.log(bs)
     const pubKeys = new Map();
+    const pubKeyArray: string[] = []
     for(let keyIdx in keyset) {
       if(bs.get(Number(keyIdx)) === 1) {
         pubKeys.set(keyset[keyIdx], true)
+        pubKeyArray.push(keyset[keyIdx])
       }
     }
 
     let circuit = new BlsCircuit(signedPayload);
     circuit.aggPubKeys = pubKeys
+    circuit.setAgg(pubKeyArray)
     circuit.sig = bls.Signature.fromBytes(Buffer.from(signature.sig, 'base64url'))
 
 
     return circuit;
+  }
+}
+
+export class BlsCircuitGenerator {
+  constructor(private readonly members: {
+    account: string;
+    key: string;
+}[]) {
+  }
+
+  generate(msg: { hash: Uint8Array } | { data: string }): PartialBlsCircuit {
+    return new PartialBlsCircuit(msg, this.members)
+  }
+
+  updateMembers(
+    members: {
+      account: string
+      key: string
+    }[],
+  ) {
+    this.members.splice(0, this.members.length);
+    this.members.push(...members)
+  }
+
+  get circuitMap() {
+    return this.members.map((e) => {
+      return e.key
+    })
+  }
+}
+
+export class PartialBlsCircuit {
+  private circuit: BlsCircuit
+  constructor(msg: { hash: Uint8Array } | { data: string }, private members: {
+    account: string;
+    key: string;
+  }[]) {
+    this.circuit = new BlsCircuit(msg)
+  }
+
+  finalize(): BlsCircuit {
+    return this.circuit
+  }
+
+  get circuitMap() {
+    return this.members.map((e) => {
+      return e.key
+    })
+  }
+
+  async addAndVerify(pub: string, sig: string): Promise<boolean> {
+    if(!this.members.find(e => {
+      return e.key === pub
+    })) {
+      return false;
+    }
+
+    const verifiedSig = await this.circuit.verifySig({
+      sig: sig,
+      pub: pub,
+    });
+
+    if(verifiedSig) {
+      await this.circuit.add({
+        did: pub,
+        sig
+      })
+      return true
+    }
+    return false
   }
 }
 

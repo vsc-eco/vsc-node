@@ -16,6 +16,7 @@
     "@nestjs/platform-express": "^8.4.7",
     "@summa-tx/bitcoin-spv-js": "^4.0.2",
     "@transmute/did-key-bls12381": "^0.3.0-unstable.10",
+    "@types/node": "^20.12.2",
     "@vsc.eco/client": "^0.0.4",
     "@vsc.eco/sdk": "^0.1.3",
     "ajv": "^6.12.6",

@@ -9,6 +9,7 @@ import Ajv from "ajv"
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
 import { computeKeyId, verifyTx } from '../../../services/new/utils';
 import { TransactionContainerV2 } from '../../../services/new/types';
+import { HiveClient } from '../../../utils';
 
 const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
 
@@ -434,5 +435,9 @@ export const Resolvers = {
     return {
       nonce
     }
+  },
+  getAccountBalance: async (_, args) => {
+    const bh = await HiveClient.blockchain.getCurrentBlockNum()
+    return await appContainer.self.newService.witness.balanceKeeper.getSnapshot(args.account, bh)
   }
 }

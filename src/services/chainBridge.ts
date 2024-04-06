@@ -21,6 +21,7 @@ import { PayloadTooLargeException } from '@nestjs/common'
 import { loggers } from 'winston'
 import { YogaServer } from 'graphql-yoga'
 import { WithdrawFinalization } from '../types/coreTransactions'
+import telemetry from '../telemetry'
 
 
 export class ChainBridge {
@@ -1112,6 +1113,11 @@ export class ChainBridge {
           id: 'last_hb_processed'
         })
         if(stateHeader) {
+          telemetry.captureEvent('hive_sync_status', {
+            blockLag: this.self.newService.chainBridge.blockLag,
+            streamRate: Math.round(diff / 15),
+            parseLag: this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val,
+          })
           this.self.logger.info(`blockLag blockLag=${this.self.newService.chainBridge.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val}`)
         } else {
           this.self.logger.info(`blockLag`, {

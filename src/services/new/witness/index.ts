@@ -18,6 +18,8 @@ import { computeKeyId, sortTransactions } from '../utils';
 import { MultisigSystem } from './multisig';
 import { BalanceKeeper } from './balanceKeeper';
 
+import telemetry from '../../../telemetry';
+
 const Constants = {
   block_version: 1
 }
@@ -502,6 +504,12 @@ export class WitnessServiceV2 {
     }
 
     async proposeBlock(block_height: number) {
+      telemetry.captureEvent(`block consensus ${block_height}`, {
+        block_height,
+        lastest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposal: true,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
 
       const lastHeader = await this.blockHeaders.findOne({
         
@@ -759,6 +767,13 @@ export class WitnessServiceV2 {
           //Ensure witness slot is within slot start and end
           // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
           return e.bn === slotHeight && e.account === fromWitness.account
+      })
+
+      telemetry.captureEvent(`block consensus ${slotHeight}`, {
+        block_height: slotHeight,
+        latest_block: block_height,
+        proposal: false,
+        proposer: fromWitness.account,
       })
 
       if(!witnessSlot) {

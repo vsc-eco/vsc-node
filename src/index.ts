@@ -1,8 +1,10 @@
 import { ApiModule } from "./modules/api/index"
 import { CoreService } from "./services"
 import { NewCoreService } from "./services/new";
+import telemetry from "./telemetry";
 
 async function startup(): Promise<void> {
+  telemetry.start()
   
   const coreNew = new NewCoreService();
   const core = new CoreService({
@@ -11,6 +13,10 @@ async function startup(): Promise<void> {
   await core.start()
 
   await coreNew.init(core)
+
+  // consensusKey initialized in coreNew.init()
+  telemetry.setUserId(coreNew.consensusKey.id, process.env.HIVE_ACCOUNT)
+
   await coreNew.start()
   
   const api = new ApiModule(1337, core)
@@ -21,6 +27,7 @@ async function startup(): Promise<void> {
     await core.stop()
     await coreNew.stop()
     await api.stop()
+    await telemetry.stop()
     process.exit(code)
   };
 

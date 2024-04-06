@@ -333,9 +333,9 @@ export type HiveTransactionDbRecord = {
     operations: AnyOperation[]
 }
 
-export type AnyOperation = IndexedKeysToTuple<ListOfOperations> & ListOfOperations
+export type AnyOperation = IndexedKeysToTuple<ListOfOperations>
 
-type IndexedKeysToTuple<T extends {0: any; 1: any}> = [T[0], T[1]]
+type IndexedKeysToTuple<T extends {0: any; 1: any}> = T extends {0: infer A; 1: infer B} ? [A, B] : never
 
 type ListOfOperations =
   | AccountCreateOperation

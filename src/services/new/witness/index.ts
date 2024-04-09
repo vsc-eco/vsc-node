@@ -805,7 +805,7 @@ export class WitnessServiceV2 {
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        recvCtx = telemetry.continueTracedEvent(`received block proposal ${block_height}`, message.traceInfo, {
+        recvCtx = telemetry.continueTracedEvent(`received block proposal ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),
@@ -818,7 +818,7 @@ export class WitnessServiceV2 {
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${block_height}`, message.traceInfo, {
+        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),
@@ -845,7 +845,7 @@ export class WitnessServiceV2 {
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${block_height}`, message.traceInfo, {
+        verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),

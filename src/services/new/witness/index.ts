@@ -800,12 +800,12 @@ export class WitnessServiceV2 {
       const {message, drain, from} = pubReq;
 
       let recvCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
-      if (message?.payload?.traceInfo) {
+      if (message?.traceInfo) {
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        recvCtx = telemetry.continueTracedEvent(`received block proposal ${block_height}`, message.payload.traceInfo, {
+        recvCtx = telemetry.continueTracedEvent(`received block proposal ${block_height}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),
@@ -813,12 +813,12 @@ export class WitnessServiceV2 {
       }
 
       let cadBlockCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
-      if (message?.payload?.traceInfo) {
+      if (message?.traceInfo) {
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${block_height}`, message.payload.traceInfo, {
+        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${block_height}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),
@@ -840,12 +840,12 @@ export class WitnessServiceV2 {
       cadBlockCtx?.finish()
 
       let verifyingCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
-      if (message?.payload?.traceInfo) {
+      if (message?.traceInfo) {
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${block_height}`, message.payload.traceInfo, {
+        verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${block_height}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),

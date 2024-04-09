@@ -123,9 +123,7 @@ export class WitnessServiceV2 {
         valid_epoch?: number | null
         schedule?: Array<any>
     }
-    //Precomputed list of blocks
-    _candidateBlocks: Record<string, any>
-    candidateApprovalsDb: Collection
+
     //VSC block headres ref
     blockHeaders: Collection<BlockHeader>
     delayMonitor: DelayMonitor;
@@ -147,9 +145,6 @@ export class WitnessServiceV2 {
         this.witnessSchedule = {
           valid_height: null,
           valid_epoch: null
-        }
-        this._candidateBlocks = {
-
         }
     }
 
@@ -812,32 +807,32 @@ export class WitnessServiceV2 {
         })
       }
 
-      let cadBlockCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
+      let updateCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${slotHeight}`, message.traceInfo, {
+        updateCtx = telemetry.continueTracedEvent(`waiting for node to be up to date ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
           from: from?.toString(),
         })
       }
       
-      let cadBlock = this._candidateBlocks[message.block_height]
-      if(!cadBlock) {
-        for(let attempts = 0; attempts < 12; attempts++) {
-          if(this._candidateBlocks[message.block_height]) {
-            cadBlock = this._candidateBlocks[message.block_height]
-            break;
-          } else {
-            await sleep(1_000)
-          }
-        }
+      const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+      const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+
+      for(let attempts = 0; attempts < 12 && this.self.chainBridge.streamParser.lastParsed < slotHeight; attempts++) {
+        await sleep(1_000)
       }
 
-      cadBlockCtx?.finish()
+      updateCtx?.finish()
+      
+      if (this.self.chainBridge.streamParser.lastParsed < slotHeight) {
+        recvCtx?.finish()
+        return
+      }
 
       let verifyingCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
@@ -1075,23 +1070,6 @@ export class WitnessServiceV2 {
         verifyingCtx?.finish()
         recvCtx?.finish()
       }
-
-      if(cadBlock) {
-        // delete cadBlock.block
-        // cadBlock.block = CID.parse(cadBlock.block.toString())
-        // console.log('cadBlock.signRaw', cadBlock, (await encodePayload(cadBlock)).cid, await this.self.ipfs.block.put(IPLDDag.util.serialize(cadBlock), {
-        //   format: 'dag-cbor'
-        // }), await this.self.ipfs.dag.put(cadBlock), await this.self.ipfs.dag.put({
-        //   testLink: CID.parse(cadBlock.block.toString())
-        // }))
-        
-        
-      }
-      // const cid = CID.parse(message.hash)
-      // const signData = await this.self.consensusKey.signRaw(cid.bytes)
-      // console.log(signData)
-
-      // drain.push(signData)
     }
 
     async init() {

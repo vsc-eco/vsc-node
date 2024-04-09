@@ -63,7 +63,7 @@ export class BalanceKeeper {
     }
 
     async getSnapshot(account: string, block_height: number) { 
-        const lastBalance = await this.balanceDb.findOne({account: account})
+        const lastBalance = await this.balanceDb.findOne({account: 'fakeaccoun'})
 
         const balanceTemplate = lastBalance ? {
             account: account,
@@ -83,7 +83,10 @@ export class BalanceKeeper {
 
         const hiveDeposits = await this.ledgerDb.find({
             unit: 'HIVE',
-            from: account
+            owner: account,
+            block_height: {
+                $lte: block_height
+            }
         }, {
             sort: {
                 block_height: 1
@@ -91,7 +94,10 @@ export class BalanceKeeper {
         }).toArray()
         const hbdDeposits = await this.ledgerDb.find({
             unit: 'HBD',
-            from: account
+            owner: account,
+            block_height: {
+                $lte: block_height
+            }
         }, {
             sort: {
                 block_height: 1
@@ -307,13 +313,23 @@ export class BalanceKeeper {
                         decodedMemo['owner'] = opBody.from
                     }
 
+                    if(decodedMemo['action'] === 'donate_fill') {
+                        //For now don't account anything
+                        return;
+                    }
+
+                    if(decodedMemo['action'] === 'donate') { 
+                        //In the future donate to consensus running witnesses
+                        return;
+                    }
+
                     
                     if(decodedMemo['action'] === 'withdraw') { 
                         const balanceSnapshot = await this.getSnapshot(opBody.from, args.data.blkHeight)
-                        console.log(balanceSnapshot)
                         //Return the full deposit amount + requested amount
                         const requestedAmount = Number(decodedMemo['amount']) * 1_000
-                        const withdrawlAmount = requestedAmount + Number(amount) * 1_000
+                        const sentAmount = Number(amount) * 1_000
+                        const withdrawlAmount = requestedAmount + sentAmount
                         const dest = decodedMemo['to'] || opBody.from
 
                         if(balanceSnapshot.tokens[unit] >= withdrawlAmount) {
@@ -330,6 +346,7 @@ export class BalanceKeeper {
                                         status: "PENDING",
                                         amount: withdrawlAmount,
                                         unit,
+                                        from: opBody.from,
                                         dest,
                                     }
                                 }, {
@@ -342,9 +359,10 @@ export class BalanceKeeper {
                                 owner: opBody.from,
                             }, {
                                 $set: {
-                                    amount: -withdrawlAmount,
+                                    amount: -requestedAmount,
                                     unit,
                                     dest: opBody.from,
+                                    block_height: args.data.blkHeight
                                 }
                             }, {
                                 upsert: true
@@ -360,10 +378,11 @@ export class BalanceKeeper {
                                 }, {
                                     $set: {
                                         status: "PENDING",
-                                        amount: withdrawlAmount,
+                                        amount: sentAmount,
                                         unit,
                                         dest,
                                         type: "INSUFFICIENT_FUNDS",
+                                        block_height: args.data.blkHeight
                                     }
                                 }, {
                                     upsert: true

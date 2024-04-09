@@ -343,6 +343,16 @@ export const Resolvers = {
   },
   getAccountBalance: async (_, args) => {
     const bh = await HiveClient.blockchain.getCurrentBlockNum()
-    return await appContainer.self.newService.witness.balanceKeeper.getSnapshot(args.account, bh)
+
+    const snapshot = await appContainer.self.newService.witness.balanceKeeper.getSnapshot(args.account, bh);
+    return {
+      account: snapshot.account,
+      tokens: {
+        HBD: snapshot.tokens.HBD / 1_000,
+        HIVE: snapshot.tokens.HIVE / 1_000,
+
+      },
+      block_height: snapshot.block_height
+    }
   }
 }

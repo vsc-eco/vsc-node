@@ -14,7 +14,7 @@ import { BlockHeader, TransactionDbStatus, TransactionDbType } from '../types';
 import { PrivateKey } from '@hiveio/dhive';
 import { DelayMonitor } from './delayMonitor';
 import { simpleMerkleTree } from '../utils/crypto';
-import { computeKeyId, sortTransactions } from '../utils';
+import { ParserFuncArgs, computeKeyId, sortTransactions } from '../utils';
 import { MultisigSystem } from './multisig';
 import { BalanceKeeper } from './balanceKeeper';
 
@@ -504,10 +504,9 @@ export class WitnessServiceV2 {
     }
 
     async proposeBlock(block_height: number) {
-      telemetry.captureEvent(`block consensus ${block_height}`, {
+      const proposalCtx = telemetry.captureTracedEvent(`proposal ${block_height}`, {
         block_height,
-        lastest_block: this.self.chainBridge.streamParser.stream.lastBlock,
-        proposal: true,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
         proposer: process.env.HIVE_ACCOUNT,
       })
 
@@ -523,6 +522,11 @@ export class WitnessServiceV2 {
       //If no other header is available. Use genesis day as range
       const start_height = lastHeader ? lastHeader.end_block + 1 : networks[this.self.config.get('network.id')].genesisDay
 
+      const creatingBlockCtx = telemetry.continueTracedEvent(`creating block ${block_height}`, proposalCtx.traceInfo, {
+        block_height,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
       const blockContainer = await this.createBlock({
         end_height: block_height,
         start_height: start_height
@@ -531,12 +535,20 @@ export class WitnessServiceV2 {
         end_height: block_height,
         start_height: start_height
       }, blockContainer.toObject())
+      creatingBlockCtx.finish()
 
       if(blockContainer.rawData.txs.length === 0) {
         console.log("Cant produce blocks: 0 TXs")
+        proposalCtx.finish()
         //Don't produce block if no TXs
         return;
       }
+
+      const blockEncoderCtx = telemetry.continueTracedEvent(`block header encoding ${block_height}`, proposalCtx.traceInfo, {
+        block_height,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
 
       const blockHeader = await blockContainer.toHeader()
 
@@ -546,7 +558,15 @@ export class WitnessServiceV2 {
         ...blockHeader,
         block: blockHeader.block.toString()
       })
+      blockEncoderCtx.finish()
       await sleep(4_000)
+
+      const p2pCtx = telemetry.continueTracedEvent(`transmitting block ${block_height}`, proposalCtx.traceInfo, {
+        block_height,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
+
       const {drain} = await this.self.p2pService.memoryPoolChannel.call('propose_block', {
         payload: {
           block_header: {
@@ -556,10 +576,20 @@ export class WitnessServiceV2 {
           block_full: blockContainer.toObject(),
           block_height,
           hash: encodedPayload.cid.toString(),
+          traceInfo: proposalCtx.traceInfo,
         },
         mode: 'stream',
         streamTimeout: 15_000
       })
+
+      p2pCtx.finish()
+
+      const pinningCtx = telemetry.continueTracedEvent(`pinning & signing ${block_height}`, proposalCtx.traceInfo, {
+        block_height,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
+
       const blockHash = await this.self.ipfs.dag.put(blockHeader);
       console.log('BlsCircuit', blockHeader, blockHash)
       const circuit = new BlsCircuit({
@@ -574,14 +604,37 @@ export class WitnessServiceV2 {
         pub: JSON.parse(Buffer.from(signedData.p, 'base64url').toString()).pub,
         sig: signedData.s
       }))
+
+      pinningCtx.finish()
       // console.log('Stage 2')
       // console.log('keysMap', keysMap.length, keys.map(e => e.account))
       // console.log('witness.sign', blockHeader)
       // console.log(keysMap)
       
-      
+      let revcCtx = telemetry.continueTracedEvent(`waiting for signatures ${block_height}`, proposalCtx.traceInfo, {
+        block_height,
+        latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+        proposer: process.env.HIVE_ACCOUNT,
+      })
+
       let voteMajority = 0.67
-      for await(let sigMsg of drain) {
+      const iter = drain[Symbol.asyncIterator]()
+      // for await(let sigMsg of drain) {
+      while (true) {
+        revcCtx.finish()
+        const {done, value: sigMsg} = await iter.next()
+        if (done) {
+          break
+        }
+
+        revcCtx = telemetry.continueTracedEvent(`received signature ${block_height}`, proposalCtx.traceInfo, {
+          block_height,
+          latest_block: this.self.chainBridge.streamParser.stream.lastBlock,
+          proposer: process.env.HIVE_ACCOUNT,
+          from: sigMsg.from?.toString(),
+          ...(sigMsg.payload ?? {})
+        })
+
         const from = sigMsg.from
         const sig = sigMsg.payload?.s
         if(!sig) {
@@ -597,6 +650,9 @@ export class WitnessServiceV2 {
             sig,
             pub,
           });
+
+          revcCtx.addMetadata({verifiedSig})
+
           // 'verified sig',
           if(verifiedSig) {
             if(!keysMap.includes(pub)) {
@@ -607,6 +663,11 @@ export class WitnessServiceV2 {
             const result = await circuit.add({
               sig,
               did: pub,
+            })
+
+            revcCtx.addMetadata({
+              aggPubKeysSize: circuit.aggPubKeys.size,
+              keysMapLength: keysMap.length,
             })
 
             const signerNode = membersOfBlock.find(e => e.key === pub)
@@ -630,11 +691,14 @@ export class WitnessServiceV2 {
         }
       }
 
+      revcCtx.finish()
+
       let blockSignature;
       try {
         blockSignature = circuit.serialize(keysMap)
       } catch {
         console.log('ERROR: block not signed')
+        proposalCtx.finish()
         //Not signed
         return;
       }
@@ -650,26 +714,37 @@ export class WitnessServiceV2 {
       // })
       // console.log('circuit aggregate', circuit.aggPubKeys)
       //Did it pass minimum?   
-      console.log(circuit.aggPubKeys.size, keysMap.length, keysMap.length * voteMajority)
-      if(circuit.aggPubKeys.size / keysMap.length > voteMajority) {
-        //Disable block broadcast if required by local configuration
-        if(process.env.BLOCK_BROADCAST_DISABLED !== "yes") {
+      let error: any
+      let thrown = false
+      try {
+        console.log(circuit.aggPubKeys.size, keysMap.length, keysMap.length * voteMajority)
+        if(circuit.aggPubKeys.size / keysMap.length > voteMajority) {
+          //Disable block broadcast if required by local configuration
+          if(process.env.BLOCK_BROADCAST_DISABLED !== "yes") {
 
-          console.log('Broadcasting block live!')
-          await this.self.ipfs.dag.put(blockContainer.toObject())
-          await this.self.ipfs.dag.put(signedBlock)
-          await HiveClient.broadcast.json({
-            id: 'vsc.propose_block', 
-            required_auths: [process.env.HIVE_ACCOUNT],
-            required_posting_auths: [],
-            json: JSON.stringify({
-              //Prevents indexing of older experimental blocks.
-              replay_id: 2,
-              net_id: this.self.config.get('network.id'),
-              signed_block: signedBlock
-            })
-          }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
+            console.log('Broadcasting block live!')
+            await this.self.ipfs.dag.put(blockContainer.toObject())
+            await this.self.ipfs.dag.put(signedBlock)
+            await HiveClient.broadcast.json({
+              id: 'vsc.propose_block', 
+              required_auths: [process.env.HIVE_ACCOUNT],
+              required_posting_auths: [],
+              json: JSON.stringify({
+                //Prevents indexing of older experimental blocks.
+                replay_id: 2,
+                net_id: this.self.config.get('network.id'),
+                signed_block: signedBlock
+              })
+            }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_ACTIVE))
+          }
         }
+      } catch (e) {
+        thrown = true
+        error = e
+      }
+      proposalCtx.finish()
+      if (thrown) {
+        throw error
       }
     }
 
@@ -677,7 +752,7 @@ export class WitnessServiceV2 {
 
     }
 
-    async blockParser({data:block}) {
+    async blockParser({data:block}: ParserFuncArgs<'block'>) {
         const block_height = block.key;
 
         //Do parseLag before all other checks to prevent using unnecessary CPU when fetching blockSchedule.
@@ -692,7 +767,7 @@ export class WitnessServiceV2 {
             // const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
       
             if(scheduleSlot.account === process.env.HIVE_ACCOUNT) {
-              await this.proposeBlock(block_height)
+              await this.proposeBlock(+block_height)
             }
           }
         }
@@ -724,6 +799,31 @@ export class WitnessServiceV2 {
     async handleProposeBlockMsg(pubReq) {
       const {message, drain, from} = pubReq;
 
+      let recvCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
+      if (message?.payload?.traceInfo) {
+        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+
+        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+        
+        recvCtx = telemetry.continueTracedEvent(`received block proposal ${block_height}`, message.payload.traceInfo, {
+          block_height: slotHeight,
+          latest_block: block_height,
+          from: from?.toString(),
+        })
+      }
+
+      let cadBlockCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
+      if (message?.payload?.traceInfo) {
+        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+
+        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+        
+        cadBlockCtx = telemetry.continueTracedEvent(`computing candidate block ${block_height}`, message.payload.traceInfo, {
+          block_height: slotHeight,
+          latest_block: block_height,
+          from: from?.toString(),
+        })
+      }
       
       let cadBlock = this._candidateBlocks[message.block_height]
       if(!cadBlock) {
@@ -736,222 +836,245 @@ export class WitnessServiceV2 {
           }
         }
       }
-      // console.log('VERIFYING block over p2p channels', cadBlock, message.block_height, message)
-      // console.log('VERIFYING', await this.self.chainBridge.getWitnessesAtBlock(Number(message.block_height)))
-      const {block_header, block_full} = message;
-      
-      //Validate #0
-      //Ensure everything is defined. Only relevent for outdated nodes
-      if(!block_header || !block_full) {
-        console.log('Witness.cadBlock validate #0 - missing block_header or block_full')
-        return;
-      }
-      
-      console.log(block_header, block_full)
-      //Must be parsed as CID for hashing to work correctly when signing.
-      block_header.block = CID.parse(block_header.block)
-      
-      //Validate #1
-      //Verify witness is in runner
 
-      const block_height = this.self.chainBridge.streamParser.stream.lastBlock
-      const schedule = await this.getBlockSchedule(block_height)
+      cadBlockCtx?.finish()
 
-      const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-      
-      const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
-        ipfs_peer_id: from.toString()
-      }))
-      console.log(fromWitness)
-      const witnessSlot = schedule.find(e => {
-          //Ensure witness slot is within slot start and end
-          // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
-          return e.bn === slotHeight && e.account === fromWitness.account
-      })
+      let verifyingCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
+      if (message?.payload?.traceInfo) {
+        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
 
-      telemetry.captureEvent(`block consensus ${slotHeight}`, {
-        block_height: slotHeight,
-        latest_block: block_height,
-        proposal: false,
-        proposer: fromWitness.account,
-      })
-
-      if(!witnessSlot) {
-        console.log('Witness.cadBlock validate #1 - witness not in current slot')
-        return;
-      }
-
-      //TODO: Add something here
-
-      //Validate #2
-      //Verify block_full is the same as block_header value
-
-      const cid = await this.self.ipfs.dag.put(block_full, {
-        onlyHash: true,
-      })
-
-      if(cid.toString() !== block_header.block.toString()) {
-        console.log(`Witness.cadBlock validate #2 - invalid block_full hash expected: ${cid.toString()} got: ${block_header.block}`)
-        return;
-      }
-
-      //Validate #3
-      //Verify br (block range) is correct
-      //Verify low value
-
-      const topHeader = await this.blockHeaders.findOne({
+        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
-      }, {
-        sort: {
-          end_block: -1
-        }
-      })
-
-      if(topHeader) {
-        if(block_header.headers.br[0] !== topHeader.end_block + 1) {
-          console.log(block_header.headers.br[0], topHeader.end_block)
-          console.log('Witness.cadBlock validate #3 - not matching topheader')
-          return;
-        }
-      } else {
-        if(block_header.headers.br[0] !== networks[this.self.config.get('network.id')].genesisDay) {
-          console.log('Witness.cadBlock validate #3 - not matching genesis')
-          return;
-        }
-      }
-
-
-      //Validate #4
-      //Verify merkle root
-
-      let merkleRootTotal;
-      if(block_full.txs.length === 0) {
-        merkleRootTotal = null
-      } else {
-        merkleRootTotal = simpleMerkleTree(block_full.txs.map(e => CID.parse(e.id).bytes))
-      }
-
-      if(block_header.merkle_root !== merkleRootTotal) {
-        console.log(`Witness.cadBlock validate #4 - block **header** incorrect merkle root expected: ${merkleRootTotal} got: ${block_header.merkle_root}`)
-        return;
-      }
-      
-      if(block_full.merkle_root !== merkleRootTotal) {
-        console.log(`Witness.cadBlock validate #4 - block **full** incorrect merkle root expected: ${merkleRootTotal} got: ${block_full.merkle_root }`)
-        return;
-      }
-
-      //Validate #5
-      //Verify Hive merkle root
-      
-      //Validate #6
-      //Validate offchain TX nonces
-
-      //Use this later for verifying sort
-      let vrfTxs = [
-
-      ]
-
-      //Note, offchain needs to be properly categorized as offchain and what is considered an input
-      //Offchain can be more than just an input
-      const offchainInputTxs = block_full.txs.filter(e => {
-        return e.type === TransactionDbType.input
-      })
-
-      const nonceMap:Record<string, number> = {}
-      for(let tx of offchainInputTxs) {
-        const txRecord = await this.self.transactionPool.txDb.findOne({
-          id: tx.id
+        verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${block_height}`, message.payload.traceInfo, {
+          block_height: slotHeight,
+          latest_block: block_height,
+          from: from?.toString(),
         })
-        if(!txRecord) {
-          console.log('Witness.cadBlock validate #6 - tx not found in DB')
-          return
+      }
+
+      const DONE_ERROR = new Error('done')
+
+      try {
+        // console.log('VERIFYING block over p2p channels', cadBlock, message.block_height, message)
+        // console.log('VERIFYING', await this.self.chainBridge.getWitnessesAtBlock(Number(message.block_height)))
+        const {block_header, block_full} = message;
+        
+        //Validate #0
+        //Ensure everything is defined. Only relevent for outdated nodes
+        if(!block_header || !block_full) {
+          console.log('Witness.cadBlock validate #0 - missing block_header or block_full')
+          throw DONE_ERROR;
         }
-        const keyId = await computeKeyId(txRecord.required_auths.map(e => e.value))
-        if(!nonceMap[keyId]) {
-          const nonceRecord = await this.self.nonceMap.findOne({
-            id: keyId
-          })
-          if(!nonceRecord) {
-            //Assume zero nonce
-            nonceMap[keyId] = 0;
-          } else {
-            nonceMap[keyId] = nonceRecord.nonce
+        
+        console.log(block_header, block_full)
+        //Must be parsed as CID for hashing to work correctly when signing.
+        block_header.block = CID.parse(block_header.block)
+        
+        //Validate #1
+        //Verify witness is in runner
+
+        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+        const schedule = await this.getBlockSchedule(block_height)
+
+        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+        
+        const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
+          ipfs_peer_id: from.toString()
+        }))
+        console.log(fromWitness)
+        const witnessSlot = schedule.find(e => {
+            //Ensure witness slot is within slot start and end
+            // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
+            return e.bn === slotHeight && e.account === fromWitness.account
+        })
+
+        verifyingCtx?.addMetadata({proposer: fromWitness?.account})
+
+        if(!witnessSlot) {
+          console.log('Witness.cadBlock validate #1 - witness not in current slot')
+          throw DONE_ERROR;
+        }
+
+        //TODO: Add something here
+
+        //Validate #2
+        //Verify block_full is the same as block_header value
+
+        const cid = await this.self.ipfs.dag.put(block_full, {
+          onlyHash: true,
+        })
+
+        if(cid.toString() !== block_header.block.toString()) {
+          console.log(`Witness.cadBlock validate #2 - invalid block_full hash expected: ${cid.toString()} got: ${block_header.block}`)
+          throw DONE_ERROR;
+        }
+
+        //Validate #3
+        //Verify br (block range) is correct
+        //Verify low value
+
+        const topHeader = await this.blockHeaders.findOne({
+          
+        }, {
+          sort: {
+            end_block: -1
+          }
+        })
+
+        if(topHeader) {
+          if(block_header.headers.br[0] !== topHeader.end_block + 1) {
+            console.log(block_header.headers.br[0], topHeader.end_block)
+            console.log('Witness.cadBlock validate #3 - not matching topheader')
+            throw DONE_ERROR;
+          }
+        } else {
+          if(block_header.headers.br[0] !== networks[this.self.config.get('network.id')].genesisDay) {
+            console.log('Witness.cadBlock validate #3 - not matching genesis')
+            throw DONE_ERROR;
           }
         }
-        console.log('nonce', keyId, nonceMap[keyId], txRecord.headers.nonce)
-        if(nonceMap[keyId] !== txRecord.headers.nonce) {
-          console.log(`Witness.cadBlock validate #6 - invalid nonce for keyId: ${keyId}`)
-          return
+
+
+        //Validate #4
+        //Verify merkle root
+
+        let merkleRootTotal;
+        if(block_full.txs.length === 0) {
+          merkleRootTotal = null
+        } else {
+          merkleRootTotal = simpleMerkleTree(block_full.txs.map(e => CID.parse(e.id).bytes))
         }
-        nonceMap[keyId] = nonceMap[keyId] + 1;
+
+        if(block_header.merkle_root !== merkleRootTotal) {
+          console.log(`Witness.cadBlock validate #4 - block **header** incorrect merkle root expected: ${merkleRootTotal} got: ${block_header.merkle_root}`)
+          throw DONE_ERROR;
+        }
         
-        vrfTxs.push({
-          id: tx.id,
-          nonce: txRecord.headers.nonce,    
-          act: keyId,
-          sig_hash: txRecord.sig_hash
-        })
-      }
-      
-
-      //Validate #7
-      //Validate total sorting
-      
-      console.log(block_header.headers.br[0])
-      const blockKey = await this.self.chainBridge.events.findOne({
-        key: block_header.headers.br[0]
-      })
-      let seed = blockKey.block_id
-      
-      const sortedTxs = sortTransactions(offchainInputTxs, seed)
-
-      for(let index in sortedTxs) {
-        //Verify sorting
-        if(offchainInputTxs[index].id !== sortedTxs[index].id) {
-          console.log(`Witness.cadBlock validate #7 - invalid sorting at index: ${index} expected: ${sortedTxs[index].id} got ${offchainInputTxs[index].id}`)
-          return;
+        if(block_full.merkle_root !== merkleRootTotal) {
+          console.log(`Witness.cadBlock validate #4 - block **full** incorrect merkle root expected: ${merkleRootTotal} got: ${block_full.merkle_root }`)
+          throw DONE_ERROR;
         }
+
+        //Validate #5
+        //Verify Hive merkle root
+        
+        //Validate #6
+        //Validate offchain TX nonces
+
+        //Use this later for verifying sort
+        let vrfTxs = [
+
+        ]
+
+        //Note, offchain needs to be properly categorized as offchain and what is considered an input
+        //Offchain can be more than just an input
+        const offchainInputTxs = block_full.txs.filter(e => {
+          return e.type === TransactionDbType.input
+        })
+
+        const nonceMap:Record<string, number> = {}
+        for(let tx of offchainInputTxs) {
+          const txRecord = await this.self.transactionPool.txDb.findOne({
+            id: tx.id
+          })
+          if(!txRecord) {
+            console.log('Witness.cadBlock validate #6 - tx not found in DB')
+            throw DONE_ERROR
+          }
+          const keyId = await computeKeyId(txRecord.required_auths.map(e => e.value))
+          if(!nonceMap[keyId]) {
+            const nonceRecord = await this.self.nonceMap.findOne({
+              id: keyId
+            })
+            if(!nonceRecord) {
+              //Assume zero nonce
+              nonceMap[keyId] = 0;
+            } else {
+              nonceMap[keyId] = nonceRecord.nonce
+            }
+          }
+          console.log('nonce', keyId, nonceMap[keyId], txRecord.headers.nonce)
+          if(nonceMap[keyId] !== txRecord.headers.nonce) {
+            console.log(`Witness.cadBlock validate #6 - invalid nonce for keyId: ${keyId}`)
+            throw DONE_ERROR
+          }
+          nonceMap[keyId] = nonceMap[keyId] + 1;
+          
+          vrfTxs.push({
+            id: tx.id,
+            nonce: txRecord.headers.nonce,    
+            act: keyId,
+            sig_hash: txRecord.sig_hash
+          })
+        }
+        
+
+        //Validate #7
+        //Validate total sorting
+        
+        console.log(block_header.headers.br[0])
+        const blockKey = await this.self.chainBridge.events.findOne({
+          key: block_header.headers.br[0]
+        })
+        let seed = blockKey.block_id
+        
+        const sortedTxs = sortTransactions(offchainInputTxs, seed)
+
+        for(let index in sortedTxs) {
+          //Verify sorting
+          if(offchainInputTxs[index].id !== sortedTxs[index].id) {
+            console.log(`Witness.cadBlock validate #7 - invalid sorting at index: ${index} expected: ${sortedTxs[index].id} got ${offchainInputTxs[index].id}`)
+            throw DONE_ERROR;
+          }
+        }
+        
+        //Validate #8
+        //Segwit root
+        let segwitRoot
+        if(vrfTxs.length === 0) {
+          segwitRoot = null
+        } else {
+          segwitRoot = simpleMerkleTree(vrfTxs.map(e => CID.parse(e.sig_hash).bytes))
+        }
+
+        if(block_full.sig_root !== segwitRoot) {
+          console.log(`Witness.cadBlock Validate #8 - invalid sig root expected: ${segwitRoot} got: ${block_full.sig_root}`)
+          throw DONE_ERROR;
+        }
+        
+
+        //Validate #9
+        //Validate Offchain TX validity
+
+        //Validate #10
+        //Validate contract outputs
+
+        //Validate #11
+        //Validate other core operations
+        //Contract broadcast confirm
+
+        
+        
+
+
+
+        console.log('block_header - before sign', block_header, await this.self.ipfs.dag.put(block_header))
+        const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(block_header, {
+          pin: true
+        })).bytes)
+        drain.push(signData)
+        await this.self.ipfs.dag.put(block_full, {
+          pin: true
+        })
+
+      } catch (e) {
+        if (e !== DONE_ERROR) {
+          throw e
+        }
+      } finally {
+        verifyingCtx?.finish()
+        recvCtx?.finish()
       }
-      
-      //Validate #8
-      //Segwit root
-      let segwitRoot
-      if(vrfTxs.length === 0) {
-        segwitRoot = null
-      } else {
-        segwitRoot = simpleMerkleTree(vrfTxs.map(e => CID.parse(e.sig_hash).bytes))
-      }
-
-      if(block_full.sig_root !== segwitRoot) {
-        console.log(`Witness.cadBlock Validate #8 - invalid sig root expected: ${segwitRoot} got: ${block_full.sig_root}`)
-        return;
-      }
-      
-
-      //Validate #9
-      //Validate Offchain TX validity
-
-      //Validate #10
-      //Validate contract outputs
-
-      //Validate #11
-      //Validate other core operations
-      //Contract broadcast confirm
-
-      
-      
-
-
-
-      console.log('block_header - before sign', block_header, await this.self.ipfs.dag.put(block_header))
-      const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(block_header, {
-        pin: true
-      })).bytes)
-      drain.push(signData)
-      await this.self.ipfs.dag.put(block_full, {
-        pin: true
-      })
 
       if(cadBlock) {
         // delete cadBlock.block

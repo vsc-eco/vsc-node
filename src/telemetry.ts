@@ -1,4 +1,6 @@
 import * as Sentry from '@sentry/node'
+import { getDynamicSamplingContextFromSpan, spanToTraceHeader } from '@sentry/core'
+import { dynamicSamplingContextToSentryBaggageHeader } from '@sentry/utils'
 import { nodeProfilingIntegration } from '@sentry/profiling-node'
 
 type Primitive = number | string | boolean | bigint | symbol | null | undefined
@@ -12,6 +14,11 @@ const FLUSH_INTERVAL = 60 * 1000
 const flusher = () => Sentry.flush()
 
 let flushInterval
+
+type TraceInfo = {
+  baggage: string
+  sentryTrace: string
+}
 
 export default {
   start() {
@@ -62,6 +69,45 @@ export default {
       })
     } else {
       Sentry.captureMessage(eventId, { tags: info })
+    }
+  },
+  captureTracedEvent(name: string, info: Record<string, Primitive>) {
+    const span = Sentry.startInactiveSpan({ name, tags: info })
+    const dynamicSamplingContext = getDynamicSamplingContextFromSpan(span)
+
+    const baggage = dynamicSamplingContextToSentryBaggageHeader(dynamicSamplingContext)
+
+    const traceInfo: TraceInfo = {
+      baggage,
+      sentryTrace: spanToTraceHeader(span),
+    }
+
+    return {
+      traceInfo,
+      addMetadata(info: Record<string, Primitive>) {
+        for (const [key, value] of Object.entries(info)) {
+          span.setTag(key, value)
+        }
+      },
+      finish() {
+        span.end()
+      },
+    }
+  },
+  continueTracedEvent(name: string, traceInfo: TraceInfo, info: Record<string, Primitive>) {
+    const span = Sentry.continueTrace(traceInfo, () => {
+      return Sentry.startInactiveSpan({ name, tags: info })
+    })
+
+    return {
+      addMetadata(info: Record<string, Primitive>) {
+        for (const [key, value] of Object.entries(info)) {
+          span.setTag(key, value)
+        }
+      },
+      finish() {
+        span.end()
+      },
     }
   },
 }

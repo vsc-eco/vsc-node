@@ -378,6 +378,15 @@ class VmRunner {
   }
 
   /**
+   * Revert current OP
+   * TODO: reset state DB 
+   * TODO: reset remote call stack when implemented
+   */
+  revert() {
+    this.ledgerStackTemp = []
+  }
+
+  /**
    * Create a shortened ledger for indexing purposes
    */
   // shortenLedger() {
@@ -463,6 +472,7 @@ class VmRunner {
     block_height: number
   }) {
     const contract_id = args.contract_id
+    const block_height = args.block_height
     const memory = new WebAssembly.Memory({
       initial: 10,
       maximum: 128,
@@ -508,9 +518,7 @@ class VmRunner {
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshotDirect({
-          account: args.from
-        }, 84021084)
+        const snapshot = await this.getBalanceSnapshot(args.from, block_height)
         console.log('snapshot result', snapshot)
 
         if(snapshot.tokens[args.asset] >= args.amount) {
@@ -543,11 +551,21 @@ class VmRunner {
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshotDirect({
-          account: contract_id
-        }, 84021084)
+        const snapshot = await this.getBalanceSnapshot(contract_id, block_height)
         if(snapshot.tokens[args.asset] >= args.amount) { 
 
+          this.applyLedgerOp({
+            owner: contract_id,
+            to: args.dest,
+            amount: -args.amount,
+            unit: args.asset
+          })
+          this.applyLedgerOp({
+            owner: args.dest,
+            from: contract_id,
+            amount: args.amount,
+            unit: args.asset
+          })
 
         } else {
           return {
@@ -563,9 +581,7 @@ class VmRunner {
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshotDirect({
-          account: contract_id
-        }, 84021084)
+        const snapshot = await this.getBalanceSnapshot(contract_id, block_height)
         console.log('snapshot result', snapshot)
 
         if(snapshot.tokens[args.asset] >= args.amount) {
@@ -808,7 +824,7 @@ void (async () => {
         action: message.action,
         //Fill these in soon
         env: message.env,
-        block_height: 84021084
+        block_height: message.env['anchor.height']
       })
       process.send({
         ...executeResult,

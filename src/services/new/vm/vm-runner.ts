@@ -464,7 +464,15 @@ class VmRunner {
 
     let modules = {}
     for (let [contract_id, code] of Object.entries<string>(this.modules)) {
-      const binaryData = await ipfs.dag.get(IPFS.CID.parse(code))
+      const cid = IPFS.CID.parse(code)
+      const binaryData = await (async () => {
+        switch (cid.code) {
+          case 0x71:
+            return (await ipfs.dag.get(cid)).value
+          case 0x55:
+            return await ipfs.block.get(cid)
+        }
+      })()
       try {
         modules[contract_id] = await WebAssembly.compile(binaryData.value)
       } catch (e) {
@@ -508,7 +516,7 @@ class VmRunner {
     const block_height = args.block_height
     const memory = new WebAssembly.Memory({
       initial: 10,
-      maximum: 128,
+      maximum: 12800,
     })
 
     let IOGas = 0
@@ -708,7 +716,7 @@ class VmRunner {
 
             return insta.exports.__newString(val)
           },
-          'db.delObject': async (keyPtr) => {
+          'db.delObject': (keyPtr) => {
             const key = (insta as any).exports.__getString(keyPtr)
             wasmRunner.tmpState.set(key, null)
           },
@@ -730,7 +738,7 @@ class VmRunner {
 
             return insta.exports.__newString(resultData)
           },
-          'system.getEnv': async (envPtr) => {
+          'system.getEnv': (envPtr) => {
             const envArg = insta.exports.__getString(envPtr)
 
             return insta.exports.__newString(
@@ -790,7 +798,7 @@ class VmRunner {
           return {
             type: 'execute-stop',
             ret: null,
-            error: ex.toString(),
+            error: ex.toString() + ' ' + ex.stack,
             errorType: ContractErrorType.RUNTIME_UNKNOWN,
             logs,
             // reqId: message.reqId,

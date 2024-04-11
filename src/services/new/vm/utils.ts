@@ -434,8 +434,11 @@ export class VmContainer {
     this.child.kill()
   }
 
-  onReady() {
-    return new Promise((resolve) => {
+  async onReady() {
+    if (this.ready) {
+      return
+    }
+    return new Promise<void>((resolve) => {
       this.events.on('ready', resolve)
     })
   }

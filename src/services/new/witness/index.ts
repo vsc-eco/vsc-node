@@ -387,6 +387,7 @@ export class WitnessServiceV2 {
         console.log('contractIds', contractIds)
         const vmContext = this.self.contractEngine.vmContext(contractIds);
         await vmContext.init()
+        console.log('initalized vm')
         
         let results: Record<string, Array<any>> = {
 
@@ -395,7 +396,9 @@ export class WitnessServiceV2 {
         for(let tx of transactions) {
           if(tx.data.contract_id) {
             const contract_id = tx.data.contract_id
+            console.log('processing tx', JSON.stringify(tx, null, 2))
             const contractCallResult = await vmContext.processTx(tx)
+            console.log('completed tx', JSON.stringify(contractCallResult, null, 2))
             if(!results[contract_id]) {
               results[contract_id] = []
             }

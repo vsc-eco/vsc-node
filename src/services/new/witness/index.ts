@@ -405,11 +405,11 @@ export class WitnessServiceV2 {
             results[contract_id].push({
               id: tx.id,
               result: {
-                ret: contractCallResult.ret,
-                error: contractCallResult.error,
-                errorType: contractCallResult.errorType,
-                logs: contractCallResult.logs,
-                IOGas: contractCallResult.IOGas
+                ret: contractCallResult.ret ?? null,
+                error: contractCallResult.error ?? null,
+                errorType: contractCallResult.errorType ?? null,
+                logs: contractCallResult.logs ?? null,
+                IOGas: contractCallResult.IOGas ?? null,
               }
             })
           }

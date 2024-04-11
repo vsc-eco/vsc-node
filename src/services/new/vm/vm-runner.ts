@@ -407,7 +407,7 @@ class VmRunner {
     }
   }
 
-  save() {
+  finishOp() {
     this.saveLedger()
     for(let [, {wasmRunner}] of Object.entries(this.state)) { 
       wasmRunner.finishState()
@@ -755,7 +755,7 @@ class VmRunner {
         const str = (insta as any).exports.__getString(ptr)
 
         //Assume successful, save any ledger results.
-        this.revertOp()
+        this.finishOp()
 
         //For testing determining use..
 

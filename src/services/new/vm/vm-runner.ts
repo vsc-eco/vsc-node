@@ -767,6 +767,7 @@ class VmRunner {
           type: 'execute-stop',
           ret: str,
           logs,
+          error: null,
           // reqId: message.reqId,
           IOGas,
         }
@@ -789,6 +790,7 @@ class VmRunner {
           return {
             type: 'execute-stop',
             ret: null,
+            error: ex.toString(),
             errorType: ContractErrorType.RUNTIME_UNKNOWN,
             logs,
             // reqId: message.reqId,
@@ -802,6 +804,7 @@ class VmRunner {
         type: 'execute-stop',
         ret: null,
         logs,
+        error: ex.toString(),
         errorType: ContractErrorType.RUNTIME_SETUP,
         // reqId: message.reqId,
         IOGas,

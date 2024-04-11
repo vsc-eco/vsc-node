@@ -45,6 +45,7 @@ class VmContext {
 
     async init() {
         let args = {
+            debug: true,
             state: {
 
             },
@@ -61,7 +62,9 @@ class VmContext {
         }
         this.vm = new VmContainer(args)
 
+        console.log('vm init')
         await this.vm.init()
+        console.log('vm readying')
         await this.vm.onReady()
     }
 

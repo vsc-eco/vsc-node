@@ -27,6 +27,7 @@ services:
       - ./seed-backup.json:/root/.vsc-seed-backup.json
       - ./.git/refs/heads/main:/root/git_commit
       - ./src:/home/github/app/src
+      - ./dist:/home/github/app/dist
 
   mongo:
     container_name: mongo_vsc_dev

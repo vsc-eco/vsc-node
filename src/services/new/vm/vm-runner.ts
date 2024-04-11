@@ -464,8 +464,12 @@ class VmRunner {
 
     let modules = {}
     for (let [contract_id, code] of Object.entries<string>(this.modules)) {
-      const binaryData = await ipfs.block.get(IPFS.CID.parse(code))
-      modules[contract_id] = await WebAssembly.compile(binaryData)
+      const binaryData = await ipfs.dag.get(IPFS.CID.parse(code))
+      try {
+        modules[contract_id] = await WebAssembly.compile(binaryData.value)
+      } catch (e) {
+        console.error(`invalid contract code ${contract_id}`, e)
+      }
     }
 
     let state = {}
@@ -763,6 +767,7 @@ class VmRunner {
           type: 'execute-stop',
           ret: str,
           logs,
+          error: null,
           // reqId: message.reqId,
           IOGas,
         }
@@ -785,6 +790,7 @@ class VmRunner {
           return {
             type: 'execute-stop',
             ret: null,
+            error: ex.toString(),
             errorType: ContractErrorType.RUNTIME_UNKNOWN,
             logs,
             // reqId: message.reqId,
@@ -798,6 +804,7 @@ class VmRunner {
         type: 'execute-stop',
         ret: null,
         logs,
+        error: ex.toString(),
         errorType: ContractErrorType.RUNTIME_SETUP,
         // reqId: message.reqId,
         IOGas,

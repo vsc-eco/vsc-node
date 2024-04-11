@@ -14,8 +14,29 @@ const ipfs = IPFS.create({ url: process.env.IPFS_HOST || 'http://127.0.0.1:5001'
 
 export class WasmRunner {
   stateCache: Map<string, any>
+  tmpState: Map<string, any>
   constructor() {
+
+    //Permanent memory cache for state
     this.stateCache = new Map()
+
+    //Temp memory cache for state. IF contract execution fails, this is reverted
+    this.tmpState = new Map()
+  }
+
+
+  /**
+   * Finalize the state
+   */
+  finishState() {
+    for(let [key, value] of this.tmpState.entries()) { 
+      this.stateCache.set(key, value)
+    }
+    this.tmpState.clear();
+  }
+
+  revertState() {
+    this.tmpState.clear()
   }
 
   async contractStateRaw(id: string, stateMerkle?: string) {
@@ -215,12 +236,6 @@ export class WasmRunner {
       startMerkle: stateCid,
     }
   }
-
-  async initiate() {}
-
-  async testRun() {}
-
-  registerBindings() {}
 }
 
 /**
@@ -235,7 +250,11 @@ class VmRunner {
   outputStack: any[]
   balanceSnapshots: Map<string, any>
 
-  state: any
+  state: Record<string, {
+    wasmRunner: WasmRunner
+    stateAccess: any
+    stateCid: string
+  }>
   modules: any
 
   constructor(args) {
@@ -379,12 +398,22 @@ class VmRunner {
 
   /**
    * Revert current OP
-   * TODO: reset state DB 
    * TODO: reset remote call stack when implemented
    */
-  revert() {
+  revertOp() {
     this.ledgerStackTemp = []
+    for(let [, {wasmRunner}] of Object.entries(this.state)) { 
+      wasmRunner.revertState()
+    }
   }
+
+  save() {
+    this.saveLedger()
+    for(let [, {wasmRunner}] of Object.entries(this.state)) { 
+      wasmRunner.finishState()
+    }
+  }
+
 
   /**
    * Create a shortened ledger for indexing purposes
@@ -440,7 +469,7 @@ class VmRunner {
     }
 
     let state = {}
-    for (let [contract_id, stateCid] of Object.entries<string>(this.state)) {
+    for (let [contract_id, {stateCid}] of Object.entries(this.state)) {
       const wasmRunner = new WasmRunner()
       const stateAccess = await wasmRunner.contractStateRaw(contract_id, stateCid)
       state[contract_id] = {
@@ -635,6 +664,7 @@ class VmRunner {
         sdk: {
           'revert': () => {
             //Revert entire TX and any lower level function calls
+            this.revertOp()
           },
           'console.log': (keyPtr) => {
             const logMsg = (insta as any).exports.__getString(keyPtr)
@@ -653,17 +683,19 @@ class VmRunner {
 
             IOGas = IOGas + key.length + val.length
 
-            wasmRunner.stateCache.set(key, val)
+            wasmRunner.tmpState.set(key, val)
             return 1
           },
           'db.getObject': async (keyPtr) => {
             const key = (insta as any).exports.__getString(keyPtr)
             let value
-            if (wasmRunner.stateCache.has(key)) {
+            if (wasmRunner.tmpState.has(key)) {
+              value = wasmRunner.tmpState.get(key)
+            } else if (wasmRunner.stateCache.has(key)) { 
               value = wasmRunner.stateCache.get(key)
             } else {
               value = await stateAccess.client.pull(key)
-              wasmRunner.stateCache.set(key, value)
+              wasmRunner.tmpState.set(key, value)
             }
 
             const val = JSON.stringify(value)
@@ -674,7 +706,7 @@ class VmRunner {
           },
           'db.delObject': async (keyPtr) => {
             const key = (insta as any).exports.__getString(keyPtr)
-            wasmRunner.stateCache.set(key, null)
+            wasmRunner.tmpState.set(key, null)
           },
           'system.call': async (callPtr, valPtr) => {
             const callArg = insta.exports.__getString(callPtr)
@@ -723,7 +755,7 @@ class VmRunner {
         const str = (insta as any).exports.__getString(ptr)
 
         //Assume successful, save any ledger results.
-        this.saveLedger()
+        this.revertOp()
 
         //For testing determining use..
 
@@ -737,6 +769,8 @@ class VmRunner {
       } catch (ex) {
         if (ex.name === 'RuntimeError' && ex.message === 'unreachable') {
           console.log(`RuntimeError: unreachable ${JSON.stringify(error)}`, error)
+
+          this.revertOp()
           return {
             type: 'execute-stop',
             ret: null,
@@ -747,6 +781,7 @@ class VmRunner {
             IOGas,
           }
         } else {
+          this.revertOp()
           return {
             type: 'execute-stop',
             ret: null,
@@ -805,8 +840,15 @@ class VmRunner {
 }
 
 void (async () => {
+  const stateParsed = JSON.parse(process.env.state)
+  let state = {}
+  for (let [contract_id, stateCid] of Object.entries(stateParsed)) {
+    state[contract_id] = {
+      stateCid,
+    }
+  }
   const vmRunner = new VmRunner({
-    state: JSON.parse(process.env.state),
+    state: state,
     modules: JSON.parse(process.env.modules),
   })
 

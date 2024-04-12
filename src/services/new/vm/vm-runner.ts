@@ -474,7 +474,7 @@ class VmRunner {
         }
       })()
       try {
-        modules[contract_id] = await WebAssembly.compile(binaryData.value)
+        modules[contract_id] = await WebAssembly.compile(binaryData)
       } catch (e) {
         console.error(`invalid contract code ${contract_id}`, e)
       }

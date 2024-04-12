@@ -76,8 +76,14 @@ class VmContext {
         
         console.log(tx)
 
-        const blockHeader = await this.engine.self.chainBridge.blockHeaders.findOne({
+        const blockHeader = await this.engine.self.chainBridge.blockHeaders.findOne(tx.anchored_id ? {
             id: tx.anchored_id
+        } : {
+            slot_height: {$lte: tx.anchored_height}
+        }, tx.anchored_id ? {} : {
+            sort: {
+                slot_height: -1
+            }
         })
         const requiredAuths = tx.required_auths.map(e => typeof e === 'string' ? e : e.value).map(e => {
             if(tx.src === 'hive') {
@@ -94,9 +100,9 @@ class VmContext {
             action: tx.data.action,
             payload: JSON.stringify(tx.data.payload),
             env: {
-                'anchor.id': tx.anchored_id,
+                'anchor.id': blockHeader.id,
                 'anchor.height': tx.anchored_height,
-                'anchor.block': tx.anchored_block,
+                'anchor.block': tx.anchored_block || `hive:${tx.id}`,
                 'anchor.timestamp': blockHeader.ts.getTime(),
 
 

@@ -153,7 +153,8 @@ export class MultisigSystem {
                 account: networks[this.self.config.get('network.id')].multisigAccount,
                 owner: {
                     //Backup account for now. It will be removed in future versions
-                    account_auths: [['vsc.network', multisigConf.threshold]],
+                    // account_auths: [['vsc.network', multisigConf.threshold]],
+                    account_auths: [],
                     key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
                     
                     weight_threshold: multisigConf.threshold

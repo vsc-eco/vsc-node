@@ -76,15 +76,43 @@ class VmContext {
         
         console.log(tx)
 
-       
+        const blockHeader = await this.engine.self.chainBridge.blockHeaders.findOne(tx.anchored_id ? {
+            id: tx.anchored_id
+        } : {
+            slot_height: {$lte: tx.anchored_height}
+        }, tx.anchored_id ? {} : {
+            sort: {
+                slot_height: -1
+            }
+        })
+        const requiredAuths = tx.required_auths.map(e => typeof e === 'string' ? e : e.value).map(e => {
+            if(tx.src === 'hive') {
+                //Format should be human readable
+                return `hive:${e}`
+            } else {
+                //i.e did:key:123etcetc
+                return e
+            }
+        })
 
        const callOutput = await this.vm.call({
             contract_id,
             action: tx.data.action,
             payload: JSON.stringify(tx.data.payload),
             env: {
-                
-            } as any
+                'anchor.id': blockHeader.id,
+                'anchor.height': tx.anchored_height,
+                'anchor.block': tx.anchored_block || `hive:${tx.id}`,
+                'anchor.timestamp': blockHeader.ts.getTime(),
+
+
+                'msg.sender': requiredAuths[0],
+                //Retain the type info as well.
+                //TODO: properly parse and provide authority type to contract
+                //Such as ACTIVE vs POSTING auth
+                'msg.required_auths': requiredAuths,
+                'tx.origin': requiredAuths[0],
+            }
         })
 
         return callOutput
@@ -257,7 +285,7 @@ export class ContractEngineV2 {
                     //Such as ACTIVE vs POSTING auth
                     'msg.required_auths': tx.required_auths,
                     'tx.origin': requiredAuths[0],
-                } as any
+                }
             })
 
             

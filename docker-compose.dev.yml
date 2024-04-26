@@ -2,7 +2,9 @@ version: "3.3"
 
 services:
   vsc-node: # name of the service
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     image: vsc-node # the image to use
     container_name: vsc-node_dev # what to label the container for docker ps
     restart: always # restart if failed, until we stop it ourselves
@@ -18,7 +20,6 @@ services:
     ports:
       - 1338:1337
     environment:
-      DEV: true
       IPFS_HOST: http://ipfs:5201
       MONGO_HOST: mongo:27017
     volumes:

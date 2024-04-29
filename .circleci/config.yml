@@ -20,9 +20,19 @@ executors:
       docker_layer_caching: true
     resource_class: arm.large
 
+jobs:
+  debug:
+    machine:
+      image: ubuntu-2204:2024.01.2
+    steps:
+      - run: echo "$CIRCLE_PULL_REQUEST"
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
 workflows:
+  debug:
+    jobs:
+      - debug
   build:
     when:
       and:

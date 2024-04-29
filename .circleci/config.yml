@@ -34,8 +34,8 @@ jobs:
     resource_class: large
     steps:
       - docker/check
-      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create main sha-${CIRCLE_SHA1:0:7}-amd64 sha-${CIRCLE_SHA1:0:7}-arm64
-      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push main
+      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create vaultec/vsc-node:main vaultec/vsc-node:sha-${CIRCLE_SHA1:0:7}-amd64 vaultec/vsc-node:sha-${CIRCLE_SHA1:0:7}-arm64
+      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push vaultec/vsc-node:main
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows

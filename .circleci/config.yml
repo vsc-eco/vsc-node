@@ -20,28 +20,35 @@ executors:
       docker_layer_caching: true
     resource_class: arm.large
 
+jobs:
+  main_branch:
+    machine:
+      image: ubuntu-2004:2024.01.2
+    resource_class: large
+    steps: []
+
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
 workflows:
   build:
-    when:
-      and:
-        - equal:
-            - main
-            - << pipeline.git.branch >>
-        - equal:
-            - << $CIRCLE_PULL_REQUEST >>
-            - ""
     jobs:
+      - main_branch:
+          branches:
+            only:
+              - main
       - docker/publish:
           executor: arm64
           image: vaultec/vsc-node
           tag: sha-${CIRCLE_SHA1:0:7}
           context:
             - docker-hub-creds
+          requires:
+            - main_branch
       - docker/publish:
           executor: amd64
           image: vaultec/vsc-node
           tag: sha-${CIRCLE_SHA1:0:7}
           context:
             - docker-hub-creds
+          requires:
+            - main_branch

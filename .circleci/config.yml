@@ -30,7 +30,7 @@ workflows:
             - main
             - << pipeline.git.branch >>
         - equal:
-            - "$CIRCLE_PULL_REQUEST"
+            - << $CIRCLE_PULL_REQUEST >>
             - ""
     jobs:
       - docker/publish:

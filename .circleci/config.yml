@@ -48,6 +48,7 @@ workflows:
               only:
                 - main
       - docker/publish:
+          name: docker-arm64
           executor: arm64
           image: vaultec/vsc-node
           tag: sha-${CIRCLE_SHA1:0:7}-arm64
@@ -56,6 +57,7 @@ workflows:
           requires:
             - main_branch
       - docker/publish:
+          name: docker-amd64
           executor: amd64
           image: vaultec/vsc-node
           tag: sha-${CIRCLE_SHA1:0:7}-amd64
@@ -67,4 +69,5 @@ workflows:
           context:
             - docker-hub-creds
           requires:
-            - docker/publish
+            - docker-amd64
+            - docker-arm64

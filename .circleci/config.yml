@@ -1,0 +1,45 @@
+# Couldn't automatically generate a config from your source code.
+# This is a generic template to serve as a base for your custom config
+
+# Use the latest 2.1 version of CircleCI pipeline process engine.
+# See: https://circleci.com/docs/configuration-reference
+version: 2.1
+
+orbs:
+  docker: circleci/docker@2.6.0
+
+executors:
+  amd64:
+    machine:
+      image: ubuntu-2004:2024.01.2
+      docker_layer_caching: true
+    resource_class: large
+  arm64:
+    machine:
+      image: ubuntu-2004:2024.01.2
+      docker_layer_caching: true
+    resource_class: arm.large
+
+# Orchestrate jobs using workflows
+# See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
+workflows:
+  build:
+    when:
+      and:
+        - equal:
+            - main
+            - << pipeline.git.branch >>
+        - not: $CIRCLE_PULL_REQUEST
+    jobs:
+      - docker/publish:
+          executor: arm64
+          image: vaultec/vsc-node
+          tag: sha-${CIRCLE_SHA1:0:7}
+          context:
+            - docker-hub-creds
+      - docker/publish:
+          executor: amd64
+          image: vaultec/vsc-node
+          tag: sha-${CIRCLE_SHA1:0:7}
+          context:
+            - docker-hub-creds

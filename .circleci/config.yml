@@ -34,9 +34,10 @@ workflows:
   build:
     jobs:
       - main_branch:
-          branches:
-            only:
-              - main
+          filters:
+            branches:
+              only:
+                - main
       - docker/publish:
           executor: arm64
           image: vaultec/vsc-node

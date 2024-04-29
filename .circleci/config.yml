@@ -25,7 +25,8 @@ jobs:
     machine:
       image: ubuntu-2004:2024.01.2
     resource_class: large
-    steps: []
+    steps:
+      - run: echo
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows

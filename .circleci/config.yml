@@ -27,6 +27,15 @@ jobs:
     resource_class: large
     steps:
       - run: echo
+  publish_main:
+    machine:
+      image: ubuntu-2004:2024.01.2
+      docker_layer_caching: true
+    resource_class: large
+    steps:
+      - docker/check
+      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create main sha-${CIRCLE_SHA1:0:7}-amd64 sha-${CIRCLE_SHA1:0:7}-arm64
+      - run: DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push main
 
 # Orchestrate jobs using workflows
 # See: https://circleci.com/docs/workflows/ & https://circleci.com/docs/configuration-reference/#workflows
@@ -41,7 +50,7 @@ workflows:
       - docker/publish:
           executor: arm64
           image: vaultec/vsc-node
-          tag: sha-${CIRCLE_SHA1:0:7},main
+          tag: sha-${CIRCLE_SHA1:0:7}-arm64
           context:
             - docker-hub-creds
           requires:
@@ -49,8 +58,13 @@ workflows:
       - docker/publish:
           executor: amd64
           image: vaultec/vsc-node
-          tag: sha-${CIRCLE_SHA1:0:7},main
+          tag: sha-${CIRCLE_SHA1:0:7}-amd64
           context:
             - docker-hub-creds
           requires:
             - main_branch
+      - publish_main:
+          context:
+            - docker-hub-creds
+          requires:
+            - docker/publish

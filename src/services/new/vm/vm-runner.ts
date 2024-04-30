@@ -1,4 +1,6 @@
 import * as IPFS from 'kubo-rpc-client'
+import sift, { BasicValueQuery, Query } from 'sift'
+
 import { Collection, MongoClient } from 'mongodb'
 import { addLink } from '../../../ipfs-utils/add-link'
 import { removeLink } from '../../../ipfs-utils/rm-link'
@@ -11,6 +13,29 @@ import { LedgerType } from '../types'
 const CID = IPFS.CID
 
 const ipfs = IPFS.create({ url: process.env.IPFS_HOST || 'http://127.0.0.1:5001' })
+
+
+const intentFieldMap = {
+  'hive.allow_transfer': { 
+    limit: 'number',
+    token: 'string'
+  }
+}
+
+function transformIntentField(intentName, fieldName, value) {
+  if(intentFieldMap[intentName] && intentFieldMap[intentName][fieldName]) { 
+    switch(intentFieldMap[intentName][fieldName]) { 
+      case 'number':
+        return parseInt(value)
+      case 'string':
+        return value.toString()
+      case 'boolean': 
+        return Boolean(value)
+    }
+  } else {
+    return value
+  }
+}
 
 export class WasmRunner {
   stateCache: Map<string, any>
@@ -256,6 +281,10 @@ class VmRunner {
     stateCid: string
   }>
   modules: any
+  intents: Array<{
+    name: string
+    args: Record<string, any>
+  }>
 
   constructor(args) {
     this.state = args.state
@@ -364,8 +393,8 @@ class VmRunner {
     if(this.balanceSnapshots.has(account)) { 
       const balance = this.balanceSnapshots.get(account)
       const combinedLedger = [...this.ledgerStack, ...this.ledgerStackTemp]
-      const hbdBal = combinedLedger.filter(e => e.amount && e.unit === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.token['HBD'])
-      const hiveBal = combinedLedger.filter(e => e.amount && e.unit === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.token['HIVE'])
+      const hbdBal = combinedLedger.filter(e => e.amount && e.unit === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HBD'])
+      const hiveBal = combinedLedger.filter(e => e.amount && e.unit === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HIVE'])
 
       return {
         account: account,
@@ -451,6 +480,40 @@ class VmRunner {
   // }
 
 
+  /**
+   * Verifies intent meets header condition
+   * @param name
+   * @param conditions 
+   * @returns 
+   */
+  verifyIntent(name: string, conditions?: Record<
+    string,
+    Query<string | number>
+    >): boolean {
+
+    console.log('verifying INTENT', this.intents)
+
+
+    for(let intent of this.intents) { 
+      if(intent.name !== name) {
+        continue;
+      }
+  
+      for(let conditionName in conditions) {
+        const filterData = conditions[conditionName]
+        const filter = sift(filterData)
+        
+        if(!filter(
+          intent.args[conditionName]
+        )) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
 
   /**
    * Init should only be called once
@@ -500,6 +563,7 @@ class VmRunner {
     contract_id: string; 
     action: string; 
     payload: string 
+    intents: Array<string>
     env: {
       'anchor.id': string
       'anchor.block': string
@@ -514,6 +578,23 @@ class VmRunner {
   }) {
     const contract_id = args.contract_id
     const block_height = args.block_height
+
+    this.intents = (args.intents || []).map(e => {
+      const [name, queryParam] = e.split('?')
+
+      const paramters = {}
+      new URLSearchParams(queryParam).forEach((value, key) => { 
+        console.log(name, key, value)
+        paramters[key] = transformIntentField(name, key, value)
+      })
+      
+      return {
+        name: name,
+        args: paramters
+      }
+    })
+
+
     const memory = new WebAssembly.Memory({
       initial: 10,
       maximum: 12800,
@@ -561,6 +642,34 @@ class VmRunner {
         } = JSON.parse(value)
         const snapshot = await this.getBalanceSnapshot(args.from, block_height)
         console.log('snapshot result', snapshot)
+
+        //Total amount drawn from ledgerStack during this execution
+        const totalAmountDrawn = Math.abs(this.ledgerStackTemp.filter(sift({
+          owner: args.from,
+          to: contract_id,
+          unit: args.asset
+        })).reduce((acc, cur) => acc + cur.amount, 0))
+
+
+        console.log('totalAmountDrawn', totalAmountDrawn)
+
+        console.log('totalAmountDrawn.limit', args.amount + totalAmountDrawn)
+
+        const allowedByIntent = this.verifyIntent('hive.allow_transfer', {
+          token: {
+            $eq: args.asset.toLowerCase()
+          },
+          limit: {
+            $gte: args.amount + totalAmountDrawn
+          }
+        })
+
+
+        if(!allowedByIntent) {
+          return {
+            result: "MISSING_INTENT_HEADER" 
+          }
+        }
 
         if(snapshot.tokens[args.asset] >= args.amount) {
           this.applyLedgerOp({
@@ -880,6 +989,7 @@ void (async () => {
         payload: message.payload,
         action: message.action,
         //Fill these in soon
+        intents: message.intents,
         env: message.env,
         block_height: message.env['anchor.height']
       })

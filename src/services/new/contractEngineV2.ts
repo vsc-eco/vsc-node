@@ -99,6 +99,7 @@ class VmContext {
             contract_id,
             action: tx.data.action,
             payload: JSON.stringify(tx.data.payload),
+            intents: tx.headers.intents,
             env: {
                 'anchor.id': blockHeader.id,
                 'anchor.height': tx.anchored_height,

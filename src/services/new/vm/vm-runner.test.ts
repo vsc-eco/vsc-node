@@ -85,6 +85,9 @@ void (async () => {
             to: "test1",
             from: 'test2',
           }),
+          intents: [
+            'hive.allow_transfer?limit=1100&token=hive'
+          ],
           env: {
             'anchor.id': 'bafyreicyk3o2maukvczy2376m3mn3tblfyglfghc2pwshsda6axnisiwca',
             'anchor.block': '05021b0f31ca836fd90513ac2684b9f203e0491a',

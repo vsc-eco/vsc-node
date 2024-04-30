@@ -50,9 +50,9 @@ export function getEnv(): ENV_DEFINITION {
   }
 }
 
-export function getBalanceOf(address: string, token: string): i64 {
+//export function getBalanceOf(address: string, token: string): i64 {
   
-}
+//}
 
 
 declare namespace System {
@@ -116,10 +116,14 @@ export function testJSON(payload: string):string {
   arg0.set('asset', 'HIVE')
   json.set('arg0', arg0.stringify())
   
+
+  const drawdownInfo =  json.stringify()
   const result = SystemAPI.call('hive.draw', json.stringify())
+  const result2 = SystemAPI.call('hive.draw', drawdownInfo)
   
   console.log(json.stringify())
   console.log(result)
+  console.log(result2)
   const env = getEnv()
   console.log(env.msg_required_auths[0])
   console.log(env.anchor_block)

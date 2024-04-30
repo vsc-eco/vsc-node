@@ -327,7 +327,9 @@ export class BalanceKeeper {
                     if(decodedMemo['action'] === 'withdraw') { 
                         const balanceSnapshot = await this.getSnapshot(opBody.from, args.data.blkHeight)
                         //Return the full deposit amount + requested amount
-                        const requestedAmount = Number(decodedMemo['amount']) * 1_000
+                        
+                        //Must shorten to 3 decimal places as Hive only goes to a max of 1.000
+                        const requestedAmount = Number(Number(decodedMemo['amount']).toFixed(3)) * 1_000
                         const sentAmount = Number(amount) * 1_000
                         const withdrawlAmount = requestedAmount + sentAmount
                         const dest = decodedMemo['to'] || opBody.from
@@ -433,12 +435,9 @@ export class BalanceKeeper {
             // console.log('withdraw action RUN', block_height)
             try {
                 const withdrawTx = await this.createWithdrawTx(block_height)
-                const hiveTx = new HiveTx.Transaction(withdrawTx).sign(
-                    HiveTx.PrivateKey.from(process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner'))
-                )
+                
 
                 const signedTx = hive.auth.signTransaction(withdrawTx, [process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner')]);
-                console.log('sending requeste signing', signedTx)
                 args.drain.push({
                     signature: signedTx.signatures[0]
                 })

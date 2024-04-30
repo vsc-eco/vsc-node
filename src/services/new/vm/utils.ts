@@ -284,6 +284,7 @@ export class VmContainer {
     contract_id: string
     action: string
     payload: string
+    intents?: Array<string>
     env: {
       'anchor.id': string
       'anchor.block': string
@@ -302,6 +303,7 @@ export class VmContainer {
       type: "call",
       action: args.action,
       payload: args.payload,
+      intents: args.intents,
       env: args.env,
       contract_id: args.contract_id,
       reqId

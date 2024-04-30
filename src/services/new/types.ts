@@ -233,6 +233,7 @@ export interface TransactionDbRecordV2 {
         contract_id?: string
         lock_block?: number
         nonce?: number
+        intents?: Array<string>
     }
     data: any | null
     local: boolean
@@ -250,8 +251,11 @@ export interface TransactionDbRecordV2 {
 
 
 export enum TransactionIntent {
-    'money.spend' = 'money.spend'
-}
+    // # Query Params
+    // limit = number in Hive
+    // token = hive or hbd
+    'hive.allow_transfer' = 'hive.allow_transfer'
+  }
 
 export interface TransactionContainerV2 {
     __t: 'vsc-tx'
@@ -262,7 +266,7 @@ export interface TransactionContainerV2 {
         required_auths: Array<string>
         //Tuple of transaction intent enum and arguments as querystring
         nonce: number
-        intents?: null | Array<[TransactionIntent, string]> 
+        intents?: null | Array<string> 
         type: TransactionDbType
     }
     tx: { 

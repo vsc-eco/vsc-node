@@ -23,7 +23,7 @@ type TraceInfo = {
 export default {
   start() {
     Sentry.init({
-      dsn: 'https://8997351a7510d343abfe7227b44b20d4@o4507035962179584.ingest.us.sentry.io/4507039719358464',
+      dsn: "https://282dcbc06e2462f1f83ce8190894497e@sentry.vsc.eco/2",
       integrations: [nodeProfilingIntegration()],
       // Performance Monitoring
       tracesSampleRate: 1.0, //  Capture 100% of the transactions

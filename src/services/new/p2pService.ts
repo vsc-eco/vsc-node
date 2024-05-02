@@ -599,8 +599,6 @@ export class P2PService {
                         ts: ts.toISOString(),
                         
                         signing_keys: {
-                            posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
-                            active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),
                             owner: PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString()
                         }
                     }, signers)

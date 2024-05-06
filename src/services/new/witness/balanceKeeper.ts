@@ -7,6 +7,7 @@ import { CID } from 'kubo-rpc-client'
 import networks from '../../../services/networks';
 import { HiveClient, HiveClient2 } from '../../../utils';
 import moment from 'moment';
+const PrivateKey = HiveTx.PrivateKey;
 
 interface TxReceipt {
     status: "PENDING" | "COMPLETE"
@@ -215,7 +216,7 @@ export class BalanceKeeper {
             const { payload } = data
             const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(hiveTx.digest().digest).toString()
             console.log(derivedPublicKey)
-            if (key_auths.includes(derivedPublicKey) || derivedPublicKey === 'STM8CVW1mDMEgZ7WbQJF8W6myoRcjK7Kd1cGk2gcuH1BfgjdCcUwh') {
+            if (key_auths.includes(derivedPublicKey)) {
                 if(!signatures.includes(payload.signature)) {
                     signatures.push(payload.signature)
                 }
@@ -230,16 +231,16 @@ export class BalanceKeeper {
         }, []);
         what.signatures = signatures
         console.log('sending tx confirm', multisigAccount.owner.weight_threshold,  signatures.length )
-        // if(multisigAccount.owner.weight_threshold <= signatures.length  ) { 
+        if(multisigAccount.owner.weight_threshold <= signatures.length  ) { 
             try {
                 const txConfirm = await HiveClient.broadcast.send(what)
                 console.log('Sending txConfirm', txConfirm)
             } catch (ex) {
                 console.log(ex)
             }
-        // } else {
-        //     // console.log('not fully signed')
-        // }
+        } else {
+            console.log('not fully signed')
+        }
     }
 
     async handleTxTick(args) {
@@ -436,6 +437,25 @@ export class BalanceKeeper {
             try {
                 const withdrawTx = await this.createWithdrawTx(block_height)
                 
+
+                const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
+
+                let signingKey;
+                for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
+                    const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.nodePrivate'), 'base64').toString(), 'owner')
+                    
+                    if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === privKey.createPublic().toString())) {
+                        signingKey = privKey
+                        break;
+                    }
+                }
+
+                if(!signingKey && process.env.MULTISIG_STARTUP_OWNER) {
+                    signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+                } else {
+                    console.log('Error: No signing key found - Not in signing list')
+                    return;
+                }
 
                 const signedTx = hive.auth.signTransaction(withdrawTx, [process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner')]);
                 args.drain.push({

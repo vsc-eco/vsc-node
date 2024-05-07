@@ -189,7 +189,7 @@ export class MultisigSystem {
         let signingKey;
         let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();
         console.log(pubKey)
-        if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === pubKey)){ 
+        if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e.toString() === pubKey)){ 
             signingKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner'))
         } else if(process.env.MULTISIG_STARTUP_OWNER) {
             signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
@@ -309,7 +309,7 @@ export class MultisigSystem {
             for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
                 const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.nodePrivate'), 'base64').toString(), 'owner')
                 
-                if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === privKey.createPublic().toString())) {
+                if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e.toString() === privKey.createPublic().toString())) {
                     signingKey = privKey
                     break;
                 }

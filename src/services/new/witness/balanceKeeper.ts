@@ -230,7 +230,7 @@ export class BalanceKeeper {
             ...transaction
         }, []);
         what.signatures = signatures
-        console.log('sending tx confirm', multisigAccount.owner.weight_threshold,  signatures.length )
+        console.log('sending tx confirm', `weight_threshold=${multisigAccount.owner.weight_threshold}`, `signatures=${signatures.length}`)
         if(multisigAccount.owner.weight_threshold <= signatures.length  ) { 
             try {
                 const txConfirm = await HiveClient.broadcast.send(what)
@@ -440,11 +440,14 @@ export class BalanceKeeper {
 
                 const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
 
+
+                console.log(multisigAccount.owner.key_auths.map(e => e[0]))
                 let signingKey;
                 for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
-                    const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.nodePrivate'), 'base64').toString(), 'owner')
+                    const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')
                     
                     if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === privKey.createPublic().toString())) {
+                        console.log(`Signing key selected: ${privKey.createPublic().toString()}`)
                         signingKey = privKey
                         break;
                     }
@@ -457,7 +460,7 @@ export class BalanceKeeper {
                     return;
                 }
 
-                const signedTx = hive.auth.signTransaction(withdrawTx, [process.env.TEST_KEY || this.self.config.get('identity.signing_keys.owner')]);
+                const signedTx = hive.auth.signTransaction(withdrawTx, [this.self.config.get('identity.signing_keys.owner')]);
                 args.drain.push({
                     signature: signedTx.signatures[0]
                 })

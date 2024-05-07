@@ -186,12 +186,18 @@ export class MultisigSystem {
         }
         //const hiveTxData = new HiveTx.Transaction(transaction)
 
+        
         let signingKey;
-        let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();
-        console.log(pubKey)
-        if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === pubKey)){ 
-            signingKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner'))
-        } else if(process.env.MULTISIG_STARTUP_OWNER) {
+        for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
+            const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')
+            
+            if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === privKey.createPublic().toString())) {
+                signingKey = privKey
+                break;
+            }
+        }
+
+        if(!signingKey && process.env.MULTISIG_STARTUP_OWNER) {
             signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
         } else {
             console.log('Error: No signing key found - Not in signing list')
@@ -307,7 +313,7 @@ export class MultisigSystem {
             //Fix issues with rotated keys after 
             let signingKey;
             for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
-                const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.nodePrivate'), 'base64').toString(), 'owner')
+                const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')
                 
                 if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e === privKey.createPublic().toString())) {
                     signingKey = privKey

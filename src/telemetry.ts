@@ -11,6 +11,8 @@ const errorHandler = (err) => {
 
 const FLUSH_INTERVAL = 60 * 1000
 
+const DISABLED = true
+
 const flusher = () => Sentry.flush()
 
 let flushInterval
@@ -22,8 +24,11 @@ type TraceInfo = {
 
 export default {
   start() {
+    if (DISABLED) {
+      return
+    }
     Sentry.init({
-      dsn: "https://282dcbc06e2462f1f83ce8190894497e@sentry.vsc.eco/2",
+      dsn: 'https://282dcbc06e2462f1f83ce8190894497e@sentry.vsc.eco/2',
       integrations: [nodeProfilingIntegration()],
       // Performance Monitoring
       tracesSampleRate: 1.0, //  Capture 100% of the transactions
@@ -36,15 +41,24 @@ export default {
     flushInterval = setInterval(flusher, FLUSH_INTERVAL)
   },
   stop() {
+    if (DISABLED) {
+      return
+    }
     process.off('unhandledRejection', errorHandler)
     process.off('uncaughtException', errorHandler)
     clearInterval(flushInterval)
     return Sentry.close()
   },
   setUserId(id: string, username: string) {
+    if (DISABLED) {
+      return
+    }
     Sentry.getCurrentScope().setUser({ id, username })
   },
   captureMessage(msg: string, ignoreContext: boolean = true) {
+    if (DISABLED) {
+      return
+    }
     if (ignoreContext) {
       Sentry.runWithAsyncContext(() => {
         Sentry.captureMessage(msg)
@@ -54,6 +68,9 @@ export default {
     }
   },
   captureError(err: Error, ignoreContext: boolean = false) {
+    if (DISABLED) {
+      return
+    }
     if (ignoreContext) {
       Sentry.runWithAsyncContext(() => {
         Sentry.captureException(err)
@@ -63,6 +80,9 @@ export default {
     }
   },
   captureEvent(eventId: string, info: Record<string, Primitive>, ignoreContext: boolean = true) {
+    if (DISABLED) {
+      return
+    }
     if (ignoreContext) {
       Sentry.runWithAsyncContext(() => {
         Sentry.captureMessage(eventId, { tags: info })
@@ -72,6 +92,22 @@ export default {
     }
   },
   captureTracedEvent(name: string, info: Record<string, Primitive>) {
+    if (DISABLED) {
+      return {
+        traceInfo: {
+          baggage: '',
+          sentryTrace: '',
+        },
+        addMetadata(info: Record<string, Primitive>) {
+          for (const [key, value] of Object.entries(info)) {
+            span.setTag(key, value)
+          }
+        },
+        finish() {
+          span.end()
+        },
+      }
+    }
     const span = Sentry.startInactiveSpan({ name, tags: info })
     const dynamicSamplingContext = getDynamicSamplingContextFromSpan(span)
 
@@ -95,6 +131,12 @@ export default {
     }
   },
   continueTracedEvent(name: string, traceInfo: TraceInfo, info: Record<string, Primitive>) {
+    if (DISABLED) {
+      return {
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
+      }
+    }
     const span = Sentry.continueTrace(traceInfo, () => {
       return Sentry.startInactiveSpan({ name, tags: info })
     })

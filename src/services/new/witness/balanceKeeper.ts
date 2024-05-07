@@ -452,14 +452,16 @@ export class BalanceKeeper {
                     }
                 }
 
-                if(!signingKey && process.env.MULTISIG_STARTUP_OWNER) {
-                    signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
-                } else {
-                    console.log('Error: No signing key found - Not in signing list')
-                    return;
+                if(!signingKey) {
+                    if(process.env.MULTISIG_STARTUP_OWNER) {
+                        signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+                    } else {
+                        console.log('Error: No signing key found - Not in signing list')
+                        return;
+                    }
                 }
 
-                const signedTx = hive.auth.signTransaction(withdrawTx, [this.self.config.get('identity.signing_keys.owner')]);
+                const signedTx = hive.auth.signTransaction(withdrawTx, [signingKey.toString()]);
                 args.drain.push({
                     signature: signedTx.signatures[0]
                 })

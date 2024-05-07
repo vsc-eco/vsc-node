@@ -188,7 +188,7 @@ export class MultisigSystem {
 
         
         let signingKey;
-        for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
+        for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) {
             const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')
             
             if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e.toString() === privKey.createPublic().toString())) {
@@ -197,11 +197,13 @@ export class MultisigSystem {
             }
         }
 
-        if(!signingKey && process.env.MULTISIG_STARTUP_OWNER) {
-            signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
-        } else {
-            console.log('Error: No signing key found - Not in signing list')
-            return;
+        if(!signingKey) {
+            if(process.env.MULTISIG_STARTUP_OWNER) {
+                signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+            } else {
+                console.log('Error: No signing key found - Not in signing list')
+                return;
+            }
         }
 
         const what = hive.auth.signTransaction({
@@ -321,11 +323,14 @@ export class MultisigSystem {
                 }
             }
 
-            if(!signingKey && process.env.MULTISIG_STARTUP_OWNER) {
-                signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
-            } else {
-                console.log('Error: No signing key found - Not in signing list')
-                return;
+
+            if(!signingKey) {
+                if(process.env.MULTISIG_STARTUP_OWNER) {
+                    signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+                } else {
+                    console.log('Error: No signing key found - Not in signing list')
+                    return;
+                }
             }
                 
             /*let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();

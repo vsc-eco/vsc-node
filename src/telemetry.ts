@@ -98,14 +98,8 @@ export default {
           baggage: '',
           sentryTrace: '',
         },
-        addMetadata(info: Record<string, Primitive>) {
-          for (const [key, value] of Object.entries(info)) {
-            span.setTag(key, value)
-          }
-        },
-        finish() {
-          span.end()
-        },
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
       }
     }
     const span = Sentry.startInactiveSpan({ name, tags: info })

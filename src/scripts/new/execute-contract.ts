@@ -2,7 +2,7 @@ import { PrivateKey } from "@hiveio/dhive"
 import { HiveClient } from "../../utils"
 import { CoreService } from "../../services"
 
-const contractId = 'vs41q9c3ygy36jwdd06qe4wgmhxm8m3dxvapy69ckdgn6tp6esuusvd7tupu7smvypyg'
+const contractId = 'vs41q9c3ygzj5gxun4pc8g6d7ag2sh6xhep79jt6urx2dw2w4k3f35s8cj639g4t6qsp'
 
 void (async () => {
     const core = new CoreService({
@@ -23,13 +23,11 @@ void (async () => {
             net_id: core.config.get('network.id'),
             __v: '0.1',
             __t: 'native',
-            data: {
+            tx: {
                 op: 'call_contract',
-                action: 'testJSON',
+                action: 'dumpEnv',
                 contract_id: contractId,
-                payload: {
-                    testData: "hello-world"
-                }
+                payload: 'sldfjlksdjfl'
             }
         })
     }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING))

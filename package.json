@@ -20,7 +20,7 @@
     "@transmute/did-key-bls12381": "^0.3.0-unstable.10",
     "@types/node": "^20.12.2",
     "@vsc.eco/client": "^0.0.4",
-    "@vsc.eco/sdk": "^0.1.3",
+    "@vsc.eco/sdk": "^0.1.4",
     "ajv": "^6.12.6",
     "assemblyscript": "^0.27.22",
     "assemblyscript-json": "^1.1.0",

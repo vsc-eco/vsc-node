@@ -6,7 +6,15 @@ import { Collection } from "mongodb";
 
 
 export const VersionConfig = {
-    index_reset_id: 12,
+    index_reset_id: 13,
+
+     /**
+      * should only be increased, but it can be decremented when trying a previous block reset
+      * requires index_reset_id to be updated to trigger a reindex of the new block data
+      */
+    index_block_reset_id: 0,
+    last_block_to_keep: [85032300],
+
     //Match with package.json and tag
     version_id: 'v0.1.3'
 }
@@ -31,6 +39,10 @@ export class VersionManager {
     withdrawDb: Collection;
     ledgerDb: Collection;
     balanceDb: Collection;
+    eventsDb: Collection<{
+        id: 'hive_block',
+        key: number
+    }>;
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -48,6 +60,7 @@ export class VersionManager {
         this.withdrawDb = this.self.db.collection('bridge_withdrawals')
         this.ledgerDb = this.self.db.collection('bridge_ledger')
         this.balanceDb = this.self.db.collection('bridge_balances')
+        this.eventsDb = this.self.db.collection('events')
 
         this.init = this.init.bind(this)
     }
@@ -82,6 +95,42 @@ export class VersionManager {
     }
 
     async init() {
+        const resetBlocksEntry = await this.streamState.findOne({
+            id: 'index_block_reset'
+        });
+
+        if(resetBlocksEntry === null || resetBlocksEntry.val !== VersionConfig.index_reset_id) {
+            const index = resetBlocksEntry?.val ?? 0;
+            const lastBlockToKeep = Math.min(...VersionConfig.last_block_to_keep.slice(index));
+
+            console.log('Resetting block height to:', lastBlockToKeep);
+
+            await this.eventsDb.deleteMany({
+                id: 'hive_block',
+                key: {
+                    $gt: lastBlockToKeep,
+                }
+            })
+
+            await this.streamState.findOneAndUpdate({
+                id: 'last_hb'
+            }, {
+                $set: {
+                    val: lastBlockToKeep
+                }
+            })
+
+            await this.streamState.findOneAndUpdate({
+                id: 'index_block_reset'
+            }, {
+                $set: {
+                    val: VersionConfig.index_block_reset_id
+                }
+            }, {
+                upsert: true
+            })
+        }
+
         const resetEntry = await this.streamState.findOne({
             id: "index_reset"
         })

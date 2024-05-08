@@ -282,6 +282,9 @@ export const Resolvers = {
     }
   },
   witnessNodes: async (_, args) => {
+    if(!args.height) { 
+      args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
+    }
     //Use getWitnessesAtBlock to get witnesses in general
     //TODO: Create separate API to include indicate whether a node is in the schedule or not.
     return await appContainer.self.newService.chainBridge.getWitnessesAtBlock(args.height)

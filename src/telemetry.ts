@@ -103,9 +103,40 @@ export default {
       }
     }
     const span = Sentry.startInactiveSpan({ name, tags: info })
+
+    if (!span) {
+      console.warn('creating traced event failed... ignoring')
+      return {
+        traceInfo: {
+          baggage: '',
+          sentryTrace: '',
+        },
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
+      }
+    }
+
     const dynamicSamplingContext = getDynamicSamplingContextFromSpan(span)
 
     const baggage = dynamicSamplingContextToSentryBaggageHeader(dynamicSamplingContext)
+
+    if (!baggage) {
+      console.warn('could not generate trace info... returning without it')
+      return {
+        traceInfo: {
+          baggage: '',
+          sentryTrace: '',
+        },
+        addMetadata(info: Record<string, Primitive>) {
+          for (const [key, value] of Object.entries(info)) {
+            span.setTag(key, value)
+          }
+        },
+        finish() {
+          span.end()
+        },
+      }
+    }
 
     const traceInfo: TraceInfo = {
       baggage,
@@ -134,6 +165,14 @@ export default {
     const span = Sentry.continueTrace(traceInfo, () => {
       return Sentry.startInactiveSpan({ name, tags: info })
     })
+
+    if (!span) {
+      console.warn('continuing traced event invalid... ignoring')
+      return {
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
+      }
+    }
 
     return {
       addMetadata(info: Record<string, Primitive>) {

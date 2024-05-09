@@ -6,7 +6,7 @@ import { encodePayload } from 'dag-jose-utils'
 import { NewCoreService } from ".";
 import { BlockHeader, HiveAccountAuthority, TransactionDbStatus, TransactionDbType } from "./types";
 import networks from "../networks";
-import { createMongoDBClient, fastStream, sleep } from "../../utils";
+import { createMongoDBClient, fastStream, sleep, truthy } from "../../utils";
 import { BlsCircuit } from './utils/crypto/bls-did';
 import BitSet from 'bitset';
 import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils';
@@ -658,7 +658,7 @@ export class ChainBridgeV2 {
             }
             
             return e;
-        }))).filter(e => !!e)
+        }))).filter(truthy)
         
         // console.log('filteredWitnesses', filteredWitnesses, filteredWitnesses.length)
         return filteredWitnesses.sort((a, b) => {

@@ -362,7 +362,6 @@ export class MultisigSystem {
                 const block_height = Number(block.key)
 
                 if(block_height % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
-                    const slotInfo = await this.self.witness.calculateConsensusRound(block_height)
                     const schedule = await this.self.witness.getBlockSchedule(block_height)
                     const slot = schedule.find(e => e.bn >= block_height)
                     

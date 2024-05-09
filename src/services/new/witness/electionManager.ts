@@ -13,7 +13,7 @@ import { VersionConfig } from "./versionManager";
 import EventEmitter from 'node:events';
 
 
-interface ElectionResult {
+export interface ElectionResult {
     block_height: number
     epoch: number
     members: Array<{
@@ -30,34 +30,6 @@ interface ElectionResultSignedHeader {
         sig: string
         bv: string
     }
-}
-
-function d2h(d) {
-    var h = (d).toString(16);
-    return h.length % 2 ? '0' + h : h;
-}
-
-function compressBV<T>(subset: Array<T>, set: Array<T>): string {
-    const bs = new BitSet()
-    for(let s of subset) {
-        const n = set.indexOf(s);
-        if(n !== -1) {
-            bs.set(n, 1)
-        }
-    }
-    return Buffer.from(d2h(bs.toString(16)), 'hex').toString('base64url');
-}
-
-function decompressBV<T>(bv: string, set: Array<T>): Array<T> {
-    const bs = BitSet.fromHexString(Buffer.from(bv, 'base64url').toString('hex'))
-    let result = []
-    for(let keyIdx in bs) {
-        if(bs.get(Number(keyIdx)) === 1) {
-            result.push(set[keyIdx])
-        }
-    }
-
-    return result;
 }
 
 
@@ -158,6 +130,9 @@ export class ElectionManager {
                 block_height: -1
             }
         })
+        if (!electionResult) {
+            throw new Error(`could not find election before block ${blkHeight}`)
+        }
         return electionResult
     }
 
@@ -308,6 +283,14 @@ export class ElectionManager {
         if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
+
+            if (!process.env.HIVE_ACCOUNT) {
+                throw new Error('no hive account... will not broadcast election result')
+            }
+
+            if (!process.env.HIVE_ACCOUNT_ACTIVE) {
+                throw new Error('no hive account active key... will not broadcast election result')
+            }
             
             await HiveClient.broadcast.json({
                 id: 'vsc.election_result',
@@ -321,15 +304,15 @@ export class ElectionManager {
         }
     }
 
-    async btHoldElection({data:block}) {
+    async btHoldElection({data:block}: ParserFuncArgs<'block'>) {
         const blk = block.key
         // const drift = blk % this.epochLength;
         // const slotHeight = blk - drift
-        if(blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
-            const witnessSchedule = await this.self.witness.getBlockSchedule(blk)
-            const scheduleSlot = witnessSchedule.find(e => e.bn >= blk)
+        if(+blk % this.epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+            const witnessSchedule = await this.self.witness.getBlockSchedule(+blk)
+            const scheduleSlot = witnessSchedule.find(e => e.bn >= +blk)
             if(scheduleSlot && scheduleSlot.account === process.env.HIVE_ACCOUNT) {
-                this.holdElection(blk)
+                this.holdElection(+blk)
             }
         }
     }
@@ -357,7 +340,7 @@ export class ElectionManager {
                 const slotHeight = blkHeight - (blkHeight % this.epochLength)
                 
                 const circuit = BlsCircuit.deserialize(json, (await this.getMembersOfBlock(slotHeight)).map(e => e.key))
-                let pubKeys = []
+                const pubKeys: string[] = []
                 for(let pub of circuit.aggPubKeys) {
                     pubKeys.push(pub[0])
                 }
@@ -525,13 +508,10 @@ export class ElectionManager {
             // }
             
             const verifierCircuit = BlsCircuit.deserialize(electionResult, (await this.getMembersOfBlock(slotHeight)).map(e => e.key))
-                let pubKeys = []
+                const pubKeys: string[] = []
                 for(let pub of circuit.aggPubKeys) {
                     pubKeys.push(pub[0])
                 }
-
-                const signedDataNoSig = electionResult;
-                delete signedDataNoSig.signature
 
                 //Aggregate pubkeys
                 verifierCircuit.setAgg(pubKeys)

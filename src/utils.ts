@@ -14,6 +14,13 @@ import { Version } from 'multiformats'
 import {pathToFileURL} from 'node:url';
 import { mongo } from './services/db'
 import https from 'node:https'
+
+
+export function truthy<T>(v: T): v is Exclude<T, false | '' | null | undefined> {
+  return !!v
+}
+
+
 export const keepAliveAgent = new https.Agent({keepAlive:true});
 
 

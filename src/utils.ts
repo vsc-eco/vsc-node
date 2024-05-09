@@ -3,7 +3,7 @@ import EventEmitter from 'events'
 //import PQueue from 'p-queue'
 import { BlockchainMode, BlockchainStreamOptions, Client } from '@hiveio/dhive'
 import Pushable from 'it-pushable'
-import { DagJWS, DID } from 'dids'
+import { DagJWS, DID, JWSSignature } from 'dids'
 import PQueue from 'p-queue'
 import { IPFSHTTPClient } from 'kubo-rpc-client'
 import winston from 'winston'
@@ -32,7 +32,7 @@ HiveClient.options.agent = keepAliveAgent;
 export class fastStream {
 
   replayComplete: boolean
-  blockMap: Record<string, any>
+  blockMap?: Record<string, any>
 
   eventQueue: NodeJS.Timer
   events: EventEmitter
@@ -67,7 +67,7 @@ export class fastStream {
     this.startBlock = streamOpts.startBlock || 1
     this.parser_height = streamOpts.startBlock || 0
     this.setSize = 50;
-    this.endSet = (streamOpts.endBlock - streamOpts.startBlock) / this.setSize
+    this.endSet = ((streamOpts.endBlock || this.parser_height )- this.parser_height) / this.setSize
 
     this.blockMap = {}
     this.aborts = []
@@ -89,7 +89,7 @@ export class fastStream {
     })
 
     this.eventQueue = setInterval(() => {
-      if (this.blockMap[this.parser_height]) {
+      if (this.blockMap?.[this.parser_height]) {
         const block_height = parseInt(this.blockMap[this.parser_height].block_id.slice(0, 8), 16)
 
         this.parser_height = block_height + 1;
@@ -99,9 +99,9 @@ export class fastStream {
         this.lastBlockTs = new Date(this.blockMap[block_height].timestamp + "Z")
         delete this.blockMap[block_height]
       }
-      for (let key of Object.keys(this.blockMap)) {
+      for (let key of Object.keys(this.blockMap ?? {})) {
         if (Number(key) < this.parser_height) {
-          delete this.blockMap[key]; //Memory safety
+          delete this.blockMap?.[key]; //Memory safety
         }
       }
     }, 1)
@@ -154,7 +154,7 @@ export class fastStream {
           console.log('this.lastBlock', this.lastBlock, {
             count: this.setSize,
             start_block: this.startBlock + x * this.setSize,
-            blockMapSize: Object.keys(this.blockMap).length
+            blockMapSize: Object.keys(this.blockMap ?? {}).length
           })
           // this.currentBlock = this.currentBlock + this.setSize
 
@@ -169,7 +169,7 @@ export class fastStream {
               this.lastBlockAt = new Date()
               this.lastBlock = block_height;
               this.lastBlockTs = new Date(block.timestamp + "Z")
-            } else if (block_height > this.parser_height) {
+            } else if (block_height > this.parser_height && this.blockMap) {
               this.blockMap[block_height] = block
             }
           }
@@ -199,7 +199,7 @@ export class fastStream {
           this.lastBlockAt = new Date()
           this.lastBlock = block_height;
           this.lastBlockTs = new Date(block.timestamp + "Z")
-        } else if (block_height > this.parser_height) {
+        } else if (block_height > this.parser_height && this.blockMap) {
           this.blockMap[block_height] = block
         }
       }
@@ -434,7 +434,7 @@ export const NULL_DID = 'did:key:z6MkeTG3bFFSLYVU7VqhgZxqr6YzpaGrQtFMh1uvqGy1vDn
 
 
 export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
-  let auths = [];
+  let auths: string[] = [];
 
   for (let sig of dagJws.signatures) {
     const obj = {
@@ -452,7 +452,7 @@ export async function verifyMultiJWS(dagJws: DagJWS, signer: DID) {
   }
 }
 export async function verifyMultiDagJWS(dagJws: DagJWS, signer: DID) {
-  let auths = [];
+  let auths: string[] = [];
 
   for (let sig of dagJws.signatures) {
     const obj = {
@@ -484,13 +484,17 @@ export async function unwrapDagJws(dagJws: any, ipfs: IPFSHTTPClient, signer: DI
 }
 
 export async function createJwsMultsign(data: any, signers: DID[]) {
-  let signatures = []
-  let signedDag
+  let signatures: JWSSignature[] = []
+  let signedDag: DagJWS
   for (let signer of signers) {
     signedDag = await signer.createJWS(data)
     let d = await signer.createDagJWS(data)
     // console.log('signedDag', signedDag, d.jws)
     signatures.push(...signedDag.signatures)
+  }
+
+  if (!signers.length) {
+    throw new Error('no signers')
   }
   // let signatures = []
   // let signedDag
@@ -511,7 +515,7 @@ export async function createJwsMultsign(data: any, signers: DID[]) {
   //   })
   // }
   return {
-    payload: signedDag.payload,
+    payload: signedDag!.payload,
     signatures,
     // link: signedDag.jws.link,
   }
@@ -699,7 +703,7 @@ export class ModuleContainer {
 
 
   async startModules() {
-    let startStack = []
+    let startStack: any[] = []
     for (let [key, regClass] of this.modules) {
       if (regClass.start) {
         try {
@@ -714,7 +718,7 @@ export class ModuleContainer {
   }
 
   async stopModules() {
-    let stopStack = []
+    let stopStack: any[] = []
     for (let [key, regClass] of this.modules) {
       if (regClass.stop) {
         try {

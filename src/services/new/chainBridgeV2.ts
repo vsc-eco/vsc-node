@@ -4,7 +4,7 @@ import DeepEqual from 'deep-equal'
 import PQueue from "p-queue";
 import { encodePayload } from 'dag-jose-utils'
 import { NewCoreService } from ".";
-import { BlockHeader, HiveAccountAuthority, TransactionDbStatus, TransactionDbType } from "./types";
+import { BlockHeader, HiveAccountAuthority, TransactionDbStatus, TransactionDbType, WitnessDbRecord } from "./types";
 import networks from "../networks";
 import { createMongoDBClient, fastStream, sleep, truthy } from "../../utils";
 import { BlsCircuit } from './utils/crypto/bls-did';
@@ -35,7 +35,7 @@ export class ChainBridgeV2 {
     events: Collection<EventRecord>;
     accountAuths: Collection<HiveAccountAuthority>;
     streamState: Collection
-    witnessDb: Collection
+    witnessDb: Collection<WitnessDbRecord>
     witnessHistoryDb: Collection
     consensusDb: Collection
     consensusDataDb: Collection

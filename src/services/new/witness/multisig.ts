@@ -8,6 +8,7 @@ import { NewCoreService } from "..";
 import { WitnessServiceV2 } from ".";
 import networks from "../../networks";
 import { ParserFuncArgs } from "../utils";
+import { WitnessDbRecord } from "../types";
 
 
 
@@ -131,7 +132,7 @@ export class MultisigSystem {
         const members = electionResult.members
 
 
-        const candidateNodes = []
+        const candidateNodes: WitnessDbRecord[] = []
         for(let member of members) { 
             const witness = await this.self.chainBridge.witnessDb.findOne({
                 account: member.account
@@ -264,7 +265,7 @@ export class MultisigSystem {
             const members = electionResult.members
 
             
-            const candidateNodes = []
+            const candidateNodes: WitnessDbRecord[] = []
             for(let member of members) { 
                 const witness = await this.self.chainBridge.witnessDb.findOne({
                     account: member.account
@@ -365,7 +366,7 @@ export class MultisigSystem {
                     const schedule = await this.self.witness.getBlockSchedule(block_height)
                     const slot = schedule.find(e => e.bn >= block_height)
                     
-                    if(slot.account === process.env.HIVE_ACCOUNT) {
+                    if(slot && slot.account === process.env.HIVE_ACCOUNT) {
                         const limit = block_height % this.epochLength;
         
                         await this.runKeyRotation(block_height)

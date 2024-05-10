@@ -1,7 +1,7 @@
 #!/bin/bash
 
 repo_url="https://github.com/vsc-eco/vsc-deployment.git"
-default_path=$(realpath "../")
+default_path=$(realpath "../vsc-deployment")
 
 if [ -z "$1" ]; then
     echo "VSC node migration script. The default path is for the deployment repository is '${default_path}'"
@@ -11,9 +11,7 @@ else
     clone_path="$1"
 fi
 
-clone_path=$clone_path"/vsc-deployment"
 
-mkdir -p "$clone_path" || { echo "Failed to create directory at ${clone_path}"; exit 1; }
 
 git clone "$repo_url" "$clone_path" || { echo "Failed to clone repository."; exit 1; }
 

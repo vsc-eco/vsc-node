@@ -7,7 +7,7 @@ import networks from "../../../services/networks";
 import { ParserFuncArgs } from "../utils/streamUtils";
 import BitSet from "bitset";
 import { CID } from "kubo-rpc-client";
-import { HiveClient } from "../../../utils";
+import { HiveClient, truthy } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { VersionConfig } from "./versionManager";
 import EventEmitter from 'node:events';
@@ -150,7 +150,7 @@ export class ElectionManager {
                     account: e.account,
                     key: e.keys.find(b => b.t === 'consensus')?.key
                 }
-            }).filter(e => !!e.key)
+            }).filter((e): e is typeof e & {key: string} => truthy(e.key))
         }
     }
 
@@ -203,9 +203,9 @@ export class ElectionManager {
         }).map(e => {
             return {
                 account: e.account,
-                key: e.keys.find(b => b.t === 'consensus').key
+                key: e.keys.find(b => b.t === 'consensus')?.key
             }
-        })
+        }).filter((e): e is typeof e & {key: string} => truthy(e.key))
 
         const electionData = {
             __t: 'vsc-election',

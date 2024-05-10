@@ -297,6 +297,7 @@ export interface WitnessDbRecord {
     ipfs_peer_id: string
     last_signed: number
     net_id: string
+    version_id: string
     signing_keys: {
         posting: string
         active: string

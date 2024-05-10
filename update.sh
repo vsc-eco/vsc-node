@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+echo "********** This method of updating the node is deprecated.                  **********"
+echo "********** Please use the vsc-deployment repository to launch the VSC-node. **********"
+echo "********** For an easy migration please use the 'migrate.sh' script.        **********"
+
 updateCode=$(git pull);
 
 gitCommit=$(git rev-parse HEAD)

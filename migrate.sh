@@ -20,6 +20,11 @@ if [ ! -f "${clone_path}/.env" ] && [ ! -d "${clone_path}/data" ] && [ -f ".env"
     cp ".env" "${clone_path}/"
     cp -r "data" "${clone_path}/"
     echo "Node data copied successfully."
+
+    read -p "Would you like to disable automatic updates? We highly recommend to leave automatic updates enabled, because outdated nodes may be excluded from the network [y/N]: " -n 1 -e auto_updates
+    if [ "y" = "${auto_updates}" ]; then
+        echo -e "\nAUTO_UPDATE=false" >> "${clone_path}/.env"
+    fi
 else
     echo "Node data not found in the current directory or already exists in the target directory."
     exit 1

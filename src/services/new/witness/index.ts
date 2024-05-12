@@ -8,6 +8,7 @@ import { Collection } from 'mongodb';
 import { CID } from 'multiformats';
 import IPLDDag from 'ipld-dag-cbor'
 import ShuffleSeed from 'shuffle-seed'
+import fs from 'fs/promises'
 
 
 import { BlockHeader, TransactionDbStatus, TransactionDbType } from '../types';
@@ -779,7 +780,7 @@ export class WitnessServiceV2 {
     async getBlockSchedule(blockHeight) {
       const consensusRound = await this.calculateConsensusRound(blockHeight)
       const electionResult = await this.self.electionManager.getValidElectionOfblock(blockHeight)
-      // console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
+      //console.log(electionResult.epoch, this.witnessSchedule.valid_epoch, consensusRound.randomizeHash, this.witnessSchedule.valid_height)
       if(this.witnessSchedule.valid_height === consensusRound.pastRoundHeight && electionResult?.epoch === this.witnessSchedule.valid_epoch) {
         // console.log('this.witnessSchedule.valid_to', this.witnessSchedule.valid_height, blockHeight, consensusRound)
         return this.witnessSchedule.schedule;
@@ -874,12 +875,20 @@ export class WitnessServiceV2 {
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
         const schedule = await this.getBlockSchedule(block_height)
 
+
+
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
         const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
           ipfs_peer_id: from.toString()
         }))
-        console.log(fromWitness)
+
+        if(!fromWitness) {
+          console.log('Witness.cadBlock validate #1.1 - witness NOT FOUND in DB')
+          throw DONE_ERROR;
+        }
+
+        
         const witnessSlot = schedule.find(e => {
             //Ensure witness slot is within slot start and end
             // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
@@ -889,7 +898,7 @@ export class WitnessServiceV2 {
         verifyingCtx?.addMetadata({proposer: fromWitness?.account})
 
         if(!witnessSlot) {
-          console.log('Witness.cadBlock validate #1 - witness not in current slot')
+          console.log(`Witness.cadBlock validate #1.2 - witness NOT IN SLOT (@${fromWitness.account})`)
           throw DONE_ERROR;
         }
 

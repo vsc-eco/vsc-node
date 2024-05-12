@@ -11,7 +11,7 @@ const errorHandler = (err) => {
 
 const FLUSH_INTERVAL = 60 * 1000
 
-const DISABLED = true
+const DISABLED = false
 
 const flusher = () => Sentry.flush()
 
@@ -28,7 +28,7 @@ export default {
       return
     }
     Sentry.init({
-      dsn: 'https://282dcbc06e2462f1f83ce8190894497e@sentry.vsc.eco/2',
+      dsn: 'https://8997351a7510d343abfe7227b44b20d4@o4507035962179584.ingest.us.sentry.io/4507039719358464',
       integrations: [nodeProfilingIntegration()],
       // Performance Monitoring
       tracesSampleRate: 1.0, //  Capture 100% of the transactions
@@ -103,9 +103,40 @@ export default {
       }
     }
     const span = Sentry.startInactiveSpan({ name, tags: info })
+
+    if (!span) {
+      console.warn('creating traced event failed... ignoring')
+      return {
+        traceInfo: {
+          baggage: '',
+          sentryTrace: '',
+        },
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
+      }
+    }
+
     const dynamicSamplingContext = getDynamicSamplingContextFromSpan(span)
 
     const baggage = dynamicSamplingContextToSentryBaggageHeader(dynamicSamplingContext)
+
+    if (!baggage) {
+      console.warn('could not generate trace info... returning without it')
+      return {
+        traceInfo: {
+          baggage: '',
+          sentryTrace: '',
+        },
+        addMetadata(info: Record<string, Primitive>) {
+          for (const [key, value] of Object.entries(info)) {
+            span.setTag(key, value)
+          }
+        },
+        finish() {
+          span.end()
+        },
+      }
+    }
 
     const traceInfo: TraceInfo = {
       baggage,
@@ -134,6 +165,14 @@ export default {
     const span = Sentry.continueTrace(traceInfo, () => {
       return Sentry.startInactiveSpan({ name, tags: info })
     })
+
+    if (!span) {
+      console.warn('continuing traced event invalid... ignoring')
+      return {
+        addMetadata(info: Record<string, Primitive>) {},
+        finish() {},
+      }
+    }
 
     return {
       addMetadata(info: Record<string, Primitive>) {

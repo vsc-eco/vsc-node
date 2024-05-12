@@ -1,4 +1,4 @@
-export default {
+const networks = new Proxy({
     //LEGACY DONT USE
     "testnet/ab8b6cf1-b344-4ad3-8f81-f2d72c61f6b2": {
         genesisDay: 70790692,
@@ -29,9 +29,18 @@ export default {
         consensusRoundLength: 10,
         multisigAccount: 'vsc.gateway'
     }
-} as Record<string, {
-    genesisDay: number,
-    roundLength: number
-    totalRounds: number
-    multisigAccount?: string
-}>
+} as const, {
+    get(target, p, receiver) {
+        if (!Object.prototype.hasOwnProperty.call(target, p)) {
+            throw new Error(`unknown network selected: ${String(p)}`)
+        }
+        return Reflect.get(target, p, receiver)
+    },
+})
+
+/**
+ * List of network configurations
+ * 
+ * @throws if network id is not in the list
+ */
+export default networks

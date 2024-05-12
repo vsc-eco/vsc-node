@@ -17,7 +17,7 @@ export const VersionConfig = {
 
     //Match with package.json and tag
     version_id: 'v0.1.3'
-}
+} as const;
 
 /**
  * Manages signaling new versions of VSC releases.
@@ -99,7 +99,7 @@ export class VersionManager {
             id: 'index_block_reset'
         });
 
-        if(resetBlocksEntry === null || resetBlocksEntry.val !== VersionConfig.index_reset_id) {
+        if(resetBlocksEntry === null || resetBlocksEntry.val !== VersionConfig.index_block_reset_id) {
             const index = resetBlocksEntry?.val ?? 0;
             const lastBlockToKeep = Math.min(...VersionConfig.last_block_to_keep.slice(index));
 

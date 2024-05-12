@@ -4,9 +4,9 @@ import DeepEqual from 'deep-equal'
 import PQueue from "p-queue";
 import { encodePayload } from 'dag-jose-utils'
 import { NewCoreService } from ".";
-import { BlockHeader, HiveAccountAuthority, TransactionDbStatus, TransactionDbType } from "./types";
+import { BlockHeader, HiveAccountAuthority, TransactionDbStatus, TransactionDbType, WitnessDbRecord } from "./types";
 import networks from "../networks";
-import { createMongoDBClient, fastStream, sleep } from "../../utils";
+import { createMongoDBClient, fastStream, sleep, truthy } from "../../utils";
 import { BlsCircuit } from './utils/crypto/bls-did';
 import BitSet from 'bitset';
 import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils';
@@ -28,6 +28,22 @@ interface BlockHeaderDbRecord {
     ts: Date
 }
 
+type WitnessHistoryDbRecord =
+  | {
+      account: string
+      type: 'witness.toggle'
+      valid_from: number
+      enabled: boolean
+      net_id: string
+      ref_id: string
+    }
+  | {
+      account: string
+      type: 'witness.last_signed'
+      valid_from: number
+      ref_id: string
+    }
+
 
 export class ChainBridgeV2 {
     streamParser: StreamParser
@@ -35,8 +51,8 @@ export class ChainBridgeV2 {
     events: Collection<EventRecord>;
     accountAuths: Collection<HiveAccountAuthority>;
     streamState: Collection
-    witnessDb: Collection
-    witnessHistoryDb: Collection
+    witnessDb: Collection<WitnessDbRecord>
+    witnessHistoryDb: Collection<WitnessHistoryDbRecord>
     consensusDb: Collection
     consensusDataDb: Collection
     blockHeaders: Collection<BlockHeaderDbRecord>
@@ -118,7 +134,8 @@ export class ChainBridgeV2 {
                         json = {}
                     }
                     
-                    const keys = []
+                    const keys: HiveAccountAuthority['keys'] = []
+                    // TODO zod verification
                     if(Array.isArray(json.did_keys)) {
                         keys.push(...json.did_keys)
                     }
@@ -153,10 +170,10 @@ export class ChainBridgeV2 {
                             }
                         })
                         
-                        let valid_from2;
+                        let valid_from2: number;
                         //Ensure lastRecord
                         if (!!lastRecordHistory) {
-                            if (lastRecordHistory.enabled === enabled) {
+                            if (lastRecordHistory.type === 'witness.toggle' && lastRecordHistory.enabled === enabled && lastRecord) {
                                 valid_from2 = lastRecord.valid_from
                             } else {
                                 await this.witnessHistoryDb.updateOne({
@@ -314,7 +331,7 @@ export class ChainBridgeV2 {
                                     const circuit = BlsCircuit.deserialize(signedBlock, witnessSet)
     
                                     
-                                    let pubKeys = []
+                                    let pubKeys: string[] = []
                                     for(let pub of circuit.aggPubKeys) {
                                         pubKeys.push(pub[0])
                                     }
@@ -567,6 +584,9 @@ export class ChainBridgeV2 {
                 key: -1
             }
         })
+        if (!block) {
+            throw new Error('could not get lastest block')
+        }
         return Number(block.key)
     }
 
@@ -576,10 +596,7 @@ export class ChainBridgeV2 {
             net_id: this.self.config.get('network.id')
         }).toArray()
         const filteredWitnesses = (await Promise.all(witnesses.map(async(e) => {
-            let query
-            let sort
-            if(blk) {
-                query = {
+            const data = await this.witnessHistoryDb.findOne({
                     type: "witness.toggle",
                     account: e.account,
                     
@@ -587,13 +604,10 @@ export class ChainBridgeV2 {
                         $lte: blk
                     },
                     
-                }
-                sort = {
+                }, {
+                sort: {
                     valid_from: -1
                 }
-            }
-            const data = await this.witnessHistoryDb.findOne(query, {
-                sort
             })
             // console.log(data)
 
@@ -602,7 +616,7 @@ export class ChainBridgeV2 {
                 return null;
             }
             
-            if(data.enabled !== true) {
+            if(data.type === 'witness.toggle' && data.enabled !== true) {
                 // console.log('filtered out 314', e.account, data)
                 return null;
             }
@@ -650,15 +664,13 @@ export class ChainBridgeV2 {
 
             // console.log(keys)
             if(keys) {
-                e.keys = keys.keys;
+                return { ...e, keys: keys.keys }
             } else {
                 // console.log('keys is empty')
                 // console.log('filtered out 347 keys', e.account)
                 return null
             }
-            
-            return e;
-        }))).filter(e => !!e)
+        }))).filter(truthy)
         
         // console.log('filteredWitnesses', filteredWitnesses, filteredWitnesses.length)
         return filteredWitnesses.sort((a, b) => {

@@ -28,7 +28,7 @@ export default {
       return
     }
     Sentry.init({
-      dsn: 'https://8997351a7510d343abfe7227b44b20d4@o4507035962179584.ingest.us.sentry.io/4507039719358464',
+      dsn: 'https://fc5104356f8d98f552e5f7733d18b9a8@o4507035962179584.ingest.us.sentry.io/4507039719358464',
       integrations: [nodeProfilingIntegration()],
       // Performance Monitoring
       tracesSampleRate: 1.0, //  Capture 100% of the transactions

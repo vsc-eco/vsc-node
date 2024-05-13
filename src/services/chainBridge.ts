@@ -1103,6 +1103,8 @@ export class ChainBridge {
           }
         }
       })()
+
+      let lastEventCapture: number | null = null;
   
       let blkNum;
       setInterval(async() => {
@@ -1113,11 +1115,16 @@ export class ChainBridge {
           id: 'last_hb_processed'
         })
         if(stateHeader) {
-          telemetry.captureEvent('hive_sync_status', {
-            blockLag: this.self.newService.chainBridge.blockLag,
-            streamRate: Math.round(diff / 15),
-            parseLag: this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val,
-          })
+          const now = Date.now();
+          const hourAgo = now - (1000 * 60 * 60);
+          if (lastEventCapture === null || lastEventCapture >= hourAgo) {
+            lastEventCapture = now;
+            telemetry.captureEvent('hive_sync_status', {
+              blockLag: this.self.newService.chainBridge.blockLag,
+              streamRate: Math.round(diff / 15),
+              parseLag: this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val,
+            })
+          }
           this.self.logger.info(`blockLag blockLag=${this.self.newService.chainBridge.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.self.newService.chainBridge.streamParser.stream.calcHeight - stateHeader.val}`)
         } else {
           this.self.logger.info(`blockLag`, {

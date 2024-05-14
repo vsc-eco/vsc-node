@@ -153,9 +153,10 @@ export class MultisigSystem {
             ['account_update', {
                 account: networks[this.self.config.get('network.id')].multisigAccount,
                 owner: {
-                    //Backup account for now. It will be removed in future versions
-                    // account_auths: [['vsc.network', multisigConf.threshold]],
-                    account_auths: [],
+                    //~~Backup account for now. It will be removed in future versions~~
+                    //Backup account has been readded while network stability is resolved
+                    account_auths: [['vsc.network', multisigConf.threshold]],
+                    // account_auths: [],
                     key_auths: orderAlphabetically(ownerKeys.map(e => [e, 1])),
                     
                     weight_threshold: multisigConf.threshold
@@ -181,7 +182,7 @@ export class MultisigSystem {
         ], block_height)
 
         
-        console.log(JSON.stringify(transaction, null, 2), ownerKeys, ownerKeys.length)
+        //console.log(JSON.stringify(transaction, null, 2), ownerKeys, ownerKeys.length)
         if(transaction.operations[0][1].owner.key_auths.length < 3) { 
             return
         }
@@ -371,6 +372,89 @@ export class MultisigSystem {
         
                         await this.runKeyRotation(block_height)
                     }
+                }
+            }
+        })
+        await this.self.chainBridge.streamParser.addParser({
+            type: "block",
+            priority: "after",
+            func: async (data: ParserFuncArgs<'block'>) => { 
+                const block = data.data
+                const block_height = Number(block.key)
+                const epochLength = 20 * 15 //15 minutes
+
+                if(block_height % epochLength === 0 && this.self.chainBridge.parseLag < 5) {
+                    const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
+        
+                   
+                    const transaction: Transaction = await this.constructHiveTx([
+                        ['account_update', {
+                            account: networks[this.self.config.get('network.id')].multisigAccount,
+                            owner: {
+                                //~~Backup account for now. It will be removed in future versions~~
+                                //Backup account has been readded while network stability is resolved
+                                account_auths: [['vsc.network', multisigAccount.owner.weight_threshold]],
+                                // account_auths: [],
+                                key_auths: multisigAccount.owner.key_auths,
+                                
+                                weight_threshold: multisigAccount.owner.weight_threshold
+                            },
+
+                            json_metadata: multisigAccount.json_metadata,
+                            
+                            memo_key: multisigAccount.memo_key,
+                        }]
+                    ], block_height, moment.duration(30, 'minutes').asMilliseconds())
+
+
+                    let signingKey;
+                    for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
+                        const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')
+                        
+                        if(!!multisigAccount.owner.key_auths.map(e => e[0]).find(e => e.toString() === privKey.createPublic().toString())) {
+                            signingKey = privKey
+                            break;
+                        }
+                    }
+        
+        
+                    if(!signingKey) {
+                        if(process.env.MULTISIG_STARTUP_OWNER) {
+                            signingKey = PrivateKey.fromString(process.env.MULTISIG_STARTUP_OWNER)
+                        } else {
+                            console.log('Error: No signing key found - Not in signing list')
+                            return;
+                        }
+                    }
+                        
+                    /*let pubKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner')).createPublic().toString();
+                    console.log(pubKey)
+                    if(!!{ 
+                        signingKey = PrivateKey.fromString(this.self.config.get('identity.signing_keys.owner'))
+                    } else if(process.env.MULTISIG_STARTUP_OWNER) {
+                        
+                    } else {
+                        
+                    }*/
+        
+
+                    console.log('transaction', JSON.stringify(transaction, null, 2), transaction.operations[0][1])
+        
+                    const signedTx = hive.auth.signTransaction({
+                        ...transaction
+                    }, [signingKey.toString()]);
+
+                    
+            
+                    await HiveClient.broadcast.json({
+                        id: 'vsc.emr-sig',
+                        json: JSON.stringify({
+                            digest: new HiveTx.Transaction(transaction).digest(),
+                            signatures: signedTx.signatures,
+                        }),
+                        required_auths: [],
+                        required_posting_auths: [process.env.HIVE_ACCOUNT],
+                    }, PrivateKey.fromString(process.env.HIVE_ACCOUNT_POSTING))
                 }
             }
         })

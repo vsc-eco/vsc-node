@@ -214,7 +214,10 @@ export class PeerChannel {
     }
 
     private async send(msg: any) {
-        await this.ipfs.pubsub.publish(this.topic, Buffer.from(JSON.stringify(msg)))
+        await this.ipfs.pubsub.publish(this.topic, Buffer.from(JSON.stringify({
+            ...msg,
+            ts: new Date().toISOString()
+        })))
     }
 
     private async goodMorning() {

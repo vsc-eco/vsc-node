@@ -61,20 +61,32 @@ export const schema = `
         peer_id: String
         did: String
     }
+    type HiveKeys {
+        posting: String
+        active: String
+        owner: String
+    }
     type WitnessNode {
-        account: String
-        did: String
-        enabled: Boolean
-        git_commit: String
-        last_signed: String
+        ` +
+        // account: String
+        // did: String
+        // enabled: Boolean
+        // git_commit: String
+        // last_signed: String
+        // net_id: String
+        // peer_id: String
+        // plugins: JSON
+        // signing_keys: JSON
+        // disabled_at: Int
+        // disabled_reason: String
+        // enabled_at: Int
+        // trusted: Boolean
+        `account: String
+        ipfs_peer_id: String
+        last_signed: Int
         net_id: String
-        peer_id: String
-        plugins: JSON
-        signing_keys: JSON
-        disabled_at: Int
-        disabled_reason: String
-        enabled_at: Int
-        trusted: Boolean
+        version_id: String
+        signing_keys: HiveKeys
     }
     interface BalanceController {
         type: BalanceControllerType

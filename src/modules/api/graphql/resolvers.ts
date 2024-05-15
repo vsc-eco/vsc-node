@@ -8,7 +8,7 @@ import {convertTxJws} from '@vsc.eco/client/dist/utils'
 import Ajv from "ajv"
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
 import { computeKeyId, verifyTx } from '../../../services/new/utils';
-import { TransactionContainerV2 } from '../../../services/new/types';
+import { TransactionContainerV2, WitnessDbRecord } from '../../../services/new/types';
 import { HiveClient } from '../../../utils';
 
 const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
@@ -281,7 +281,7 @@ export const Resolvers = {
       peer_id: idInfo.id
     }
   },
-  witnessNodes: async (_, args) => {
+  witnessNodes: async (_, args): Promise<WitnessDbRecord[]> => {
     if(!args.height) { 
       args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
     }

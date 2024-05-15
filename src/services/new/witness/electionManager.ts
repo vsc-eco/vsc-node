@@ -7,7 +7,7 @@ import networks from "../../../services/networks";
 import { ParserFuncArgs } from "../utils/streamUtils";
 import BitSet from "bitset";
 import { CID } from "kubo-rpc-client";
-import { HiveClient, truthy } from "../../../utils";
+import { HiveClient, todo, truthy } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { VersionConfig } from "./versionManager";
 import EventEmitter from 'node:events';
@@ -54,12 +54,53 @@ async function getGitTagDate(tag: string): Promise<Date> {
     return data
 }
 
+class Range {
+    private constructor(
+        readonly start: number,
+        readonly end: number,
+    ) {
+        if (end <= start) {
+            throw new Error(`range error: end > start must be true {end: ${end}, start: ${start}}`)
+        }
+    }
 
-/**
- * TODO: Dynamically adjust required weight IF election is stuck for more than 1 hour.
- */
-function calcVotingWeight(drift: number) {
-    return 2/3
+    static from([start, end]: [number, number]) {
+        return new Range(start, end);
+    }
+
+    position(value: number) {
+        const {start, end} = this
+        if (value < start || value > end) {
+            throw new Error(`range error: value ${value} not in range [${start},${end}]`)
+        }
+        return (value - start) / (end - start)
+    }
+
+    value(position: number) {
+        const {start, end} = this
+        if (position < 0 || position > 1) {
+            throw new Error(`range error: position ${position} not in range [0,1]`)
+        }
+        return position * (end - start) + start
+    }
+
+    map(value: number, to: Range) {
+        const position = this.position(value)
+        return to.value(position)
+    }
+}
+
+export const MIN_BLOCKS_SINCE_LAST_ELECTION = 1200 // 1 hour
+export const MAX_BLOCKS_SINCE_LAST_ELECTION = 403200 // 2 weeks
+
+export function minimalRequiredElectionVotes(blocksSinceLastElection: number, memberCountOfLastElection: number): number {
+    if (blocksSinceLastElection < MIN_BLOCKS_SINCE_LAST_ELECTION) {
+        throw new Error('tried to run election before time slot')
+    }
+    const minMembers = Math.floor((memberCountOfLastElection / 2) + 1) // 1/2 + 1
+    const maxMembers = Math.ceil(memberCountOfLastElection * 2 / 3) // 2/3
+    const drift = (MAX_BLOCKS_SINCE_LAST_ELECTION - Math.min(blocksSinceLastElection, MAX_BLOCKS_SINCE_LAST_ELECTION)) / MAX_BLOCKS_SINCE_LAST_ELECTION;
+    return Math.round(Range.from([0, 1]).map(drift, Range.from([minMembers, maxMembers])));
 }
 
 interface LogEntry {
@@ -158,6 +199,7 @@ export class ElectionManager {
      * Generates a raw election graph from local data
      */
     async generateElection(blk: number) {
+        // TODO refactor these calls into params
         const witnesses = await this.self.chainBridge.getWitnessesAtBlock(blk)
         const electionResult = await this.getValidElectionOfblock(blk - 1)
 
@@ -227,6 +269,7 @@ export class ElectionManager {
     }
 
     async holdElection(blk:number) {
+        const electionResult = await this.getValidElectionOfblock(blk - 1)
         const electionData = await this.generateElection(blk)
         
         console.log('electionData - holding election', electionData)
@@ -279,8 +322,8 @@ export class ElectionManager {
             }
         }
 
-        const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch === 0)) {
+        const voteMajority = minimalRequiredElectionVotes(blk - electionResult.block_height, members.length); //Hardcode for 0 until the future
+        if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
 
@@ -366,9 +409,20 @@ export class ElectionManager {
                 })
                 console.log('Validing election result', isValid)
 
+                const lastElection = await this.electionDb.findOne({
+                    block_height: {
+                        $le: blkHeight
+                    },
+                    net_id: json.net_id
+                }, {
+                    sort: {
+                        epoch: -1
+                    }
+                })
+
                 //Don't require 2/3 consensus for initial startup.
-                const voteMajority = 2/3
-                if(isValid && (((pubKeys.length / members.length) > voteMajority) || json.epoch === 0)) {
+                const voteMajority = minimalRequiredElectionVotes(blkHeight - (lastElection?.block_height || 0), members.length)
+                if(isValid && ((pubKeys.length > voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 
@@ -488,8 +542,9 @@ export class ElectionManager {
         }
 
         const members = await this.getMembersOfBlock(blk)
-        const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch < 200)) {
+        const blocksSinceLastElection: number = todo('blocksSinceLastElection')
+        const voteMajority = minimalRequiredElectionVotes(blocksSinceLastElection, members.length); //Hardcode for 0 until the future
+        if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch < 200)) {
             //Must be valid
             
             const electionResult = {

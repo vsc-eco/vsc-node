@@ -126,10 +126,6 @@ async function getRandomizeHashForBlock(
   return blockHeader.block_id
 }
 
-function todo<T>(msg: string): T {
-  throw new Error('todo: ' + msg)
-}
-
 export type Schedule = ReturnType<typeof weightedSchedule>['schedule']
 
 /**

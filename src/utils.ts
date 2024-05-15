@@ -20,6 +20,10 @@ export function truthy<T>(v: T): v is Exclude<T, false | '' | null | undefined> 
   return !!v
 }
 
+export function todo<T>(msg: string): T {
+  throw new Error('todo: ' + msg)
+}
+
 
 export const keepAliveAgent = new https.Agent({keepAlive:true});
 

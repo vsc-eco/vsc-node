@@ -111,6 +111,13 @@ interface LogEntry {
     version_id: string
 }
 
+const REQUIRED_ELECTION_MEMBERS = [
+    'vsc.node1', 'vsc.node2', 'vaultec-scc',
+    'geo52rey.vsc', 'geo52rey.dev',
+    'manu-node',
+    'v4vapp.vsc',
+]
+
 
 /**
  * Manages elections and upgrades 
@@ -226,6 +233,9 @@ export class ElectionManager {
         }
         
         const witnessList = witnesses.filter(e => {
+            if (REQUIRED_ELECTION_MEMBERS.includes(e.account)) {
+                return true;
+            }
             if(topDates[0]) {
                 if(topDates[0].date.getTime() > Moment().subtract('12', 'hours').toDate().getTime() && e.version_id === topDates[1]?.tag) {
                     //Check if node is using the older update & hasn't updated (yet)
@@ -247,12 +257,27 @@ export class ElectionManager {
                 account: e.account,
                 key: e.keys.find(b => b.t === 'consensus')?.key
             }
-        }).filter((e): e is typeof e & {key: string} => truthy(e.key))
+        }).filter((e): e is typeof e & {key: string} => truthy(e.key));
+
+        const optionalNodes = witnessList.filter(e => !REQUIRED_ELECTION_MEMBERS.includes(e.account))
+        const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
+
+        const [maxRequired, maxOptional] = (() => {
+            for (let maxRequired = requiredNodes.length; maxRequired > 0; maxRequired--) {
+                const maxOptional = 2 * maxRequired - 1;
+                if (maxOptional <= optionalNodes.length) {
+                    return [maxRequired, maxOptional]
+                }
+            }
+            throw new Error('could not enough nodes to include any required election members')
+        })()
+
+        const members = [...requiredNodes.slice(0, maxRequired), ...optionalNodes.slice(0, maxOptional)]
 
         const electionData = {
             __t: 'vsc-election',
             __v: '0.1',
-            members: witnessList,
+            members,
             //Iterate upon each successive consensus epoch
             epoch: electionResult ? electionResult.epoch + 1 : 0,
 

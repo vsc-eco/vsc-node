@@ -168,7 +168,7 @@ export class ElectionManager {
     /**
      * Retrieves valid election as of N block height
      */
-    async getValidElectionOfblock(blkHeight: number) {
+    async getValidElectionOfblockUnchecked(blkHeight: number) {
         const electionResult = await this.electionDb.findOne({
             block_height: {
                 $lt: blkHeight
@@ -178,6 +178,14 @@ export class ElectionManager {
                 block_height: -1
             }
         })
+        return electionResult
+    }
+
+        /**
+     * Retrieves valid election as of N block height
+     */
+    async getValidElectionOfblock(blkHeight: number) {
+        const electionResult = await this.getValidElectionOfblockUnchecked(blkHeight)
         if (!electionResult) {
             throw new Error(`could not find election before block ${blkHeight}`)
         }
@@ -187,7 +195,7 @@ export class ElectionManager {
     //Gets valid members of N block height
     //Works across both 
     async getMembersOfBlock(blkHeight: number): Promise<Array<{account: string, key: string}>> {
-        const election = await this.getValidElectionOfblock(blkHeight)
+        const election = await this.getValidElectionOfblockUnchecked(blkHeight)
         if(election) {
             return election.members
         } else {
@@ -208,7 +216,7 @@ export class ElectionManager {
     async generateElection(blk: number) {
         // TODO refactor these calls into params
         const witnesses = await this.self.chainBridge.getWitnessesAtBlock(blk)
-        const electionResult = await this.getValidElectionOfblock(blk - 1)
+        const electionResult = await this.getValidElectionOfblockUnchecked(blk - 1)
 
         const gitTags = await getGitTags();
         const recentGitTags = gitTags.map(e => {
@@ -294,7 +302,7 @@ export class ElectionManager {
     }
 
     async holdElection(blk:number) {
-        const electionResult = await this.getValidElectionOfblock(blk - 1)
+        const electionResult = await this.getValidElectionOfblockUnchecked(blk - 1)
         const electionData = await this.generateElection(blk)
         
         console.log('electionData - holding election', electionData)
@@ -347,7 +355,7 @@ export class ElectionManager {
             }
         }
 
-        const voteMajority = minimalRequiredElectionVotes(blk - electionResult.block_height, members.length); //Hardcode for 0 until the future
+        const voteMajority = minimalRequiredElectionVotes(electionHeader.epoch === 0 || !electionResult ? blk : blk - electionResult.block_height, members.length); //Hardcode for 0 until the future
         if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
@@ -434,19 +442,10 @@ export class ElectionManager {
                 })
                 console.log('Validing election result', isValid)
 
-                const lastElection = await this.electionDb.findOne({
-                    block_height: {
-                        $le: blkHeight
-                    },
-                    net_id: json.net_id
-                }, {
-                    sort: {
-                        epoch: -1
-                    }
-                })
+                const lastElection = await this.getValidElectionOfblockUnchecked(blkHeight)
 
                 //Don't require 2/3 consensus for initial startup.
-                const voteMajority = minimalRequiredElectionVotes(blkHeight - (lastElection?.block_height || 0), members.length)
+                const voteMajority = minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, members.length)
                 if(isValid && ((pubKeys.length > voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value

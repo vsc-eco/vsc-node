@@ -39,7 +39,7 @@ services:
 
   ipfs:
     container_name: ipfs-vsc
-    image: ipfs/kubo:v0.18.1
+    image: ipfs/kubo:v0.28.0
     restart: always
     command:
       - daemon
@@ -55,6 +55,7 @@ services:
       IPFS_PATH: /etc/ipfs
     volumes:
       - ./data/ipfs:/etc/ipfs
+      - ./ipfs-migration.sh:/container-init.d/001-ipfs-migration.sh
 
 volumes:
   node-modules-store: {}

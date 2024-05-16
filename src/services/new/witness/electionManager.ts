@@ -118,6 +118,8 @@ const REQUIRED_ELECTION_MEMBERS = [
     'v4vapp.vsc',
 ]
 
+const EPOCH_122_BLOCK_HEIGHT = 85060812;
+
 
 /**
  * Manages elections and upgrades 
@@ -445,8 +447,8 @@ export class ElectionManager {
                 const lastElection = await this.getValidElectionOfblockUnchecked(blkHeight)
 
                 //Don't require 2/3 consensus for initial startup.
-                const voteMajority = minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, members.length)
-                if(isValid && ((pubKeys.length > voteMajority) || json.epoch === 0)) {
+                const voteMajority = blkHeight < EPOCH_122_BLOCK_HEIGHT ? members.length * 2 / 3 : minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, members.length)
+                if(isValid && ((pubKeys.length >= voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 

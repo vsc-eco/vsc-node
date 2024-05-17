@@ -4,7 +4,9 @@ type Aggregate struct {
 	plugins []Plugin
 }
 
-func New(plugins ...Plugin) *Aggregate {
+var _ Plugin = &Aggregate{}
+
+func New(plugins []Plugin) *Aggregate {
 	return &Aggregate{
 		plugins,
 	}
@@ -15,16 +17,12 @@ func (a *Aggregate) Run() error {
 		return err
 	}
 
-	for _, p := range a.plugins {
-		if err := p.Init(); err != nil {
-			return err
-		}
+	if err := a.Init(); err != nil {
+		return err
 	}
 
-	for _, p := range a.plugins {
-		if err := p.Start(); err != nil {
-			return err
-		}
+	if err := a.Start(); err != nil {
+		return err
 	}
 
 	return nil
@@ -33,10 +31,38 @@ func (a *Aggregate) Run() error {
 func (a *Aggregate) registerExitHandlers() error {
 	// TODO register handler
 	_ = func() {
-		for _, p := range a.plugins {
-			if err := p.Stop(); err != nil {
-				panic(err)
-			}
+		if err := a.Stop(); err != nil {
+			panic(err)
+		}
+	}
+	return nil
+}
+
+// Init implements Plugin.
+func (a *Aggregate) Init() error {
+	for _, p := range a.plugins {
+		if err := p.Init(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Start implements Plugin.
+func (a *Aggregate) Start() error {
+	for _, p := range a.plugins {
+		if err := p.Start(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Stop implements Plugin.
+func (a *Aggregate) Stop() error {
+	for _, p := range a.plugins {
+		if err := p.Stop(); err != nil {
+			return err
 		}
 	}
 	return nil

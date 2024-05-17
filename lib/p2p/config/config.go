@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/vsc-eco/vsc-node/lib/p2p/peer"
 	"github.com/vsc-eco/vsc-node/modules/aggregate"
@@ -10,6 +11,7 @@ import (
 type Config struct {
 	Peers    []peer.Peer
 	Addr     string
+	Port     uint16
 	MinPeers uint64
 
 	preInitialized bool
@@ -18,12 +20,16 @@ type Config struct {
 var _ aggregate.Plugin = &Config{}
 
 func New() *Config {
-	return &Config{MinPeers: 20}
+	return &Config{MinPeers: 20, Addr: "0.0.0.0", Port: 1447}
 }
 
 func NewWithConfig(c Config) *Config {
 	c.preInitialized = true
 	return &c
+}
+
+func (config *Config) Host() string {
+	return fmt.Sprintf("%s:%d", config.Addr, config.Port)
 }
 
 // Init implements aggregate.Plugin.

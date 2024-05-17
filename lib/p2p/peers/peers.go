@@ -115,7 +115,7 @@ func (p *Peers) Init() error {
 
 // Start implements aggregate.Plugin.
 func (p *Peers) Start() error {
-	p.Push(peer.Peer(p.config.Addr))
+	p.Push(peer.Peer(p.config.Host()))
 	return nil
 }
 

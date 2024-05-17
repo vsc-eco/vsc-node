@@ -22,11 +22,13 @@ const ManyNodeCount = 350
 func TestManyNodes(t *testing.T) {
 	prs := make([]*peers.Peers, ManyNodeCount)
 	p2ps := make([]aggregate.Plugin, ManyNodeCount)
-	for i := 0; i < ManyNodeCount; i++ {
+	for i := uint16(0); i < ManyNodeCount; i++ {
 		cfg := config.NewWithConfig(config.Config{
 			// bootstrap nodes
 			Peers: []peer.Peer{"127.0.0.1:1447", "127.0.0.1:1448", "127.0.0.1:1449"},
-			Addr:  fmt.Sprintf("127.0.0.1:%d", 1447+i),
+
+			Addr: "127.0.0.1:",
+			Port: 1447 + i,
 
 			// defaults to 20 then will scan for new nodes every minute
 			MinPeers: ManyNodeCount * 7 / 8,

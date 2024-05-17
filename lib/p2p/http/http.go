@@ -80,7 +80,7 @@ func (h *HttpServer) Init() error {
 	}))
 
 	h.server = &http.Server{
-		Addr:    h.config.Addr,
+		Addr:    h.config.Host(),
 		Handler: mux,
 	}
 

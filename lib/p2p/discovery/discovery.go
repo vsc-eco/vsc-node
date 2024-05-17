@@ -86,7 +86,7 @@ func (p *PeerDiscovery) fetchAndUpdatePeers() {
 				resolve(struct{}{})
 				return
 			}
-			req.Header.Set("peer_id", p.config.Addr)
+			req.Header.Set("peer_id", p.config.Host())
 			r, err := http.DefaultClient.Do(req)
 			if err != nil {
 				// fmt.Printf("peer %s failed to respond to /known_peers: %v\n", p, err)

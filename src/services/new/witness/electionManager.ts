@@ -7,7 +7,7 @@ import networks from "../../../services/networks";
 import { ParserFuncArgs } from "../utils/streamUtils";
 import BitSet from "bitset";
 import { CID } from "kubo-rpc-client";
-import { HiveClient, truthy } from "../../../utils";
+import { HiveClient, todo, truthy } from "../../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { VersionConfig } from "./versionManager";
 import EventEmitter from 'node:events';
@@ -54,12 +54,53 @@ async function getGitTagDate(tag: string): Promise<Date> {
     return data
 }
 
+class Range {
+    private constructor(
+        readonly start: number,
+        readonly end: number,
+    ) {
+        if (end <= start) {
+            throw new Error(`range error: end > start must be true {end: ${end}, start: ${start}}`)
+        }
+    }
 
-/**
- * TODO: Dynamically adjust required weight IF election is stuck for more than 1 hour.
- */
-function calcVotingWeight(drift: number) {
-    return 2/3
+    static from([start, end]: [number, number]) {
+        return new Range(start, end);
+    }
+
+    position(value: number) {
+        const {start, end} = this
+        if (value < start || value > end) {
+            throw new Error(`range error: value ${value} not in range [${start},${end}]`)
+        }
+        return (value - start) / (end - start)
+    }
+
+    value(position: number) {
+        const {start, end} = this
+        if (position < 0 || position > 1) {
+            throw new Error(`range error: position ${position} not in range [0,1]`)
+        }
+        return position * (end - start) + start
+    }
+
+    map(value: number, to: Range) {
+        const position = this.position(value)
+        return to.value(position)
+    }
+}
+
+export const MIN_BLOCKS_SINCE_LAST_ELECTION = 1200 // 1 hour
+export const MAX_BLOCKS_SINCE_LAST_ELECTION = 403200 // 2 weeks
+
+export function minimalRequiredElectionVotes(blocksSinceLastElection: number, memberCountOfLastElection: number): number {
+    if (blocksSinceLastElection < MIN_BLOCKS_SINCE_LAST_ELECTION) {
+        throw new Error('tried to run election before time slot')
+    }
+    const minMembers = Math.floor((memberCountOfLastElection / 2) + 1) // 1/2 + 1
+    const maxMembers = Math.ceil(memberCountOfLastElection * 2 / 3) // 2/3
+    const drift = (MAX_BLOCKS_SINCE_LAST_ELECTION - Math.min(blocksSinceLastElection, MAX_BLOCKS_SINCE_LAST_ELECTION)) / MAX_BLOCKS_SINCE_LAST_ELECTION;
+    return Math.round(Range.from([0, 1]).map(drift, Range.from([minMembers, maxMembers])));
 }
 
 interface LogEntry {
@@ -69,6 +110,15 @@ interface LogEntry {
     index_id: number
     version_id: string
 }
+
+const REQUIRED_ELECTION_MEMBERS = [
+    'vsc.node1', 'vsc.node2', 'vaultec-scc',
+    'geo52rey.vsc', 'geo52rey.dev',
+    'manu-node',
+    'v4vapp.vsc',
+]
+
+const EPOCH_122_BLOCK_HEIGHT = 85060812;
 
 
 /**
@@ -120,7 +170,7 @@ export class ElectionManager {
     /**
      * Retrieves valid election as of N block height
      */
-    async getValidElectionOfblock(blkHeight: number) {
+    async getValidElectionOfblockUnchecked(blkHeight: number) {
         const electionResult = await this.electionDb.findOne({
             block_height: {
                 $lt: blkHeight
@@ -130,6 +180,14 @@ export class ElectionManager {
                 block_height: -1
             }
         })
+        return electionResult
+    }
+
+        /**
+     * Retrieves valid election as of N block height
+     */
+    async getValidElectionOfblock(blkHeight: number) {
+        const electionResult = await this.getValidElectionOfblockUnchecked(blkHeight)
         if (!electionResult) {
             throw new Error(`could not find election before block ${blkHeight}`)
         }
@@ -139,7 +197,7 @@ export class ElectionManager {
     //Gets valid members of N block height
     //Works across both 
     async getMembersOfBlock(blkHeight: number): Promise<Array<{account: string, key: string}>> {
-        const election = await this.getValidElectionOfblock(blkHeight)
+        const election = await this.getValidElectionOfblockUnchecked(blkHeight)
         if(election) {
             return election.members
         } else {
@@ -158,8 +216,9 @@ export class ElectionManager {
      * Generates a raw election graph from local data
      */
     async generateElection(blk: number) {
+        // TODO refactor these calls into params
         const witnesses = await this.self.chainBridge.getWitnessesAtBlock(blk)
-        const electionResult = await this.getValidElectionOfblock(blk - 1)
+        const electionResult = await this.getValidElectionOfblockUnchecked(blk - 1)
 
         const gitTags = await getGitTags();
         const recentGitTags = gitTags.map(e => {
@@ -184,6 +243,9 @@ export class ElectionManager {
         }
         
         const witnessList = witnesses.filter(e => {
+            if (REQUIRED_ELECTION_MEMBERS.includes(e.account)) {
+                return true;
+            }
             if(topDates[0]) {
                 if(topDates[0].date.getTime() > Moment().subtract('12', 'hours').toDate().getTime() && e.version_id === topDates[1]?.tag) {
                     //Check if node is using the older update & hasn't updated (yet)
@@ -205,12 +267,27 @@ export class ElectionManager {
                 account: e.account,
                 key: e.keys.find(b => b.t === 'consensus')?.key
             }
-        }).filter((e): e is typeof e & {key: string} => truthy(e.key))
+        }).filter((e): e is typeof e & {key: string} => truthy(e.key));
+
+        const optionalNodes = witnessList.filter(e => !REQUIRED_ELECTION_MEMBERS.includes(e.account))
+        const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
+
+        const [maxRequired, maxOptional] = (() => {
+            for (let maxRequired = requiredNodes.length; maxRequired > 0; maxRequired--) {
+                const maxOptional = 2 * maxRequired - 1;
+                if (maxOptional <= optionalNodes.length) {
+                    return [maxRequired, maxOptional]
+                }
+            }
+            throw new Error('could not enough nodes to include any required election members')
+        })()
+
+        const members = [...requiredNodes.slice(0, maxRequired), ...optionalNodes.slice(0, maxOptional)]
 
         const electionData = {
             __t: 'vsc-election',
             __v: '0.1',
-            members: witnessList,
+            members,
             //Iterate upon each successive consensus epoch
             epoch: electionResult ? electionResult.epoch + 1 : 0,
 
@@ -227,6 +304,7 @@ export class ElectionManager {
     }
 
     async holdElection(blk:number) {
+        const electionResult = await this.getValidElectionOfblockUnchecked(blk - 1)
         const electionData = await this.generateElection(blk)
         
         console.log('electionData - holding election', electionData)
@@ -279,8 +357,8 @@ export class ElectionManager {
             }
         }
 
-        const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch === 0)) {
+        const voteMajority = minimalRequiredElectionVotes(electionHeader.epoch === 0 || !electionResult ? blk : blk - electionResult.block_height, members.length); //Hardcode for 0 until the future
+        if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
 
@@ -366,9 +444,11 @@ export class ElectionManager {
                 })
                 console.log('Validing election result', isValid)
 
+                const lastElection = await this.getValidElectionOfblockUnchecked(blkHeight)
+
                 //Don't require 2/3 consensus for initial startup.
-                const voteMajority = 2/3
-                if(isValid && (((pubKeys.length / members.length) > voteMajority) || json.epoch === 0)) {
+                const voteMajority = blkHeight < EPOCH_122_BLOCK_HEIGHT ? members.length * 2 / 3 : minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, members.length)
+                if(isValid && ((pubKeys.length >= voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 
@@ -488,8 +568,9 @@ export class ElectionManager {
         }
 
         const members = await this.getMembersOfBlock(blk)
-        const voteMajority = calcVotingWeight(0); //Hardcode for 0 until the future
-        if((((circuit.aggPubKeys.size / members.length) > voteMajority) || electionHeader.epoch < 200)) {
+        const blocksSinceLastElection: number = todo('blocksSinceLastElection')
+        const voteMajority = minimalRequiredElectionVotes(blocksSinceLastElection, members.length); //Hardcode for 0 until the future
+        if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch < 200)) {
             //Must be valid
             
             const electionResult = {

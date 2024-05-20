@@ -803,3 +803,13 @@ export function isExecutedDirectly(currentFile: string) {
 export function createMongoDBClient(dbSuffix?: string) {
   return dbSuffix !== undefined && dbSuffix !== '' ? mongo.db('vsc-' + dbSuffix) : mongo.db('vsc')
 }
+
+
+export function makeSimpleObjectText(obj: any) {
+  let text = ''
+  for(let [key, value] of Object.entries(obj)) {
+    text = text + `${key}=${value} `
+  }
+  
+  return text;
+}

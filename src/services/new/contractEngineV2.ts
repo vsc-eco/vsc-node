@@ -21,6 +21,7 @@ interface ContractInfo {
     name: string
     description:string
     creator: string
+    state_merkle: string
 }
 
 /**
@@ -55,9 +56,12 @@ class VmContext {
         }
         for(let contractId of this.args.contractList) {
             const contractRecord = await this.engine.contractDb.findOne({id: contractId})
-            console.log({id: contractId}, contractRecord)
+            if (!contractRecord) {
+                console.log(`warning: ignoring contract does not exist with id: ${contractId}`);
+                continue
+            }
             //Replace with proper state storage
-            args.state[contractId] = (contractRecord as any).state_merkle
+            args.state[contractId] = contractRecord.state_merkle
             args.modules[contractId] = contractRecord.code
         }
         this.vm = new VmContainer(args)
@@ -71,7 +75,7 @@ class VmContext {
     async processTx(tx: TransactionDbRecordV2) {
         const contract_id = (tx.data as any).contract_id;
         if(!this.args.contractList.includes(contract_id)) {
-            throw new Error('Contract ID not registered with VmContext')
+            throw new Error(`Contract ID "${contract_id}" not registered with VmContext`)
         }
         
         console.log(tx)
@@ -85,6 +89,14 @@ class VmContext {
                 slot_height: -1
             }
         })
+
+        if (!blockHeader) {
+            throw new Error(`could not find block header for ${JSON.stringify({
+                anchored_id: tx.anchored_id,
+                anchored_height: tx.anchored_height,
+            }, null, 2)}`)
+        }
+
         const requiredAuths = tx.required_auths.map(e => typeof e === 'string' ? e : e.value).map(e => {
             if(tx.src === 'hive') {
                 //Format should be human readable
@@ -102,7 +114,7 @@ class VmContext {
             intents: tx.headers.intents,
             env: {
                 'anchor.id': blockHeader.id,
-                'anchor.height': tx.anchored_height,
+                'anchor.height': tx.anchored_height || blockHeader.slot_height,
                 'anchor.block': tx.anchored_block || `hive:${tx.id}`,
                 'anchor.timestamp': blockHeader.ts.getTime(),
 
@@ -120,7 +132,7 @@ class VmContext {
     }
     
     async finish() {
-        let outputs = []
+        let outputs: {contract_id: string, stateMerkle: string}[] = []
         for await(let output of this.vm.finishIterator()) {
             outputs.push(output)
         }
@@ -227,104 +239,6 @@ export class ContractEngineV2 {
         return new VmContext(this, {
             contractList
         })
-    }
-
-
-    async createContractOutput(args: {
-        txs: any
-        contract_id: string
-    }) {
-        const contractInfo = await this.contractDb.findOne({
-            id: args.contract_id
-        })
-        if(!contractInfo) {
-            throw new Error('Contract not registered with node or does not exist')
-        }
-
-
-        if(args.txs.length === 0) {
-            return null;
-        }
-
-        const vm = new VmContainer({
-            // cid: contractInfo.code,
-            // contract_id: args.contract_id
-        } as any)
-
-        await vm.init()
-        await vm.onReady()
-
-        const txResults = []
-
-        for(let tx of args.txs) {
-            const blockHeader = await this.self.chainBridge.blockHeaders.findOne({
-                id: tx.anchored_id
-            })
-            const requiredAuths = tx.required_auths.map(e => e.value).map(e => {
-                if(tx.src === 'hive') {
-                    //Format should be human readable
-                    return `hive:${e}`
-                } else {
-                    //i.e did:key:123etcetc
-                    return e
-                }
-            })
-            const result = await vm.call({
-                contract_id: args.contract_id,
-                action: tx.data.action,
-                payload: JSON.stringify(tx.data.payload),
-                env: {
-                    'anchor.id': tx.anchored_id,
-                    'anchor.height': tx.anchored_height,
-                    'anchor.block': tx.anchored_block,
-                    'anchor.timestamp': blockHeader.ts.getTime(),
-
-
-                    'msg.sender': requiredAuths[0],
-                    //Retain the type info as well.
-                    //TODO: properly parse and provide authority type to contract
-                    //Such as ACTIVE vs POSTING auth
-                    'msg.required_auths': tx.required_auths,
-                    'tx.origin': requiredAuths[0],
-                }
-            })
-
-            
-            let ret
-            let code
-            let msg
-            if(result.ret) {
-                const parsedResult: {
-                    msg?: string
-                    code: number
-                    ret?: string
-                } = JSON.parse((result as any).ret);
-                ret = parsedResult.ret,
-                code = parsedResult.code
-                msg = parsedResult.msg
-            }
-            console.log('parsed result', result)
-            txResults.push({
-                ret: ret,
-                code: code || result.errorType,
-                logs: (result as any).logs,
-                //Dont store gas usage if 0
-                ...(result.IOGas > 0 ? {gas: result.IOGas} : {})
-            })
-        }
-        const {stateMerkle, ledgerResults} = await vm.finishAndCleanup()
-        console.log('finishing and cleaning up')
-        
-        const returnObj = {
-            input_map: args.txs.map(e => e.id),
-            state_merkle: stateMerkle,
-            results: txResults,
-            ledger_results: ledgerResults
-        }
-
-        console.log('returnObj', returnObj)
-
-        return returnObj
     }
 
     async init() {

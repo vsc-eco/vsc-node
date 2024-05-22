@@ -7,7 +7,9 @@ import Crypto from 'crypto'
 import Pushable from 'it-pushable';
 import { MONGODB_URL } from '../../db';
 import { LedgerType } from '../types';
+import type { AnyReceivedMessage, AnySentMessage, Env, ExecuteStopMessage, FinishResultMessage, PartialResultMessage } from './types';
 
+export const CONTRACT_TIMEOUT_ERROR = new Error('contract execution timeout')
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -259,9 +261,15 @@ export class VmContainer {
     timeout?: number
   }
   ready: boolean
-  events: EventEmitter;
+  events: EventEmitter<{
+    timeout: [{
+      type: 'timeout'
+    }],
+    ready: [],
+  } | {
+    [msgType in Exclude<AnyReceivedMessage['type'], 'ready'>]: [AnyReceivedMessage & {type: msgType}]
+  }>;
   reqId: string;
-  startTime: Date | null;
 
   constructor(opts: {
     // contract_id: string
@@ -285,46 +293,29 @@ export class VmContainer {
     action: string
     payload: string
     intents?: Array<string>
-    env: {
-      'anchor.id': string
-      'anchor.block': string
-      'anchor.timestamp': number
-      'anchor.height': number
-
-      'msg.sender': string
-      'msg.required_auths': Array<string>
-      'tx.origin': string
-    }
+    env: Env
   }) {
     let reqId = Crypto.randomBytes(8).toString('base64url')
     this.reqId = reqId
-    this.startTime = new Date();
+    const startTime = new Date();
     this.child.send({
       type: "call",
       action: args.action,
       payload: args.payload,
-      intents: args.intents,
+      intents: args.intents || [],
       env: args.env,
       contract_id: args.contract_id,
       reqId
-    });
+    } satisfies AnySentMessage);
     const timeoutPid = setInterval(() => {
-      const lag = new Date().getTime() - this.startTime.getTime();
+      const lag = new Date().getTime() - startTime.getTime();
       if(lag > 50) {
         this.events.emit('timeout', {
           type: 'timeout'
         })
       }
     }, this.opts.timeout || 2)
-    const executeStop = await new Promise<{
-      type: string
-      ret: string | null
-      logs: Array<string>
-      error: any
-      errorType: ContractErrorType
-      reqId: string
-      IOGas: number
-    } | null>((resolve, reject) => {
+    const executeStop = await new Promise<ExecuteStopMessage | {type: 'timeout'}>((resolve, reject) => {
       this.events.once('execute-stop', (result0) => {
         resolve(result0)
         clearInterval(timeoutPid)
@@ -342,17 +333,14 @@ export class VmContainer {
     if(this.child.connected) {
       this.child.send({
         type: 'finish'
-      })
-      const result = await new Promise<{
-        stateMerkle: string
-        ledgerResults: LedgerType
-      }>((resolve, reject) => {
+      } satisfies AnySentMessage)
+      const result = await new Promise<FinishResultMessage>((resolve, reject) => {
         this.events.once('finish-result', (result0) => {
           console.log('finish-result', this.child.connected)
           resolve(result0)
         })
         this.events.once('timeout', (resultErr) => {
-          resolve(resultErr)
+          reject(CONTRACT_TIMEOUT_ERROR)
         })
       })
       return result;
@@ -362,37 +350,32 @@ export class VmContainer {
   }
 
   finishIterator() {
+    const pushable = Pushable<PartialResultMessage>()
     if(this.child.connected) {
       this.child.send({
         type: 'finish'
       })
-      const pushable = Pushable()
 
       void (async () => {
-        const func = (result0) => {
+        const func = (result0: PartialResultMessage) => {
           pushable.push(result0)
         };
         this.events.on('partial-result', func)
         this.events.once('timeout', (resultErr) => {
           this.events.off('partial-result', func)
-          pushable.end(resultErr)
+          pushable.end(CONTRACT_TIMEOUT_ERROR)
         })
         this.events.once('finish-result', () => {
+          this.events.off('partial-result', func) // don't leak memory
           pushable.end()
         })
 
       })()
       return pushable
     } else {
-      return null;
+      pushable.end()
+      return pushable;
     }
-  }
-
-  async finishAndCleanup() {
-    const val = await this.finish()
-    this.cleanup()
-
-    return val;
   }
 
   async init() {
@@ -415,19 +398,23 @@ export class VmContainer {
         silent: this.opts.debug ? !this.opts.debug : true
     });
     this.child = child;
-    this.child.on('message', (message: any) => {
+    this.child.on('message', (message: unknown) => {
+      if (typeof message !== 'object' || message === null || !('type' in message)) {
+        return;
+      }
       if(message.type === 'ready') {
         this.ready = true
         this.events.emit('ready')
       }
+      // TODO zod runtime type validation
       if(message.type === 'finish-result') {
-        this.events.emit('finish-result', message)
+        this.events.emit('finish-result', message as FinishResultMessage)
       }
       if(message.type === 'partial-result') {
-        this.events.emit('partial-result', message)
+        this.events.emit('partial-result', message as PartialResultMessage)
       }
       if(message.type === 'execute-stop') {
-        this.events.emit('execute-stop', message)
+        this.events.emit('execute-stop', message as ExecuteStopMessage)
       }
     })
   }

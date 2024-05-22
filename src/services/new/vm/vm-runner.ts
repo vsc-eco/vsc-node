@@ -9,6 +9,7 @@ import { ContractErrorType, instantiate } from './utils'
 //Crypto imports
 import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto'
 import { LedgerType } from '../types'
+import type { AnyReceivedMessage, AnySentMessage, Env, ExecuteStopMessage, FinishResultMessage, PartialResultMessage, ReadyMessage } from './types'
 
 const CID = IPFS.CID
 
@@ -138,7 +139,14 @@ export class WasmRunner {
 
             let linkExists
             let dagData
-            let brokenPaths = []
+            let brokenPaths: ({
+              path: string,
+              cid: IPFS.CID,
+              wrongFormat: true,
+            } | {
+              path: string, 
+              wrongFormat?: never,
+            })[] = []
             try {
               const resolvedCid = await ipfs.dag.resolve(merkleCid, {
                 path: key,
@@ -564,18 +572,9 @@ class VmRunner {
     action: string; 
     payload: string 
     intents: Array<string>
-    env: {
-      'anchor.id': string
-      'anchor.block': string
-      'anchor.timestamp': number
-      'anchor.height': number
-
-      'msg.sender': string
-      'msg.required_auths': Array<string>
-      'tx.origin': string
-    }
+    env: Env
     block_height: number
-  }) {
+  }): Promise<Omit<ExecuteStopMessage, 'reqId'>> {
     const contract_id = args.contract_id
     const block_height = args.block_height
 
@@ -602,7 +601,7 @@ class VmRunner {
 
     let IOGas = 0
     let error
-    const logs = []
+    const logs: (string | boolean | number)[] = []
     const { wasmRunner, stateAccess } = this.state[contract_id]
 
     const contractEnv = {
@@ -861,6 +860,7 @@ class VmRunner {
         return {
           type: 'execute-stop',
           ret: null,
+          error: null,
           errorType: ContractErrorType.INVALID_ACTION,
           logs,
           // reqId: message.reqId,
@@ -885,6 +885,7 @@ class VmRunner {
           ret: str,
           logs,
           error: null,
+          errorType: null,
           // reqId: message.reqId,
           IOGas,
         }
@@ -929,7 +930,7 @@ class VmRunner {
     }
   }
 
-  async *finish() {
+  async *finish(): AsyncGenerator<PartialResultMessage | FinishResultMessage> {
     let entries = Object.entries<{
       wasmRunner: any
       stateAccess: any
@@ -964,6 +965,15 @@ class VmRunner {
 }
 
 void (async () => {
+  if (!process.env.state) {
+    throw new Error('`state` not in environment. vm-runner is called wrong')
+  }
+  if (!process.env.modules) {
+    throw new Error('`modules` not in environment. vm-runner is called wrong')
+  }
+  if (!process.send) {
+    throw new Error('vm-runner not called as a Node.JS sub-process')
+  }
   const stateParsed = JSON.parse(process.env.state)
   let state = {}
   for (let [contract_id, stateCid] of Object.entries(stateParsed)) {
@@ -980,9 +990,9 @@ void (async () => {
 
   process.send({
     type: 'ready',
-  })
+  } satisfies AnyReceivedMessage)
 
-  process.on('message', async (message: any) => {
+  process.on('message', async (message: AnySentMessage) => {
     if (message.type === 'call') {
       const executeResult = await vmRunner.executeCall({
         contract_id: message.contract_id,
@@ -993,16 +1003,16 @@ void (async () => {
         env: message.env,
         block_height: message.env['anchor.height']
       })
-      process.send({
+      process.send!({
         ...executeResult,
         reqId: message.reqId,
-      })
+      } satisfies AnyReceivedMessage)
     }
 
     //Finalization when VM is done
     if (message.type === 'finish') {
       for await (let result of vmRunner.finish()) {
-        process.send(result)
+        process.send!(result satisfies AnyReceivedMessage)
       }
     }
   })

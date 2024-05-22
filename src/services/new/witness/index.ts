@@ -11,7 +11,7 @@ import ShuffleSeed from 'shuffle-seed'
 import fs from 'fs/promises'
 
 
-import { BlockHeader, TransactionDbStatus, TransactionDbType } from '../types';
+import { BlockHeader, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from '../types';
 import { PrivateKey } from '@hiveio/dhive';
 import { DelayMonitor } from './delayMonitor';
 import { simpleMerkleTree } from '../utils/crypto';
@@ -21,6 +21,9 @@ import { BalanceKeeper } from './balanceKeeper';
 
 import telemetry from '../../../telemetry';
 import { Schedule, getBlockSchedule } from './schedule';
+import { MessageHandleOpts } from '../p2pService';
+import { ExecuteStopMessage } from '../vm/types';
+import { ContractErrorType } from '../vm/utils';
 
 const Constants = {
   block_version: 1
@@ -220,7 +223,7 @@ export class WitnessServiceV2 {
       }).toArray()
 
       const nonceMap:Record<string, number> = {}
-      const offchainTxs = []
+      const offchainTxs: TransactionDbRecordV2[] = []
       for(let tx of offchainTxsUnfiltered) {
         const keyId = await computeKeyId(tx.required_auths.map(e => e.value))
         if(!nonceMap[keyId]) {
@@ -250,25 +253,32 @@ export class WitnessServiceV2 {
 
      
       
-      let hiveMerkleProof = {
-        id: null,
-        data: null,
-        chain: 'hive',
-        type: TransactionDbType.anchor_ref
-      }
+      const hiveMerkleProof: {
+        id: string
+        data: string
+        chain: string
+        type: TransactionDbType
+      } | null = await (async () => {
+        if (onchainTxs.length === 0) {
+          return null;
+        }
 
-      if(onchainTxs.length > 0) {
         const txIds = onchainTxs.map(e => Buffer.from(e.id, 'hex'));
         const root = simpleMerkleTree(txIds)
         // console.log(root)
         // const proof = tree.getProof(SHA256(txIds[0]))
         // console.log(proof)
         // console.log('onchainTxs', onchainTxs.map(e => e.id))
-        hiveMerkleProof.id = (await this.self.ipfs.dag.put({
+        const id = (await this.self.ipfs.dag.put({
           txs: txIds
         })).toString()
-        hiveMerkleProof.data = root;
-      }
+        return {
+          id,
+          data: root,
+          chain: 'hive',
+          type: TransactionDbType.anchor_ref,
+        }
+      })();
 
       // const contractIds = await this.self.transactionPool.txDb.distinct('headers.contract_id', {
       //   $or: [
@@ -294,7 +304,11 @@ export class WitnessServiceV2 {
 
       console.log(contractIds)
 
-      let contractOutputs = []
+      let contractOutputs: {
+        id: string,
+        contract_id: string,
+        type: TransactionDbType,
+      }[] = []
       if(transactions.length > 0 && contractIds.length > 0) {
         
         console.log('contractIds', contractIds)
@@ -302,7 +316,7 @@ export class WitnessServiceV2 {
         await vmContext.init()
         console.log('initalized vm')
         
-        let results: Record<string, Array<any>> = {
+        let results: Record<string, Array<{id: string; result: Omit<ExecuteStopMessage, 'type' | 'reqId'>}>> = {
 
         }
   
@@ -315,16 +329,24 @@ export class WitnessServiceV2 {
             if(!results[contract_id]) {
               results[contract_id] = []
             }
-            results[contract_id].push({
-              id: tx.id,
-              result: {
-                ret: contractCallResult.ret ?? null,
-                error: contractCallResult.error ?? null,
-                errorType: contractCallResult.errorType ?? null,
-                logs: contractCallResult.logs ?? null,
-                IOGas: contractCallResult.IOGas ?? null,
-              }
-            })
+            if (contractCallResult.type === 'timeout') {
+              results[contract_id].push({
+                id: tx.id,
+                result: {
+                  ret: null,
+                  error: 'timeout',
+                  errorType: ContractErrorType.TIMEOUT,
+                  logs: [],
+                  IOGas: 0, // TODO prob shouldn't be 0
+                }
+              })
+            } else {
+              const {reqId, type, ...result} = contractCallResult;
+              results[contract_id].push({
+                id: tx.id,
+                result,
+              })
+            }
           }
         }
         for(let out of await vmContext.finish()) {
@@ -377,12 +399,12 @@ export class WitnessServiceV2 {
           }
         }),
         ...contractOutputs,
-        ...(hiveMerkleProof.id ? [hiveMerkleProof] : [])
+        ...(hiveMerkleProof ? [hiveMerkleProof] : [])
       ]
       
       const merkleRoot = simpleMerkleTree(txList.map(e => CID.parse(e.id).bytes))
       const sigRoot = simpleMerkleTree(offchainTxs.map(e => {
-        const cid = CID.parse(e.sig_hash).bytes
+        const cid = CID.parse(e.sig_hash).bytes // TODO check what is going on with sig_hash being maybe undefined
         return cid;
       }))
       
@@ -693,7 +715,7 @@ export class WitnessServiceV2 {
       return getBlockSchedule(this, blockHeight)
     }
 
-    async handleProposeBlockMsg(pubReq) {
+    async handleProposeBlockMsg(pubReq: MessageHandleOpts) {
       const {message, drain, from} = pubReq;
 
       let recvCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
@@ -754,6 +776,8 @@ export class WitnessServiceV2 {
       try {
         // console.log('VERIFYING block over p2p channels', cadBlock, message.block_height, message)
         // console.log('VERIFYING', await this.self.chainBridge.getWitnessesAtBlock(Number(message.block_height)))
+
+        // TODO add zod validation to message
         const {block_header, block_full} = message;
         
         //Validate #0
@@ -793,7 +817,7 @@ export class WitnessServiceV2 {
             return e.bn === slotHeight && e.account === fromWitness.account
         })
 
-        verifyingCtx?.addMetadata({proposer: fromWitness?.account})
+        verifyingCtx?.addMetadata({proposer: fromWitness.account})
 
         if(!witnessSlot) {
           console.log(`Witness.cadBlock validate #1.2 - witness NOT IN SLOT (@${fromWitness.account})`)
@@ -921,6 +945,12 @@ export class WitnessServiceV2 {
         const blockKey = await this.self.chainBridge.events.findOne({
           key: block_header.headers.br[0]
         })
+
+        if(!blockKey) {
+          console.log(`Witness.cadBlock validate #6.5 - hive block not found at block height: ${block_header.headers.br[0]}`)
+          throw DONE_ERROR
+        }
+
         let seed = blockKey.block_id
         
         const sortedTxs = sortTransactions(offchainInputTxs, seed)
@@ -939,7 +969,7 @@ export class WitnessServiceV2 {
         if(vrfTxs.length === 0) {
           segwitRoot = null
         } else {
-          segwitRoot = simpleMerkleTree(vrfTxs.map(e => CID.parse(e.sig_hash).bytes))
+          segwitRoot = simpleMerkleTree(vrfTxs.map(e => CID.parse(e.sig_hash).bytes)) // TODO see line 407
         }
 
         if(block_full.sig_root !== segwitRoot) {

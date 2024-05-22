@@ -1,5 +1,5 @@
 import * as IPFS from 'kubo-rpc-client'
-import { Collection, Db } from "mongodb";
+import { Collection, Db, MongoServerError } from "mongodb";
 import DeepEqual from 'deep-equal'
 import PQueue from "p-queue";
 import { encodePayload } from 'dag-jose-utils'
@@ -449,17 +449,21 @@ export class ChainBridgeV2 {
                                                 upsert: true
                                             })
                                             for(let txInput of txData.inputs) {
-                                                await this.self.transactionPool.txDb.findOneAndUpdate({
-                                                    id: txInput
-                                                }, {
-                                                    $set: {
-                                                        status: TransactionDbStatus.confirmed,
-                                                        output: {
-                                                            index: txData.inputs.indexOf(txInput),
-                                                            id: tx.id,
+                                                try {
+                                                    await this.self.transactionPool.txDb.findOneAndUpdate({
+                                                        id: txInput
+                                                    }, {
+                                                        $set: {
+                                                            status: TransactionDbStatus.confirmed,
+                                                            output: {
+                                                                index: txData.inputs.indexOf(txInput),
+                                                                id: tx.id,
+                                                            }
                                                         }
-                                                    }
-                                                })
+                                                    })
+                                                } catch (e) {
+                                                    console.error(e)
+                                                }
                                             }
                                             if(txData.ledger_results) {
                                                 for(let idx in txData.ledger_results) {
@@ -495,26 +499,11 @@ export class ChainBridgeV2 {
                                                 }
                                             }
                                         } else if(tx.type === TransactionDbType.input) {
+                                            nonceMap[await computeKeyId(txData.headers.required_auths)] = txData.headers.nonce
 
-                                            const txRecord = await this.self.transactionPool.txDb.findOne({
-                                                id: tx.id
-                                            })
                                             // console.log('reindex txRecord', txRecord, tx, txData)
                                             // console.log(txData.headers.nonce)
-                                            nonceMap[await computeKeyId(txData.headers.required_auths)] = txData.headers.nonce
-                                            if(txRecord) {
-                                                //Modify existing
-                                                await this.self.transactionPool.txDb.findOneAndUpdate({
-                                                    id: tx.id
-                                                }, {
-                                                    $set: {
-                                                        status: TransactionDbStatus.included,
-                                                        anchored_height: endBlock,
-                                                        anchored_block: block_id,
-                                                        anchored_id: anchorId,
-                                                    }
-                                                })
-                                            } else {
+                                            try {
                                                 //Do ingestion if not already indexed.
                                                 //This will mainly be the case during initial sync
                                                 //Note, transactions that are ingested do not have sig data attached
@@ -534,6 +523,28 @@ export class ChainBridgeV2 {
                                                     anchored_id: block_id, //Same for Hive
                                                     src: "vsc"
                                                 })
+                                            } catch (e) {
+                                                if (
+                                                  e instanceof MongoServerError &&
+                                                  e.code === 11000 // key already exist
+                                                ) {
+                                                  //Modify existing
+                                                  await this.self.transactionPool.txDb.findOneAndUpdate(
+                                                    {
+                                                      id: tx.id,
+                                                    },
+                                                    {
+                                                      $set: {
+                                                        status: TransactionDbStatus.included,
+                                                        anchored_height: endBlock,
+                                                        anchored_block: block_id,
+                                                        anchored_id: anchorId,
+                                                      },
+                                                    },
+                                                  )
+                                                } else {
+                                                    throw e
+                                                }
                                             }
                                         }
                                     }

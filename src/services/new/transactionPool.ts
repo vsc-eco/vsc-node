@@ -323,7 +323,7 @@ export class TransactionPoolV2 {
                         }))
                         const txData = {
                             status: TransactionDbStatus.included,
-                            id: tx.transaction_id,
+                            id: `${tx.transaction_id}-${tx.index}`,
                             required_auths,
                             anchored_height: blkHeight,
                             anchored_index: tx.index,
@@ -342,7 +342,13 @@ export class TransactionPoolV2 {
                             accessible: true,
                             src: "hive" as any,
                         }
-                        await this.txDb.insertOne(txData)
+                        await this.txDb.findOneAndUpdate({
+                            id: `${tx.transaction_id}-${tx.index}`,
+                        }, {
+                            $set: txData
+                        }, {
+                            upsert: true
+                        })
                     }
                 }
             }
@@ -353,6 +359,18 @@ export class TransactionPoolV2 {
     
     async init() {
         this.txDb = this.self.db.collection('transaction_pool')
+
+        try {
+            await this.txDb.createIndex(
+                {
+                    id: 1,
+                },
+                {
+                    unique: true,
+                },
+            )
+        } catch {}
+
         // this.self.chainBridge.registerTickHandle('tx_pool.processTx', this.tickHandle, {
         //     type: 'tx',
         //     priority: 'before'

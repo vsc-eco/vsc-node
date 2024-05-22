@@ -492,7 +492,9 @@ export class WitnessServiceV2 {
         block: blockHeader.block.toString()
       })
       blockEncoderCtx.finish()
-      await sleep(4_000)
+
+      // This shouldn't be here send the block ASAP
+      // await sleep(4_000)
 
       const p2pCtx = telemetry.continueTracedEvent(`transmitting block ${block_height}`, proposalCtx.traceInfo, {
         block_height,

@@ -93,7 +93,7 @@ type ConsensusRound = {
   currentBlockNumber: number
 }
 
-function calculateConsensusRound(blockNumber: number, network: NetworkInfo): ConsensusRound {
+export function calculateConsensusRound(blockNumber: number, network: NetworkInfo): ConsensusRound {
   const { roundLength, totalRounds } = network
 
   const modLength = roundLength * totalRounds

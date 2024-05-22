@@ -117,21 +117,6 @@ export const schema = `
         block_ref: String
         included_block: Int
     }
-    type Deposit {
-        from: String
-        id: String
-        orig_balance: Float
-        active_balance: Float
-        created_at: String
-        last_interacted_at: String
-        outputs: [DepositDrain]
-        inputs: [DepositDrain]
-        asset_type: String
-        create_block: BlockRef
-        controllers: [BalanceController]
-        contract_id: String
-        controllers_hash: String
-    }
     type GetBalanceTokens {
         HBD: Float
         HIVE: Float
@@ -158,7 +143,6 @@ export const schema = `
     type Query {
         contractState(id: String): ContractState
         findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindtransactionResult
-        findDeposit(id: String): Deposit
         findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
 
         getAccountBalance(account: String): GetBalanceResult

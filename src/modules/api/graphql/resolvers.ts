@@ -132,15 +132,6 @@ export const Resolvers = {
       },
     }
   },
-  findDeposit: async (_, args) => {
-    const tx = await appContainer.self.chainBridge.balanceDb.findOne({
-      id: args.id,
-    })
-
-    return {
-      ...tx,
-    }
-  },
   findTransaction: async (_, args) => {
     let query = {}
 

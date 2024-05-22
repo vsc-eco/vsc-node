@@ -72,7 +72,7 @@ interface PeerInfo {
     connected: boolean
 }
 
-export type MessageHandleOpts = {from: string, message: any, drain: Pushable<any>, sink: Pushable<any>}
+export type MessageHandleOpts = {from: string, message: any, drain: Pushable<any>, sink: Pushable<any>, ts:any}
 type MessageHandleFn = (opts: MessageHandleOpts) => void
 
 export class PeerChannel {
@@ -150,7 +150,7 @@ export class PeerChannel {
                         this.events.on('message', func)
                         // this.logger.debug('peer events', events)
                         for await (let item of drain) {
-                            this.logger.debug('Channel Response', item)
+                            //this.logger.debug('Channel Response', item)
                             await this.send({
                                 type: json_payload.type,
                                 req_id: json_payload.req_id,
@@ -164,7 +164,7 @@ export class PeerChannel {
                         })
                         this.events.removeListener('message', func)
                     })()
-                    this._handles[json_payload.type].handler({from: msg.from.toString(), message: json_payload.payload, drain, sink})
+                    this._handles[json_payload.type].handler({from: msg.from.toString(), ts: json_payload.ts, message: json_payload.payload, drain, sink})
                 }
             } else {
                 this.events.emit('message', {

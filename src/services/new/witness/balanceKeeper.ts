@@ -5,7 +5,7 @@ import * as HiveTx from 'hive-tx';
 import hive from '@hiveio/hive-js';
 import { CID } from 'kubo-rpc-client'
 import networks from '../../../services/networks';
-import { HiveClient, HiveClient2 } from '../../../utils';
+import { HiveClient, HiveClient2, makeSimpleObjectText } from '../../../utils';
 import moment from 'moment';
 const PrivateKey = HiveTx.PrivateKey;
 
@@ -187,7 +187,7 @@ export class BalanceKeeper {
             ]
            }) as any
             
-        ], block_height, moment.duration(120, 'seconds').asMilliseconds())
+        ], block_height, moment.duration(30, 'seconds').asMilliseconds())
 
         return transaction;
     }
@@ -210,12 +210,13 @@ export class BalanceKeeper {
         const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
 
         const key_auths = multisigAccount.owner.key_auths.map(e => e[0])
-        console.log(key_auths)
+        //console.log(key_auths)
+
         let signatures = []
         for await (let data of drain) {
             const { payload } = data
             const derivedPublicKey = HiveTx.Signature.from(payload.signature).getPublicKey(hiveTx.digest().digest).toString()
-            console.log(derivedPublicKey)
+            
             if (key_auths.includes(derivedPublicKey)) {
                 if(!signatures.includes(payload.signature)) {
                     signatures.push(payload.signature)
@@ -430,10 +431,21 @@ export class BalanceKeeper {
 
     async handleMessage(args) {
         const {block_height} = args.message
+
+        const witnessInfo = await this.self.chainBridge.witnessDb.findOne({
+            ipfs_peer_id: args.from
+        })
+        console.log(witnessInfo.account)
+        console.log(makeSimpleObjectText({
+            from: args.from,
+            block_height: block_height,
+            last_block: this.self.chainBridge.streamParser.stream.lastBlock,
+            ts: args.ts
+        }))
         
         // console.log('withdraw action', block_height)
-        if(block_height > this.self.chainBridge.streamParser.stream.lastBlock - 20 && block_height % 20 === 0) {
-            // console.log('withdraw action RUN', block_height)
+        if(block_height < this.self.chainBridge.streamParser.stream.lastBlock && block_height % 20 === 0) {
+            console.log('withdraw action RUN', block_height)
             try {
                 const withdrawTx = await this.createWithdrawTx(block_height)
                 
@@ -441,7 +453,7 @@ export class BalanceKeeper {
                 const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
 
 
-                console.log(multisigAccount.owner.key_auths.map(e => e[0]))
+                
                 let signingKey;
                 for(let account of ['vsc.ms-8968d20c', networks[this.self.config.get('network.id')].multisigAccount]) { 
                     const privKey = PrivateKey.fromLogin(account, Buffer.from(this.self.config.get('identity.walletPrivate'), 'base64').toString(), 'owner')

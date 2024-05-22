@@ -144,7 +144,7 @@ export class PeerChannel {
                         })
                         // this.logger.debug('peer events', events)
                         for await (let item of drain) {
-                            this.logger.debug('Channel Response', item)
+                            //this.logger.debug('Channel Response', item)
                             await this.send({
                                 type: json_payload.type,
                                 req_id: json_payload.req_id,

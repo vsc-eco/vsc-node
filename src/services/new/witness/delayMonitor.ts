@@ -1,7 +1,6 @@
 import { Collection } from "mongodb";
 import Moment from 'moment'
 import NodeSchedule from 'node-schedule'
-import { WitnessService } from "../../witness";
 import { CoreService } from "../..";
 import { median } from "../../../utils";
 import { NewCoreService } from "..";

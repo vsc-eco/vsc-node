@@ -149,7 +149,9 @@ export class PeerChannel {
                         }
                         this.events.on('message', func)
                         // this.logger.debug('peer events', events)
+                        let sentMsg = false;
                         for await (let item of drain) {
+                            sentMsg = true
                             //this.logger.debug('Channel Response', item)
                             await this.send({
                                 type: json_payload.type,
@@ -157,14 +159,18 @@ export class PeerChannel {
                                 payload: item
                             })
                         }
-                        await this.send({
-                            type: json_payload.type,
-                            req_id: json_payload.req_id,
-                            flags: ['end']
-                        })
+                        if(sentMsg === true) {
+                            await this.send({
+                                type: json_payload.type,
+                                req_id: json_payload.req_id,
+                                flags: ['end']
+                            })
+                        }
                         this.events.removeListener('message', func)
                     })()
-                    this._handles[json_payload.type].handler({from: msg.from.toString(), ts: json_payload.ts, message: json_payload.payload, drain, sink})
+                    await this._handles[json_payload.type].handler({from: msg.from.toString(), ts: json_payload.ts, message: json_payload.payload, drain, sink})
+                    drain.end()
+                    sink.end()
                 }
             } else {
                 this.events.emit('message', {

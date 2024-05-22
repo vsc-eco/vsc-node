@@ -29,8 +29,6 @@ export class CoreService extends ModuleContainer {
     identity: DID;
     wallet: DID;
     db: Db;
-    chainBridge: ChainBridge;
-    p2pService: P2PService;
     logger: winston.Logger;
     loggerSettings: LoggerConfig;
     // multisig: MultisigCore;

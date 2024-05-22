@@ -16,7 +16,7 @@ export async function waitTxConfirm(id: string, self: CoreService, func) {
               }`
         })
         console.log(data)
-        await self.p2pService.memoryPoolChannel.call('announce_tx', {
+        await self.newService.p2pService.memoryPoolChannel.call('announce_tx', {
             payload: {
               id: id.toString()
             },

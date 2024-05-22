@@ -593,9 +593,7 @@ export class P2PService {
                     did_proof: await createJwsMultsign({
                         peer_id: identity.id.toString(),
                         ts: ts.toISOString(),
-                        anchor_status: {
-                            block_height: this.self.chainBridge.block_height
-                        },
+                        
                         signing_keys: {
                             posting: PrivateKey.fromString(this.self.config.get('identity.signing_keys.posting')).createPublic().toString(),
                             active: PrivateKey.fromString(this.self.config.get('identity.signing_keys.active')).createPublic().toString(),

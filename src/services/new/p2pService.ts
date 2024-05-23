@@ -277,7 +277,7 @@ export class PeerChannel {
         }
     }
 
-    async call(id: string, options?: {
+    async call(id: string, options: {
         payload: any,
         // stream: Pushable<any>,c
         mode?: "stream" | "basic",
@@ -288,6 +288,9 @@ export class PeerChannel {
         req_id: string
         result: () => Promise<any>
     }> {
+        if (!options.responseOrigin) {
+            options.responseOrigin = 'many';
+        }
         const drain = pushable()
         const req_id = Crypto.randomBytes(8).toString('base64url');
         if(options.streamTimeout) {

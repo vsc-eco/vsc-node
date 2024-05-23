@@ -513,6 +513,7 @@ export class WitnessServiceV2 {
           hash: encodedPayload.cid.toString(),
           traceInfo: proposalCtx.traceInfo,
         },
+        responseOrigin: 'many',
         mode: 'stream',
         streamTimeout: 15_000
       })

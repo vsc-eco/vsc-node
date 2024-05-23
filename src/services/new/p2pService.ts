@@ -501,7 +501,7 @@ export class P2PService {
     
                     
     
-                    const {result} = await channel.call('test')
+                    const {result} = await channel.call('test', {payload: {}})
     
                     this.self.logger.debug('Call Test Result', await result())
     

@@ -287,7 +287,7 @@ class VmRunner {
     wasmRunner: WasmRunner
     stateAccess: any
     stateCid: string
-  }>
+  } | undefined>
   modules: any
   intents: Array<{
     name: string
@@ -439,15 +439,15 @@ class VmRunner {
    */
   revertOp() {
     this.ledgerStackTemp = []
-    for(let [, {wasmRunner}] of Object.entries(this.state)) { 
-      wasmRunner.revertState()
+    for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
+      wasmRunner?.revertState()
     }
   }
 
   finishOp() {
     this.saveLedger()
-    for(let [, {wasmRunner}] of Object.entries(this.state)) { 
-      wasmRunner.finishState()
+    for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
+      wasmRunner?.finishState()
     }
   }
 
@@ -552,7 +552,10 @@ class VmRunner {
     }
 
     let state = {}
-    for (let [contract_id, {stateCid}] of Object.entries(this.state)) {
+    for (let [contract_id, {stateCid} = {stateCid: undefined}] of Object.entries(this.state)) {
+      if (!stateCid) {
+        continue;
+      }
       const wasmRunner = new WasmRunner()
       const stateAccess = await wasmRunner.contractStateRaw(contract_id, stateCid)
       state[contract_id] = {
@@ -602,7 +605,18 @@ class VmRunner {
     let IOGas = 0
     let error
     const logs: (string | boolean | number)[] = []
-    const { wasmRunner, stateAccess } = this.state[contract_id]
+    const state = this.state[contract_id]
+    if (!state) {
+      return {
+        type: 'execute-stop',
+        ret: null,
+        error: 'missing contract',
+        errorType: ContractErrorType.INVALID_CONTRACT,
+        logs: [],
+        IOGas: 0,
+      }
+    }
+    const { wasmRunner, stateAccess } = state
 
     const contractEnv = {
       ...args.env
@@ -931,12 +945,12 @@ class VmRunner {
   }
 
   async *finish(): AsyncGenerator<PartialResultMessage | FinishResultMessage> {
-    let entries = Object.entries<{
-      wasmRunner: any
-      stateAccess: any
-    }>(this.state)
+    let entries = Object.entries(this.state)
     for (let index in entries) {
       const [contract_id, entry] = entries[index]
+      if (!entry) {
+        continue;
+      }
       const { wasmRunner, stateAccess } = entry
       for (let [key, value] of wasmRunner.stateCache.entries()) {
         //Try catch safety

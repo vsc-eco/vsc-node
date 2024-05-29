@@ -116,6 +116,7 @@ const REQUIRED_ELECTION_MEMBERS = [
     'geo52rey.vsc', 'geo52rey.dev',
     'manu-node',
     'v4vapp.vsc',
+    'lassecashwitness',
 ]
 
 const EPOCH_122_BLOCK_HEIGHT = 85060812;

@@ -745,5 +745,16 @@ export class ChainBridgeV2 {
         await this.streamParser.start()
         // const witnesses = await this.self.chainBridge.getWitnessesAtBlock(78_000_000)
         // console.log('witnesses at time', witnesses.map(e => e.account))
+        
+        let blkNum
+        setInterval(async() => {
+            const diff = (blkNum - this.streamParser.stream.blockLag) || 0
+            blkNum = this.streamParser.stream.blockLag
+
+            const stateHeader = await this.streamState.findOne({
+                id: 'last_hb_processed'
+            })
+            this.self.logger.info(`blockLag blockLag=${this.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.streamParser.stream.calcHeight - stateHeader.val}`)
+        }, 15_000)
     }
 }

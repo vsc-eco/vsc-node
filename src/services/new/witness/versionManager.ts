@@ -95,13 +95,18 @@ export class VersionManager {
     }
 
     async init() {
+        const network = networks[this.self.config.get('network.id') as keyof typeof networks];
+
+        const firstHiveBlockEvent = await this.eventsDb.findOne({id: 'hive_block'}, {sort: {key: 1}});
+        const missingGenesis = !firstHiveBlockEvent || firstHiveBlockEvent.key !== network.genesisDay
+
         const resetBlocksEntry = await this.streamState.findOne({
             id: 'index_block_reset'
         });
 
-        if(resetBlocksEntry === null || resetBlocksEntry.val !== VersionConfig.index_block_reset_id) {
+        if(missingGenesis || (resetBlocksEntry !== null && resetBlocksEntry.val !== VersionConfig.index_block_reset_id)) {
             const index = resetBlocksEntry?.val ?? 0;
-            const lastBlockToKeep = Math.min(...VersionConfig.last_block_to_keep.slice(index));
+            const lastBlockToKeep = missingGenesis ? network.genesisDay - 1 : Math.min(...VersionConfig.last_block_to_keep.slice(index));
 
             console.log('Resetting block height to:', lastBlockToKeep);
 

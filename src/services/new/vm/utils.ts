@@ -212,6 +212,8 @@ enum CallResultError {
 }
 
 export enum ContractErrorType {
+  //If the contract does not exist
+  INVALID_CONTRACT = 1,
   //If transaction attempts to call invalid runtime function.
   INVALID_ACTION = -1,
   //Input data does not meet valiation requirements

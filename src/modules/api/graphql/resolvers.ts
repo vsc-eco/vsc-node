@@ -348,5 +348,13 @@ export const Resolvers = {
       },
       block_height: snapshot.block_height
     }
+  },
+  witnessActiveScore: async (_, args) => {
+    const bh = await HiveClient.blockchain.getCurrentBlockNum()
+    return await appContainer.self.newService.witness.getWitnessActiveScore(bh)
+  },
+  mockGenerateElection: async (_, args) => { 
+    const bh = await HiveClient.blockchain.getCurrentBlockNum()
+    return await appContainer.self.newService.electionManager.generateElection(bh)
   }
 }

@@ -283,13 +283,20 @@ export interface AddrRecord {
 }
 
 
-export interface BlockHeader {
-    end_block: number
-    hive_ref_tx: string
-    hive_ref_date: Date
-    height: number
-    proposer: string
+export interface BlockHeaderDbRecord {
     id: string
+    block: string
+    end_block: number
+    merkle_root: string
+    proposer: string
+    sig_root: string
+    signers: Array<string>
+    slot_height: number
+    start_block: number
+    stats: {
+        size: number
+    }
+    ts: Date
 }
 
 export interface WitnessDbRecord {

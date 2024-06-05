@@ -161,5 +161,8 @@ export const schema = `
         activeWitnessNodes: JSON
         witnessSchedule(height: Int): JSON
         nextWitnessSlot(self: Boolean): JSON
+
+        witnessActiveScore: JSON
+        mockGenerateElection: JSON
     }
 `

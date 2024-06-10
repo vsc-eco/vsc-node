@@ -294,7 +294,7 @@ export class ElectionManager {
 
     
 
-        let distWeight = (totalOptionalWeight/2 )/ REQUIRED_ELECTION_MEMBERS.length
+        let distWeight = (1 + totalOptionalWeight/2 )/ REQUIRED_ELECTION_MEMBERS.length
         const members = [...witnessList]
 
 
@@ -303,7 +303,7 @@ export class ElectionManager {
         for(let member of members) { 
 
             if(REQUIRED_ELECTION_MEMBERS.includes(member.account)) { 
-                weights.push(Number(distWeight.toFixed(0)))
+                weights.push(Math.ceil(Number(distWeight.toFixed(2))))
             } else {
                 weights.push(scoreChart[member.account] ? scoreChart[member.account].weight : 1)
             }

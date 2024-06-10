@@ -266,15 +266,29 @@ export class MultisigSystem {
             const members = electionResult.members
 
             
-            const candidateNodes: WitnessDbRecord[] = []
-            for(let member of members) { 
+            const candidateNodes: Array<any> = []
+            for(let memberIdx in members) { 
+                const member = members[memberIdx]
                 const witness = await this.self.chainBridge.witnessDb.findOne({
                     account: member.account
                 })
-                if(witness) {
-                    candidateNodes.push(witness)
+                if(electionResult.weights) {
+                    if(witness && electionResult?.weights[memberIdx] >= 1) {
+                        candidateNodes.push({
+                            ...witness,
+                            weight: electionResult.weights[memberIdx]
+                        })
+                    }
+                } else {
+                    candidateNodes.push({
+                        ...witness,
+                        weight: 1
+                    })
                 }
             }
+
+            const sortedNodes = candidateNodes.sort((a, b) => b.weight - a.weight).slice(0, 20); //Top 21 nodes
+
 
             const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
 

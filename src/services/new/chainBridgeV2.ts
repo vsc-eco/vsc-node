@@ -306,7 +306,9 @@ export class ChainBridgeV2 {
                                 // }).sort((a, b) => {
                                 //     return a.account - b.account;
                                 // }).filter(e => !!e).map(e => e.key)
-                                const witnessSet = (await this.self.electionManager.getMembersOfBlock(blockHeight)).map(e => e.key)
+                                const lastElection = await this.self.electionManager.getValidElectionOfblock(blockHeight)
+                                const blockSignerList = (await this.self.electionManager.getMembersOfBlock(blockHeight));
+                                const witnessSet = blockSignerList.map(e => e.key)
                                 // console.log('Asking for schedule at slot', blockHeight)
                                 const witnessSchedule = await this.self.witness.getBlockSchedule(blockHeight)
     
@@ -332,8 +334,10 @@ export class ChainBridgeV2 {
     
                                     
                                     let pubKeys: string[] = []
+                                    let signerNames: string[] = []
                                     for(let pub of circuit.aggPubKeys) {
                                         pubKeys.push(pub[0])
+                                        signerNames.push(blockSignerList.find(e => e.key === pub[0]).account)
                                     }
     
     
@@ -355,8 +359,28 @@ export class ChainBridgeV2 {
                                     }
                                     
                                     const voteMajority = 2/3
-                                    console.log(pubKeys.length, witnessSet.length, voteMajority, pubKeys.length / witnessSet.length < voteMajority)
-                                    if((pubKeys.length / witnessSet.length) < voteMajority) {
+                                    
+
+
+                                    let votedWeight = 0;
+                                    let totalWeight = 0;
+                                    if(lastElection.weights) {
+                                        //Vote based off weight
+                                        for(let key of pubKeys) {
+                                            const member = lastElection.members.find(e => e.key === key)
+                                            if(member) {
+                                                votedWeight += lastElection.weights[lastElection.members.indexOf(member)]
+                                            }
+                                        }
+                                        // votedWeight = lastElection.weight_total * voteMajority
+                                        totalWeight = lastElection.weight_total
+                                    } else {
+                                        //Vote based off signer count
+                                        votedWeight = pubKeys.length
+                                        totalWeight = witnessSet.length
+                                    }
+                                    
+                                    if((votedWeight / totalWeight) < voteMajority) {
                                         console.log('Not hitting vote majority')
                                         throw new Error('Not hitting vote majority')
                                     }
@@ -399,7 +423,8 @@ export class ChainBridgeV2 {
                                             stats: {
                                                 size: (await this.self.ipfs.block.get(signed_block.block)).length
                                             },
-                                            ts: timestamp
+                                            ts: timestamp,
+                                            signers: signerNames
                                         }
                                     }, {
                                         upsert: true

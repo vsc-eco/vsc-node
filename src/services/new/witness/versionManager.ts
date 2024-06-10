@@ -6,7 +6,7 @@ import { Collection } from "mongodb";
 
 
 export const VersionConfig = {
-    index_reset_id: 17,
+    index_reset_id: 18,
 
      /**
       * should only be increased, but it can be decremented when trying a previous block reset

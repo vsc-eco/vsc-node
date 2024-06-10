@@ -11,7 +11,7 @@ import ShuffleSeed from 'shuffle-seed'
 import fs from 'fs/promises'
 
 
-import { BlockHeader, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from '../types';
+import { BlockHeader, BlockHeaderDbRecord, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from '../types';
 import { PrivateKey } from '@hiveio/dhive';
 import { DelayMonitor } from './delayMonitor';
 import { simpleMerkleTree } from '../utils/crypto';
@@ -130,7 +130,7 @@ export class WitnessServiceV2 {
     }
 
     //VSC block headres ref
-    blockHeaders: Collection<BlockHeader>
+    blockHeaders: Collection<BlockHeaderDbRecord>
     delayMonitor: DelayMonitor;
     multisig: MultisigSystem;
     balanceKeeper: BalanceKeeper;
@@ -686,6 +686,87 @@ export class WitnessServiceV2 {
 
     async verifyBlock() {
 
+    }
+
+    async getWitnessActiveScore(block_height: number) {
+      const blockCount = 60
+      // const targetConstraints = {
+      //   // low: 7/10,
+      //   // high: 9/10
+      // }
+      const targetConstraints = [
+        [0, 6],
+        [0.70, 10],
+        [0.8, 13]
+      ] as const
+      
+      const lastXBlocks = await this.blockHeaders.find({
+        slot_height: {
+          $lte: block_height
+        }
+      }, {
+        sort: {
+          slot_height: -1
+        },
+        limit: blockCount
+      }).toArray()
+      
+      const expectedBlockScore: Record<string, number> = { 
+        
+      }
+      
+      const scoreMap: Record<string, number> = {
+        
+      }
+      
+      
+      for(let block of lastXBlocks) {
+        const {slot_height, signers} = block 
+        const election = await this.self.electionManager.getValidElectionOfblock(slot_height)
+  
+        const memberSet = election.members.map(e => e.account)
+        for(let member of memberSet) {
+          if(!scoreMap[member]) {
+            scoreMap[member] = 0
+          }
+          if(!expectedBlockScore[member]) {
+            expectedBlockScore[member] = 0
+          }
+          expectedBlockScore[member] = expectedBlockScore[member] + 1
+        }
+        
+        for(let account of signers) {
+          if(!scoreMap[account]) {
+            scoreMap[account] = 0
+          }
+          scoreMap[account] = scoreMap[account] + 1
+        }
+      }
+
+      let out = {}
+      for(let [key, value] of Object.entries(scoreMap)) {
+        const pctRaw = (value / expectedBlockScore[key])
+
+
+        let weight;
+        for(let tc of targetConstraints) {
+          const [t, w] = tc
+          if(pctRaw >= t) {
+            weight = w;
+          }
+        }
+        
+
+        out[key] = {
+          account: key,
+          pct: Math.round(pctRaw * 100),
+          expected: expectedBlockScore[key],
+          actual: value,
+          weight
+        }
+      }
+     
+      return out
     }
 
     async blockParser({data:block}: ParserFuncArgs<'block'>) {

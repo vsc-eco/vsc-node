@@ -20,6 +20,9 @@ export interface ElectionResult {
         account: string
         key: string
     }>
+
+    weights: Array<number>
+    weight_total: number
 }
 
 
@@ -237,9 +240,10 @@ export class ElectionManager {
         }> = []
         for(let tag of recentGitTags.slice(0, 1)) {
             const {data, headers} = await Axios.get(tag.commit_url)
+            console.log(data)
             topDates.push({
                 tag: tag.tag,
-                date: new Date(data.committer.date)
+                date: new Date(data.tagger.date)
             })
         }
         
@@ -271,19 +275,30 @@ export class ElectionManager {
         }).filter((e): e is typeof e & {key: string} => truthy(e.key));
 
         const optionalNodes = witnessList.filter(e => !REQUIRED_ELECTION_MEMBERS.includes(e.account))
-        const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
 
-        const [maxRequired, maxOptional] = (() => {
-            for (let maxRequired = requiredNodes.length; maxRequired > 0; maxRequired--) {
-                const maxOptional = 2 * maxRequired - 1;
-                if (maxOptional <= optionalNodes.length) {
-                    return [maxRequired, maxOptional]
-                }
+        const scoreChart = await this.self.witness.getWitnessActiveScore(blk)
+
+        const totalOptionalWeight = optionalNodes.map(e => {
+            return {
+                ...e,
+                weight: scoreChart[e.account] ? scoreChart[e.account].weight : 0
             }
-            throw new Error('could not enough nodes to include any required election members')
-        })()
+        }).map(e => e.weight).reduce((a, b) => a + b, 0)
 
-        const members = [...requiredNodes.slice(0, maxRequired), ...optionalNodes.slice(0, maxOptional)]
+        let distWeight = (1 + totalOptionalWeight/2) / REQUIRED_ELECTION_MEMBERS.length
+        const members = [...witnessList]
+
+
+        console.log(scoreChart)
+        let weights: number[] = []
+        for(let member of members) { 
+
+            if(REQUIRED_ELECTION_MEMBERS.includes(member.account)) { 
+                weights.push(Math.ceil(Number(distWeight.toFixed(2))))
+            } else {
+                weights.push(scoreChart[member.account] ? scoreChart[member.account].weight : 1)
+            }
+        }
 
         const electionData = {
             __t: 'vsc-election',
@@ -296,6 +311,10 @@ export class ElectionManager {
             //For use when staking is active
             deposits: [],
             withdrawels: [],
+
+            //List of weights in the election. Calculated by weights API
+            weights: weights,
+            weight_total: weights.reduce((a, b) => a + b, 0),
 
             //net_id to prevent replay across testnets
             net_id: this.self.config.get('network.id')
@@ -358,8 +377,32 @@ export class ElectionManager {
             }
         }
 
-        const voteMajority = minimalRequiredElectionVotes(electionHeader.epoch === 0 || !electionResult ? blk : blk - electionResult.block_height, members.length); //Hardcode for 0 until the future
-        if(((circuit.aggPubKeys.size >= voteMajority) || electionHeader.epoch === 0)) {
+        const pubKeys: string[] = []
+        for(let key of circuit.aggPubKeys.keys()) {
+            
+            pubKeys.push(key)
+        }
+
+        let votedWeight = 0;
+        let totalWeight = 0;
+        if(electionData.weights) {
+            //Vote based off weight
+            for(let key of pubKeys) {
+                const member = members.find(e => e.key === key)
+                if(member) {
+                    votedWeight += electionData.weights[members.indexOf(member)]
+                }
+            }
+            totalWeight = electionData.weight_total
+        } else {
+            //Vote based off signer count
+            votedWeight = pubKeys.length
+            totalWeight = members.length
+        }
+        
+        const voteMajority = minimalRequiredElectionVotes(electionHeader.epoch === 0 || !electionResult ? blk : blk - electionResult.block_height, totalWeight); //Hardcode for 0 until the future
+        
+        if(((votedWeight >= voteMajority) || electionHeader.epoch === 0)) {
             //Must be valid
             
 
@@ -448,8 +491,29 @@ export class ElectionManager {
                 const lastElection = await this.getValidElectionOfblockUnchecked(blkHeight)
 
                 //Don't require 2/3 consensus for initial startup.
-                const voteMajority = blkHeight < EPOCH_122_BLOCK_HEIGHT ? members.length * 2 / 3 : minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, members.length)
-                if(isValid && ((pubKeys.length >= voteMajority) || json.epoch === 0)) {
+                
+                
+                let votedWeight = 0;
+                let totalWeight = 0;
+                if(lastElection?.weights) {
+                    //Vote based off weight
+                    for(let key of pubKeys) {
+                        const member = members.find(e => e.key === key)
+                        if(member) {
+                            votedWeight += lastElection.weights[members.indexOf(member)]
+                        }
+                    }
+                    totalWeight = lastElection.weight_total
+                } else {
+                    //Vote based off signer count
+                    votedWeight = pubKeys.length
+                    totalWeight = members.length
+                }
+                
+                const voteMajority = blkHeight < EPOCH_122_BLOCK_HEIGHT ? totalWeight * 2 / 3 : minimalRequiredElectionVotes(!lastElection ? blkHeight : blkHeight - lastElection.block_height, totalWeight)
+
+                
+                if(isValid && ((votedWeight >= voteMajority) || json.epoch === 0)) {
                     //Must be valid
                     const fullContent = (await this.self.ipfs.dag.get(CID.parse(json.data))).value
 
@@ -461,6 +525,8 @@ export class ElectionManager {
                         }, {
                             $set: {
                                 members: fullContent.members,
+                                weights: fullContent.weights || null,
+                                weight_total: fullContent.weight_total || null,
                                 block_height: blkHeight,
                                 data: json.data,
                                 proposer: opPayload.required_auths[0],

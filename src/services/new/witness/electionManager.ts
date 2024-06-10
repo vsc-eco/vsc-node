@@ -275,28 +275,35 @@ export class ElectionManager {
         }).filter((e): e is typeof e & {key: string} => truthy(e.key));
 
         const optionalNodes = witnessList.filter(e => !REQUIRED_ELECTION_MEMBERS.includes(e.account))
-        const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
+        // const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
+        // const totalOptionalNodes = optionalNodes.length
+        const scoreChart = await this.self.witness.getWitnessActiveScore(blk)
 
-        const [maxRequired, maxOptional] = (() => {
-            for (let maxRequired = requiredNodes.length; maxRequired > 0; maxRequired--) {
-                const maxOptional = 2 * maxRequired - 1;
-                if (maxOptional <= optionalNodes.length) {
-                    return [maxRequired, maxOptional]
-                }
+        const totalOptionalWeight = optionalNodes.map(e => {
+            return {
+                ...e,
+                weight: scoreChart[e.account] ? scoreChart[e.account].weight : 0
             }
-            throw new Error('could not enough nodes to include any required election members')
-        })()
+        }).map(e => e.weight).reduce((a, b) => a + b, 0)
+        // const rNodes = 5
+        // const oNodes = [1, 1, 1, 1, 1, 1, 1, 1, 1,1 ]
 
+        // const oWeights = oNodes.reduce((a, b) => a + b, 0)
+        // const rWeights = oWeights/2
+        // rWeights/rNodes
+
+    
+
+        let distWeight = (totalOptionalWeight/2 )/ REQUIRED_ELECTION_MEMBERS.length
         const members = [...witnessList]
 
-        const scoreChart = await this.self.witness.getWitnessActiveScore(blk)
 
         console.log(scoreChart)
         let weights = []
         for(let member of members) { 
 
             if(REQUIRED_ELECTION_MEMBERS.includes(member.account)) { 
-                weights.push(1.3)
+                weights.push(Number(distWeight.toFixed(0)))
             } else {
                 weights.push(scoreChart[member.account] ? scoreChart[member.account].weight : 1)
             }

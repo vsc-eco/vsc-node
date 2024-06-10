@@ -695,10 +695,10 @@ export class WitnessServiceV2 {
       //   // high: 9/10
       // }
       const targetConstraints = [
-        [0, 0.6],
-        [0.75, 1],
-        [0.8, 1.3]
-      ]
+        [0, 6],
+        [0.70, 10],
+        [0.8, 13]
+      ] as const
       
       const lastXBlocks = await this.blockHeaders.find({
         slot_height: {
@@ -750,7 +750,7 @@ export class WitnessServiceV2 {
 
         let weight;
         for(let tc of targetConstraints) {
-          const [t, w] = tc as any
+          const [t, w] = tc
           if(pctRaw >= t) {
             weight = w;
           }

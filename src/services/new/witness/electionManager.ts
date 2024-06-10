@@ -275,8 +275,7 @@ export class ElectionManager {
         }).filter((e): e is typeof e & {key: string} => truthy(e.key));
 
         const optionalNodes = witnessList.filter(e => !REQUIRED_ELECTION_MEMBERS.includes(e.account))
-        // const requiredNodes = witnessList.filter(e => REQUIRED_ELECTION_MEMBERS.includes(e.account))
-        // const totalOptionalNodes = optionalNodes.length
+
         const scoreChart = await this.self.witness.getWitnessActiveScore(blk)
 
         const totalOptionalWeight = optionalNodes.map(e => {
@@ -285,21 +284,13 @@ export class ElectionManager {
                 weight: scoreChart[e.account] ? scoreChart[e.account].weight : 0
             }
         }).map(e => e.weight).reduce((a, b) => a + b, 0)
-        // const rNodes = 5
-        // const oNodes = [1, 1, 1, 1, 1, 1, 1, 1, 1,1 ]
 
-        // const oWeights = oNodes.reduce((a, b) => a + b, 0)
-        // const rWeights = oWeights/2
-        // rWeights/rNodes
-
-    
-
-        let distWeight = (1 + totalOptionalWeight/2 )/ REQUIRED_ELECTION_MEMBERS.length
+        let distWeight = (1 + totalOptionalWeight/2) / REQUIRED_ELECTION_MEMBERS.length
         const members = [...witnessList]
 
 
         console.log(scoreChart)
-        let weights = []
+        let weights: number[] = []
         for(let member of members) { 
 
             if(REQUIRED_ELECTION_MEMBERS.includes(member.account)) { 
@@ -323,7 +314,7 @@ export class ElectionManager {
 
             //List of weights in the election. Calculated by weights API
             weights: weights,
-            weight_total: Number(weights.reduce((a, b) => a + b, 0).toFixed(1)),
+            weight_total: weights.reduce((a, b) => a + b, 0),
 
             //net_id to prevent replay across testnets
             net_id: this.self.config.get('network.id')
@@ -386,7 +377,7 @@ export class ElectionManager {
             }
         }
 
-        const pubKeys = []
+        const pubKeys: string[] = []
         for(let key of circuit.aggPubKeys.keys()) {
             
             pubKeys.push(key)
@@ -504,7 +495,7 @@ export class ElectionManager {
                 
                 let votedWeight = 0;
                 let totalWeight = 0;
-                if(lastElection.weights) {
+                if(lastElection?.weights) {
                     //Vote based off weight
                     for(let key of pubKeys) {
                         const member = members.find(e => e.key === key)
@@ -534,6 +525,8 @@ export class ElectionManager {
                         }, {
                             $set: {
                                 members: fullContent.members,
+                                weights: fullContent.weights || null,
+                                weight_total: fullContent.weight_total || null,
                                 block_height: blkHeight,
                                 data: json.data,
                                 proposer: opPayload.required_auths[0],

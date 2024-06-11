@@ -132,17 +132,30 @@ export class MultisigSystem {
         const members = electionResult.members
 
 
-        const candidateNodes: WitnessDbRecord[] = []
-        for(let member of members) { 
+        const candidateNodes: Array<any> = []
+        for(let memberIdx in members) { 
+            const member = members[memberIdx]
             const witness = await this.self.chainBridge.witnessDb.findOne({
                 account: member.account
             })
-            if(witness) {
-                candidateNodes.push(witness)
+            if(electionResult.weights) {
+                if(witness && electionResult?.weights[memberIdx] >= 1) {
+                    candidateNodes.push({
+                        ...witness,
+                        weight: electionResult.weights[memberIdx]
+                    })
+                }
+            } else {
+                candidateNodes.push({
+                    ...witness,
+                    weight: 1
+                })
             }
         }
 
-        const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
+        const sortedNodes = candidateNodes.sort((a, b) => b.weight - a.weight).slice(0, 21); //Top 21 nodes
+
+        const ownerKeys = sortedNodes.map(e => e.signing_keys.owner)
         
         const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
 
@@ -287,10 +300,10 @@ export class MultisigSystem {
                 }
             }
 
-            const sortedNodes = candidateNodes.sort((a, b) => b.weight - a.weight).slice(0, 20); //Top 21 nodes
+            const sortedNodes = candidateNodes.sort((a, b) => b.weight - a.weight).slice(0, 21); //Top 21 nodes
 
 
-            const ownerKeys = candidateNodes.map(e => e.signing_keys.owner)
+            const ownerKeys = sortedNodes.map(e => e.signing_keys.owner)
 
             const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
 
@@ -384,7 +397,8 @@ export class MultisigSystem {
                     if(slot && slot.account === process.env.HIVE_ACCOUNT) {
                         const limit = block_height % this.epochLength;
         
-                        await this.runKeyRotation(block_height)
+                        
+                        this.runKeyRotation(block_height).catch(console.error)
                     }
                 }
             }

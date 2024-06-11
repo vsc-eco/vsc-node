@@ -132,14 +132,17 @@ export class MultisigSystem {
         const members = electionResult.members
 
 
-        const candidateNodes: Array<any> = []
-        for(let memberIdx in members) { 
+        const candidateNodes: (WitnessDbRecord & {weight: number})[] = []
+        for(let memberIdx = 0; memberIdx < members.length; memberIdx++) { 
             const member = members[memberIdx]
             const witness = await this.self.chainBridge.witnessDb.findOne({
                 account: member.account
-            })
+            });
+            if (!witness) {
+                throw new Error(`missing info for witness: ${member.account}`)
+            }
             if(electionResult.weights) {
-                if(witness && electionResult?.weights[memberIdx] >= 1) {
+                if(witness && electionResult.weights[memberIdx] >= 1) {
                     candidateNodes.push({
                         ...witness,
                         weight: electionResult.weights[memberIdx]
@@ -279,12 +282,15 @@ export class MultisigSystem {
             const members = electionResult.members
 
             
-            const candidateNodes: Array<any> = []
-            for(let memberIdx in members) { 
+            const candidateNodes: (WitnessDbRecord & {weight: number})[] = []
+            for(let memberIdx = 0; memberIdx < members.length; memberIdx++) { 
                 const member = members[memberIdx]
                 const witness = await this.self.chainBridge.witnessDb.findOne({
                     account: member.account
-                })
+                });
+                if (!witness) {
+                    throw new Error(`missing info for witness: ${member.account}`)
+                }
                 if(electionResult.weights) {
                     if(witness && electionResult?.weights[memberIdx] >= 1) {
                         candidateNodes.push({

@@ -35,8 +35,7 @@ export function createSafeDivision(options: {
       signers_owner: {
           weight_threshold: Math.round(map.length * factor)
       },
-      signers_active: map.slice(0, Math.round(map.length * factor)).map(e => e.signing_keys.active),
-      signers_posting: map.slice(0, Math.round(map.length * factor)).map(e => e.signing_keys.posting)
+      
   }
 }
 
@@ -160,7 +159,7 @@ export class MultisigSystem {
 
         const ownerKeys = sortedNodes.map(e => e.signing_keys.owner)
         
-        const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
+        const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: sortedNodes})
 
         const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
        
@@ -311,7 +310,7 @@ export class MultisigSystem {
 
             const ownerKeys = sortedNodes.map(e => e.signing_keys.owner)
 
-            const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: candidateNodes})
+            const multisigConf = createSafeDivision({factorMax: 11, factorMin: 6, map: sortedNodes})
 
             const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])
         

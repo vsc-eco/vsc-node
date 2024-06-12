@@ -784,5 +784,45 @@ export class ChainBridgeV2 {
             })
             this.self.logger.info(`blockLag blockLag=${this.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.streamParser.stream.calcHeight - stateHeader.val}`)
         }, 15_000)
+
+        const lastLags: {
+            parseLag: number;
+            blockLag: number;
+        }[] = [];
+        const updateLastLags = () => {
+            lastLags.push({
+                parseLag: this.parseLag,
+                blockLag: this.blockLag,
+            })
+            if (lastLags.length > 5) {
+                lastLags.shift()
+            }
+        }
+        const exitIfStuck = () => {
+            const oldest = lastLags[0];
+            const newest = lastLags[4];
+
+            if (newest.parseLag < 40) {
+                return;
+            }
+
+            if (oldest.parseLag === newest.parseLag) {
+                process.exit(0);
+            }
+
+            if (newest.parseLag - newest.blockLag < 40) {
+                return;
+            }
+
+            if (newest.parseLag > oldest.parseLag) {
+                process.exit(0);
+            }
+        }
+        setInterval(() => {
+            updateLastLags();
+            if (lastLags.length === 5) {
+                exitIfStuck();
+            }
+        }, 60_000)
     }
 }

@@ -52,13 +52,12 @@ function applyBNSchedule<T>(
   })
 }
 
-function weightedSchedule(
+export function weightedSchedule(
   network: NetworkInfo,
   witnessNodes: {
     account: string
     key: string
   }[],
-  electionResult: WithId<ElectionResult>,
   randomizeHash: string,
   consensusRound: ConsensusRound,
 ) {
@@ -80,7 +79,6 @@ function weightedSchedule(
     schedule,
     valid_from: schedule[0]?.bn || 0,
     valid_to: schedule[outSchedule.length - 1]?.bn || 1,
-    valid_epoch: electionResult.epoch,
   }
 }
 
@@ -150,17 +148,16 @@ export async function getBlockSchedule(witness: WitnessServiceV2, blockHeight: n
 
   const [witnessNodes, randomizeHash] = await Promise.all([self.electionManager.getMembersOfBlock(blockHeight),getRandomizeHashForBlock(witness, consensusRound)])
 
-  const { schedule, valid_to, valid_from, valid_epoch } = weightedSchedule(
+  const { schedule, valid_to, valid_from } = weightedSchedule(
     network,
     witnessNodes,
-    electionResult,
     randomizeHash,
     consensusRound,
   )
 
   witness.witnessSchedule = {
     schedule,
-    valid_epoch,
+    valid_epoch: electionResult.epoch,
     valid_height: consensusRound.pastRoundHeight,
   }
 

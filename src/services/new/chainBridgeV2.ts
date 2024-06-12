@@ -440,7 +440,10 @@ export class ChainBridgeV2 {
                                                 recursive: false
                                             })
                                         })
+                                        const start = Date.now();
+                                        console.log('Fetching IPFS CID: ', tx.id)
                                         const txData = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
+                                        console.log('Finished Fetching IPFS CID:', tx.id, Date.now() - start)
                                         
                                         if(tx.type === TransactionDbType.output) {
                                             //Process as output

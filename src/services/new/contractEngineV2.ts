@@ -205,8 +205,10 @@ export class ContractEngineV2 {
                         }
                     }
 
+                    const start = Date.now()
                     console.log('pinning contract CID', json.code);
                     await this.self.ipfs.pin.add(json.code)
+                    console.log('finished pinning contract CID', json.code, Date.now() - start)
 
                     const contractIdHash = (await encodePayload({
                         ref_id: tx.transaction_id,

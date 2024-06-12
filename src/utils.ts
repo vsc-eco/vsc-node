@@ -141,7 +141,7 @@ export class fastStream {
 
       return diff
     } else {
-      return null;
+      return 9999999;
     }
   }
 

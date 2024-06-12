@@ -385,15 +385,15 @@ export class ElectionManager {
 
         let votedWeight = 0;
         let totalWeight = 0;
-        if(electionData.weights) {
+        if(electionResult.weights) {
             //Vote based off weight
             for(let key of pubKeys) {
                 const member = members.find(e => e.key === key)
                 if(member) {
-                    votedWeight += electionData.weights[members.indexOf(member)]
+                    votedWeight += electionResult.weights[members.indexOf(member)]
                 }
             }
-            totalWeight = electionData.weight_total
+            totalWeight = electionResult.weight_total
         } else {
             //Vote based off signer count
             votedWeight = pubKeys.length

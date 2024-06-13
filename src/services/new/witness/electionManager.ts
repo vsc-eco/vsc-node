@@ -124,6 +124,8 @@ const REQUIRED_ELECTION_MEMBERS = [
 
 const EPOCH_122_BLOCK_HEIGHT = 85060812;
 
+const DEFAULT_NEW_NODE_WEIGHT = 10;
+
 
 /**
  * Manages elections and upgrades 
@@ -281,7 +283,7 @@ export class ElectionManager {
         const totalOptionalWeight = optionalNodes.map(e => {
             return {
                 ...e,
-                weight: scoreChart[e.account] ? scoreChart[e.account].weight : 0
+                weight: scoreChart[e.account] ? scoreChart[e.account].weight : DEFAULT_NEW_NODE_WEIGHT
             }
         }).map(e => e.weight).reduce((a, b) => a + b, 0)
 
@@ -296,7 +298,7 @@ export class ElectionManager {
             if(REQUIRED_ELECTION_MEMBERS.includes(member.account)) { 
                 weights.push(Math.ceil(Number(distWeight.toFixed(2))))
             } else {
-                weights.push(scoreChart[member.account] ? scoreChart[member.account].weight : 1)
+                weights.push(scoreChart[member.account] ? scoreChart[member.account].weight : DEFAULT_NEW_NODE_WEIGHT)
             }
         }
 

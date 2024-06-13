@@ -385,7 +385,7 @@ export class ElectionManager {
 
         let votedWeight = 0;
         let totalWeight = 0;
-        if(electionResult.weights) {
+        if(electionResult?.weights) {
             //Vote based off weight
             for(let key of pubKeys) {
                 const member = members.find(e => e.key === key)

@@ -350,7 +350,10 @@ export const Resolvers = {
     }
   },
   witnessActiveScore: async (_, args) => {
-    const bh = await HiveClient.blockchain.getCurrentBlockNum()
+    if (!args.height) {
+      args.height = await HiveClient.blockchain.getCurrentBlockNum()
+    }
+    const bh = args.height
     return await appContainer.self.newService.witness.getWitnessActiveScore(bh)
   },
   mockGenerateElection: async (_, args) => { 

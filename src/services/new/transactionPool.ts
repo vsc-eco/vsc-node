@@ -385,9 +385,18 @@ export class TransactionPoolV2 {
             loopbackOk: true
         })
         NodeSchedule.scheduleJob('*/5 * * * *', async () => { 
-            const unconfirmedTxs = await this.txDb.find({
-                status: TransactionDbStatus.unconfirmed
-            }).toArray()
+            const unconfirmedTxs = await this.txDb.aggregate([
+                {
+                    $match: {
+                        status: TransactionDbStatus.unconfirmed
+                    }
+                },
+                {
+                    $sample: {
+                        size: 25
+                    }
+                }
+            ]).toArray()
     
             for(let tx of unconfirmedTxs) {
                 await this.self.p2pService.memoryPoolChannel.call('announce_tx', {

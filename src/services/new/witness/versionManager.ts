@@ -16,7 +16,7 @@ export const VersionConfig = {
     last_block_to_keep: [85032300],
 
     //Match with package.json and tag
-    version_id: 'v0.1.4'
+    version_id: 'v0.1.5'
 } as const;
 
 /**

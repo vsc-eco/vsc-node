@@ -502,7 +502,7 @@ export class WitnessServiceV2 {
         proposer: process.env.HIVE_ACCOUNT,
       })
 
-      const {drain} = await this.self.p2pService.memoryPoolChannel.call('propose_block', {
+      const {drain} = await this.self.p2pService.multicastChannel.call('propose_block', {
         payload: {
           block_header: {
             ...blockHeader,
@@ -1113,7 +1113,7 @@ export class WitnessServiceV2 {
         func: this.blockParser
       })
 
-      this.self.p2pService.memoryPoolChannel.register('propose_block', this.handleProposeBlockMsg, {
+      this.self.p2pService.multicastChannel.register('propose_block', this.handleProposeBlockMsg, {
         loopbackOk: true
       })
     }

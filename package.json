@@ -113,7 +113,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "test:report": "sensible-browser ./coverage/lcov-report/index.html",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
-    "ts-node": "node --loader ts-node/esm",
+    "ts-node": "node --experimental-specifier-resolution=node --max-old-space-size=3072 --no-node-snapshot --loader ts-node/esm",
     "service-test": "node --experimental-specifier-resolution=node --loader ts-node/esm src/tests/index.ts"
   },
   "author": "",

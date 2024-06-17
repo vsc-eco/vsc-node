@@ -540,6 +540,13 @@ export class WitnessServiceV2 {
         sig: signedData.s
       }))
 
+
+      //Aggregate self signature
+      await circuit.add({
+        sig: signedData.s,
+        did: JSON.parse(Buffer.from(signedData.p, 'base64url').toString()).pub
+      })
+
       pinningCtx.finish()
       // console.log('Stage 2')
       // console.log('keysMap', keysMap.length, keys.map(e => e.account))

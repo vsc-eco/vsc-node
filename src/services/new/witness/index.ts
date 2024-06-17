@@ -816,7 +816,7 @@ export class WitnessServiceV2 {
 
       let recvCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+        const block_height = this.self.chainBridge.streamParser.stream.headHeight
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
@@ -829,7 +829,7 @@ export class WitnessServiceV2 {
 
       let updateCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+        const block_height = this.self.chainBridge.streamParser.stream.headHeight
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
@@ -840,7 +840,7 @@ export class WitnessServiceV2 {
         })
       }
       
-      const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+      const block_height = this.self.chainBridge.streamParser.stream.headHeight
       const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
 
       //This doesn't help IF node is slightly behind the requester node as slotHeight is calcuated from the local block data rather than what's being requested at the block level
@@ -860,7 +860,7 @@ export class WitnessServiceV2 {
 
       let verifyingCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+        const block_height = this.self.chainBridge.streamParser.stream.headHeight
 
         const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
@@ -882,7 +882,7 @@ export class WitnessServiceV2 {
         //Validate #1
         //Verify witness is in runner
 
-        const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+        const block_height = this.self.chainBridge.streamParser.stream.headHeight
         
         
         

@@ -189,16 +189,19 @@ export class WasmRunner {
               if (brokenPath.wrongFormat) {
                 merkleCid = await ipfs.object.patch.addLink(merkleCid, {
                   Name: brokenPath.path,
+                  // @ts-ignore weird deps CID types don't. no need to worry about it
                   Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
                 })
 
                 merkleCid = await ipfs.object.patch.addLink(merkleCid, {
                   Name: `${brokenPath.path}/.self`,
+                  // @ts-ignore weird deps CID types don't. no need to worry about it
                   Hash: brokenPath.cid,
                 })
               } else {
                 merkleCid = await ipfs.object.patch.addLink(merkleCid, {
                   Name: brokenPath.path,
+                  // @ts-ignore weird deps CID types don't. no need to worry about it
                   Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
                 })
               }

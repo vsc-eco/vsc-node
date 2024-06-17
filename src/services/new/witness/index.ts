@@ -432,7 +432,7 @@ export class WitnessServiceV2 {
         sig_root: sigRoot ? sigRoot : null
         // mmr_root: !merkleRoot && null
       }
-      console.log('blockFull witness', blockFull, await this.self.ipfs.dag.put(blockFull))
+      // console.log('blockFull witness', blockFull, await this.self.ipfs.dag.put(blockFull))
       
       const blockContainer = new BlockContainer(blockFull);
       blockContainer.ref_start = start_height

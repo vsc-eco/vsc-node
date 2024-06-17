@@ -219,7 +219,8 @@ export class WitnessServiceV2 {
         sort: {
           "headers.nonce": 1,
           first_seen: -1
-        }
+        },
+        limit: 2048
       }).toArray()
 
       const nonceMap:Record<string, number> = {}
@@ -467,7 +468,7 @@ export class WitnessServiceV2 {
       console.log('Stage 0 got blockContainer', {
         end_height: block_height,
         start_height: start_height
-      }, blockContainer.toObject())
+      })
       creatingBlockCtx.finish()
 
       if(blockContainer.rawData.txs.length === 0) {
@@ -649,12 +650,26 @@ export class WitnessServiceV2 {
       //   signed_block: signedBlock
       // })
       // console.log('circuit aggregate', circuit.aggPubKeys)
+
+
+      const lastElection = await this.self.electionManager.getValidElectionOfblock(block_height)
+
+      let votedWeight = 0;
+      let totalWeight = lastElection.weight_total
+      for(let member of circuit.aggPubKeys.keys()) { 
+        const memberNode = lastElection.members.find(e => e.key === member)
+        votedWeight += lastElection.weights[lastElection.members.indexOf(memberNode)]
+      }
+
+
+      console.log('votedWeight', votedWeight, 'requiredWeight', totalWeight * voteMajority , 'totalWeight', totalWeight)
+
       //Did it pass minimum?   
       let error: any
       let thrown = false
       try {
         console.log(circuit.aggPubKeys.size, keysMap.length, keysMap.length * voteMajority)
-        if(circuit.aggPubKeys.size / keysMap.length > voteMajority) {
+        if(votedWeight / totalWeight > voteMajority) {
           //Disable block broadcast if required by local configuration
           if(process.env.BLOCK_BROADCAST_DISABLED !== "yes") {
 
@@ -831,9 +846,13 @@ export class WitnessServiceV2 {
       const block_height = this.self.chainBridge.streamParser.stream.lastBlock
       const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
 
+      //This doesn't help IF node is slightly behind the requester node as slotHeight is calcuated from the local block data rather than what's being requested at the block level
+      //This should always pass unless there is a tiny amount of lag in the parsing section of the code
       for(let attempts = 0; attempts < 12 && this.self.chainBridge.streamParser.lastParsed < slotHeight; attempts++) {
         await sleep(1_000)
       }
+
+      
 
       updateCtx?.finish()
       
@@ -871,7 +890,7 @@ export class WitnessServiceV2 {
           throw DONE_ERROR;
         }
         
-        console.log(block_header, block_full)
+        // console.log(block_header, block_full)
         //Must be parsed as CID for hashing to work correctly when signing.
         block_header.block = CID.parse(block_header.block)
         
@@ -879,11 +898,28 @@ export class WitnessServiceV2 {
         //Verify witness is in runner
 
         const block_height = this.self.chainBridge.streamParser.stream.lastBlock
-        const schedule = await this.getBlockSchedule(block_height)
+        
+        
+        
+        let slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+        let schedule = await this.getBlockSchedule(block_height)
 
+        if(slotHeight !== block_header.headers.br[1] && (slotHeight - 10) < block_header.headers.br[1] && (slotHeight + 20) > block_header.headers.br[1]) { 
+          //Allow at most waiting of up to 1 slot heights
+          console.log("Node is behind by 1 slot height. Waiting...")
+          for(let i = 0; i < (10 * 3) * 2; i++) { 
+            await sleep(500)
+            const block_height = this.self.chainBridge.streamParser.stream.lastBlock
+            slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength))
+            if(slotHeight === block_header.headers.br[1]) {
+              //Make sure to re-fetch schedule. Unlikely to have changed, but accounts for elections or new consensus rounds
+              schedule = await this.getBlockSchedule(slotHeight)
+              console.log('Done waiting.. In slot!')
+              break;
+            }
+          }
+        }
 
-
-        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
         
         const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
           ipfs_peer_id: from.toString()
@@ -894,6 +930,20 @@ export class WitnessServiceV2 {
           throw DONE_ERROR;
         }
 
+        console.log('slotHeight, block_header.headers.br[1]', slotHeight, block_header.headers.br[1])
+
+
+        if(slotHeight !== block_header.headers.br[1]) { 
+          console.log(`Witness.cadBlock validate #1.2 - block is not within current slot (@${fromWitness.account}) block_height: ${block_height} ${slotHeight} !== ${block_header.headers.br[1]}`)
+
+          const ts = new Date()
+
+          const blockHeader = await HiveClient.database.getBlockHeader(block_header.headers.br[1])
+
+          const tsZ = new Date(blockHeader.timestamp + "Z")
+          console.log('DRIFT', ts, tsZ, ts.getTime() - tsZ.getTime())
+          throw DONE_ERROR;
+        }
         
         const witnessSlot = schedule.find(e => {
             //Ensure witness slot is within slot start and end
@@ -903,8 +953,9 @@ export class WitnessServiceV2 {
 
         verifyingCtx?.addMetadata({proposer: fromWitness.account})
 
+        
         if(!witnessSlot) {
-          console.log(`Witness.cadBlock validate #1.2 - witness NOT IN SLOT (@${fromWitness.account})`)
+          console.log(`Witness.cadBlock validate #1.3 - witness in wrong slot (@${fromWitness.account})`)
           throw DONE_ERROR;
         }
 
@@ -937,7 +988,7 @@ export class WitnessServiceV2 {
         if(topHeader) {
           if(block_header.headers.br[0] !== topHeader.end_block + 1) {
             console.log(block_header.headers.br[0], topHeader.end_block)
-            console.log('Witness.cadBlock validate #3 - not matching topheader')
+            console.log(`Witness.cadBlock validate #3 - not matching topheader ${fromWitness.account}`)
             throw DONE_ERROR;
           }
         } else {
@@ -1006,7 +1057,6 @@ export class WitnessServiceV2 {
               nonceMap[keyId] = nonceRecord.nonce
             }
           }
-          console.log('nonce', keyId, nonceMap[keyId], txRecord.headers.nonce)
           if(nonceMap[keyId] !== txRecord.headers.nonce) {
             console.log(`Witness.cadBlock validate #6 - invalid nonce for keyId: ${keyId}`)
             throw DONE_ERROR

@@ -8,3 +8,4 @@ data
 contracts/example.js
 seed-backup
 .DS_Store
+package-lock.json

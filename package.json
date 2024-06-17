@@ -37,6 +37,7 @@
     "bls-eth-wasm": "^1.1.0",
     "bs58check": "^3.0.1",
     "bson": "^4.7.0",
+    "chai": "^5.1.1",
     "cli-progress": "^3.11.2",
     "concurrently": "^7.6.0",
     "crypto-js": "^4.1.1",
@@ -80,11 +81,13 @@
     "warp-wasm-metering": "^1.0.1",
     "wasm-metering": "^0.2.1",
     "winston": "^3.8.2",
-    "xor-distance": "^2.0.0"
+    "xor-distance": "^2.0.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@swc/core": "^1.5.7",
     "@swc/jest": "^0.2.36",
+    "@types/chai": "^4.3.16",
     "@types/jest": "^29.5.12",
     "@typescript-eslint/eslint-plugin": "^4.28.3",
     "@typescript-eslint/parser": "^4.28.3",
@@ -97,7 +100,7 @@
     "prettier": "^2.4.1",
     "rimraf": "^5.0.0",
     "ts-jest": "^29.1.2",
-    "ts-node": "^10.8.1",
+    "ts-node": "^10.9.2",
     "ts-node-dev": "^1.1.8",
     "typescript": "^5.1.6"
   },

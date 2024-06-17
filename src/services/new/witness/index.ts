@@ -25,6 +25,8 @@ import { MessageHandleOpts } from '../p2pService';
 import { ExecuteStopMessage } from '../vm/types';
 import { ContractErrorType } from '../vm/utils';
 
+import {z} from 'zod'
+
 const Constants = {
   block_version: 1
 }
@@ -53,7 +55,7 @@ export class BlockContainer {
       //The only difference between BlockContainer and header is header does not include Txs and header is only signed
       txs: Array<{
         id: string
-        type: string
+        type: TransactionDbType
       }>,
       merkle_root: string,
       mmr_root?: string
@@ -152,6 +154,7 @@ export class WitnessServiceV2 {
     async createBlock(args: {
       start_height: number
       end_height: number
+      offchainTxsUnfiltered?: TransactionDbRecordV2[]
     }): Promise<BlockContainer> {
       const {end_height, start_height} = args;
       console.log('Gettting transactions query', {
@@ -199,7 +202,7 @@ export class WitnessServiceV2 {
       }).toArray()
       console.log('TO EXECUTE', transactions)
 
-      const offchainTxsUnfiltered = await this.self.transactionPool.txDb.find({
+      const offchainTxsUnfiltered = args.offchainTxsUnfiltered || await this.self.transactionPool.txDb.find({
         status: TransactionDbStatus.unconfirmed,
         src: 'vsc',
         
@@ -505,13 +508,7 @@ export class WitnessServiceV2 {
 
       const {drain} = await this.self.p2pService.multicastChannel.call('propose_block', {
         payload: {
-          block_header: {
-            ...blockHeader,
-            block: blockHeader.block.toString()
-          },
-          block_full: blockContainer.toObject(),
-          block_height,
-          hash: encodedPayload.cid.toString(),
+          txIds: blockContainer.rawData.txs.filter(({type}) => type === TransactionDbType.input).map(({id}) => id),
           traceInfo: proposalCtx.traceInfo,
         },
         responseOrigin: 'many',
@@ -880,19 +877,7 @@ export class WitnessServiceV2 {
         // console.log('VERIFYING block over p2p channels', cadBlock, message.block_height, message)
         // console.log('VERIFYING', await this.self.chainBridge.getWitnessesAtBlock(Number(message.block_height)))
 
-        // TODO add zod validation to message
-        const {block_header, block_full} = message;
-        
-        //Validate #0
-        //Ensure everything is defined. Only relevent for outdated nodes
-        if(!block_header || !block_full) {
-          console.log('Witness.cadBlock validate #0 - missing block_header or block_full')
-          throw DONE_ERROR;
-        }
-        
-        // console.log(block_header, block_full)
-        //Must be parsed as CID for hashing to work correctly when signing.
-        block_header.block = CID.parse(block_header.block)
+        const {block_full, txIds} = message as {block_full: unknown; txIds: unknown};
         
         //Validate #1
         //Verify witness is in runner
@@ -901,24 +886,8 @@ export class WitnessServiceV2 {
         
         
         
-        let slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-        let schedule = await this.getBlockSchedule(block_height)
-
-        if(slotHeight !== block_header.headers.br[1] && (slotHeight - 10) < block_header.headers.br[1] && (slotHeight + 20) > block_header.headers.br[1]) { 
-          //Allow at most waiting of up to 1 slot heights
-          console.log("Node is behind by 1 slot height. Waiting...")
-          for(let i = 0; i < (10 * 3) * 2; i++) { 
-            await sleep(500)
-            const block_height = this.self.chainBridge.streamParser.stream.lastBlock
-            slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength))
-            if(slotHeight === block_header.headers.br[1]) {
-              //Make sure to re-fetch schedule. Unlikely to have changed, but accounts for elections or new consensus rounds
-              schedule = await this.getBlockSchedule(slotHeight)
-              console.log('Done waiting.. In slot!')
-              break;
-            }
-          }
-        }
+        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
+        const schedule = await this.getBlockSchedule(block_height)
 
         
         const fromWitness = (await this.self.chainBridge.witnessDb.findOne({
@@ -930,21 +899,6 @@ export class WitnessServiceV2 {
           throw DONE_ERROR;
         }
 
-        console.log('slotHeight, block_header.headers.br[1]', slotHeight, block_header.headers.br[1])
-
-
-        if(slotHeight !== block_header.headers.br[1]) { 
-          console.log(`Witness.cadBlock validate #1.2 - block is not within current slot (@${fromWitness.account}) block_height: ${block_height} ${slotHeight} !== ${block_header.headers.br[1]}`)
-
-          const ts = new Date()
-
-          const blockHeader = await HiveClient.database.getBlockHeader(block_header.headers.br[1])
-
-          const tsZ = new Date(blockHeader.timestamp + "Z")
-          console.log('DRIFT', ts, tsZ, ts.getTime() - tsZ.getTime())
-          throw DONE_ERROR;
-        }
-        
         const witnessSlot = schedule.find(e => {
             //Ensure witness slot is within slot start and end
             // console.log('slot check', e.bn === slotHeight && e.account === opPayload.required_auths[0])
@@ -959,180 +913,71 @@ export class WitnessServiceV2 {
           throw DONE_ERROR;
         }
 
-        //TODO: Add something here
-
-        //Validate #2
-        //Verify block_full is the same as block_header value
-
-        const cid = await this.self.ipfs.dag.put(block_full, {
-          onlyHash: true,
-        })
-
-        if(cid.toString() !== block_header.block.toString()) {
-          console.log(`Witness.cadBlock validate #2 - invalid block_full hash expected: ${cid.toString()} got: ${block_header.block}`)
-          throw DONE_ERROR;
+        const lastHeader = await this.blockHeaders.findOne({
+        
+      }, {
+        sort: {
+          end_block: -1
         }
+      })
+      
 
-        //Validate #3
-        //Verify br (block range) is correct
-        //Verify low value
+      //If no other header is available. Use genesis day as range
+      const start_height = lastHeader ? lastHeader.end_block + 1 : networks[this.self.config.get('network.id')].genesisDay
 
-        const topHeader = await this.blockHeaders.findOne({
+        const end_height = slotHeight;
+
+        const blockFullSchema = z.object({
+          txs: z.array(
+            z.intersection(
+              z.object({
+                type: z.literal(TransactionDbType.input),
+                id: z.string()
+              }),
+              z.object({
+                type: z.nativeEnum(TransactionDbType)
+              }),
+            ),
+          ),
+        });
+
+        const txIdsSchema = z.array(z.string());
+
+        const blockFullParseRes = blockFullSchema.safeParse(block_full)
+        const txIdsParseRes = txIdsSchema.safeParse(txIds);
+
+        const txs = (() => {
+          if (txIdsParseRes.success) {
+            return txIdsParseRes.data
+          }
           
-        }, {
-          sort: {
-            end_block: -1
+          if (blockFullParseRes.success) {
+            return blockFullParseRes.data.txs
+              .filter((v): v is typeof v & {type: TransactionDbType.input} => v.type === TransactionDbType.input)
+              .map(({id}) => id as string);
           }
-        })
 
-        if(topHeader) {
-          if(block_header.headers.br[0] !== topHeader.end_block + 1) {
-            console.log(block_header.headers.br[0], topHeader.end_block)
-            console.log(`Witness.cadBlock validate #3 - not matching topheader ${fromWitness.account}`)
-            throw DONE_ERROR;
-          }
-        } else {
-          if(block_header.headers.br[0] !== networks[this.self.config.get('network.id')].genesisDay) {
-            console.log('Witness.cadBlock validate #3 - not matching genesis')
-            throw DONE_ERROR;
-          }
-        }
+          console.log('missing tx id info')
+          throw DONE_ERROR
+        })()
 
+        const offchainTxsUnfiltered = await Promise.all(
+          txs.map(id => this.self.transactionPool.txDb.findOne({id, status: TransactionDbStatus.unconfirmed}))
+        );
+        const block = await this.createBlock({start_height, end_height, offchainTxsUnfiltered});
 
-        //Validate #4
-        //Verify merkle root
-
-        let merkleRootTotal;
-        if(block_full.txs.length === 0) {
-          merkleRootTotal = null
-        } else {
-          merkleRootTotal = simpleMerkleTree(block_full.txs.map(e => CID.parse(e.id).bytes))
-        }
-
-        if(block_header.merkle_root !== merkleRootTotal) {
-          console.log(`Witness.cadBlock validate #4 - block **header** incorrect merkle root expected: ${merkleRootTotal} got: ${block_header.merkle_root}`)
-          throw DONE_ERROR;
-        }
-        
-        if(block_full.merkle_root !== merkleRootTotal) {
-          console.log(`Witness.cadBlock validate #4 - block **full** incorrect merkle root expected: ${merkleRootTotal} got: ${block_full.merkle_root }`)
-          throw DONE_ERROR;
-        }
-
-        //Validate #5
-        //Verify Hive merkle root
-        
-        //Validate #6
-        //Validate offchain TX nonces
-
-        //Use this later for verifying sort
-        let vrfTxs = [
-
-        ]
-
-        //Note, offchain needs to be properly categorized as offchain and what is considered an input
-        //Offchain can be more than just an input
-        const offchainInputTxs = block_full.txs.filter(e => {
-          return e.type === TransactionDbType.input
-        })
-
-        const nonceMap:Record<string, number> = {}
-        for(let tx of offchainInputTxs) {
-          const txRecord = await this.self.transactionPool.txDb.findOne({
-            id: tx.id
-          })
-          if(!txRecord) {
-            console.log('Witness.cadBlock validate #6 - tx not found in DB')
-            throw DONE_ERROR
-          }
-          const keyId = await computeKeyId(txRecord.required_auths.map(e => e.value))
-          if(!nonceMap[keyId]) {
-            const nonceRecord = await this.self.nonceMap.findOne({
-              id: keyId
-            })
-            if(!nonceRecord) {
-              //Assume zero nonce
-              nonceMap[keyId] = 0;
-            } else {
-              nonceMap[keyId] = nonceRecord.nonce
-            }
-          }
-          if(nonceMap[keyId] !== txRecord.headers.nonce) {
-            console.log(`Witness.cadBlock validate #6 - invalid nonce for keyId: ${keyId}`)
-            throw DONE_ERROR
-          }
-          nonceMap[keyId] = nonceMap[keyId] + 1;
-          
-          vrfTxs.push({
-            id: tx.id,
-            nonce: txRecord.headers.nonce,    
-            act: keyId,
-            sig_hash: txRecord.sig_hash
-          })
-        }
-        
-
-        //Validate #7
-        //Validate total sorting
-        
-        console.log(block_header.headers.br[0])
-        const blockKey = await this.self.chainBridge.events.findOne({
-          key: block_header.headers.br[0]
-        })
-
-        if(!blockKey) {
-          console.log(`Witness.cadBlock validate #6.5 - hive block not found at block height: ${block_header.headers.br[0]}`)
+        if (block.rawData.txs.length === 0) {
           throw DONE_ERROR
         }
 
-        let seed = blockKey.block_id
-        
-        const sortedTxs = sortTransactions(offchainInputTxs, seed)
+        const blockHeader = await block.toHeader();
 
-        for(let index in sortedTxs) {
-          //Verify sorting
-          if(offchainInputTxs[index].id !== sortedTxs[index].id) {
-            console.log(`Witness.cadBlock validate #7 - invalid sorting at index: ${index} expected: ${sortedTxs[index].id} got ${offchainInputTxs[index].id}`)
-            throw DONE_ERROR;
-          }
-        }
-        
-        //Validate #8
-        //Segwit root
-        let segwitRoot
-        if(vrfTxs.length === 0) {
-          segwitRoot = null
-        } else {
-          segwitRoot = simpleMerkleTree(vrfTxs.map(e => CID.parse(e.sig_hash).bytes)) // TODO see line 407
-        }
-
-        if(block_full.sig_root !== segwitRoot) {
-          console.log(`Witness.cadBlock Validate #8 - invalid sig root expected: ${segwitRoot} got: ${block_full.sig_root}`)
-          throw DONE_ERROR;
-        }
-        
-
-        //Validate #9
-        //Validate Offchain TX validity
-
-        //Validate #10
-        //Validate contract outputs
-
-        //Validate #11
-        //Validate other core operations
-        //Contract broadcast confirm
-
-        
-        
-
-
-
-        console.log('block_header - before sign', block_header, await this.self.ipfs.dag.put(block_header))
-        const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(block_header, {
+        console.log('blockHeader - before sign', blockHeader, await this.self.ipfs.dag.put(blockHeader))
+        const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(blockHeader, {
           pin: true
         })).bytes)
         drain.push(signData)
-        await this.self.ipfs.dag.put(block_full, {
+        await this.self.ipfs.dag.put(block, {
           pin: true
         })
 

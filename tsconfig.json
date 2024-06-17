@@ -133,5 +133,5 @@
     },
     "types": ["@types/jest"]
   },
-  "exclude": ["./contracts", "./node_modules*"]
+  "exclude": ["./contracts", "./node_modules"]
 }

@@ -23,7 +23,6 @@ services:
       IPFS_HOST: http://ipfs:5201
       MONGO_HOST: mongo:27017
     volumes:
-      - ./node_modules:/home/github/app/node_modules
       - ./data/vsc-node:/root/.vsc-node
       - ./seed-backup.json:/root/.vsc-seed-backup.json
       - ./.git/refs/heads/main:/root/git_commit

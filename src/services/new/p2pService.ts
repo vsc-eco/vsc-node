@@ -28,8 +28,8 @@ import type { Message } from '@libp2p/interface-pubsub'
 
 
 enum PUBSUB_CHANNELS  {
-    multicast = '/vsc/multicast/v1',
-    routesAnnounce = '/vsc/multicast/v1',
+    multicast = '/vsc/multicast/v2',
+    routesAnnounce = '/vsc/multicast/v2',
     memoryPool = '/vsc/memorypool/v2'
 }
 

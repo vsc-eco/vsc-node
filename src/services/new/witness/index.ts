@@ -508,6 +508,7 @@ export class WitnessServiceV2 {
 
       const {drain} = await this.self.p2pService.multicastChannel.call('propose_block', {
         payload: {
+          slotHeight: block_height,
           txIds: blockContainer.rawData.txs.filter(({type}) => type === TransactionDbType.input).map(({id}) => id),
           traceInfo: proposalCtx.traceInfo,
         },
@@ -814,12 +815,12 @@ export class WitnessServiceV2 {
     async handleProposeBlockMsg(pubReq: MessageHandleOpts) {
       const {message, drain, from} = pubReq;
 
+      const block_height = this.self.chainBridge.streamParser.stream.headHeight;
+      const roundLength = networks[this.self.config.get('network.id') as keyof typeof networks].roundLength;
+      const slotHeight = message?.slotHeight || (block_height - (block_height % roundLength));
+
       let recvCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.headHeight
-
-        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-        
         recvCtx = telemetry.continueTracedEvent(`received block proposal ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
@@ -827,12 +828,23 @@ export class WitnessServiceV2 {
         })
       }
 
+      if (slotHeight !== (slotHeight - (slotHeight % networks[this.self.config.get('network.id')].roundLength))) {
+        console.log('invalid slotHeight', JSON.stringify({slotHeight, from: from?.toString()}, null, 2));
+        return;
+      }
+
+      if (slotHeight > block_height + roundLength - 1) {
+        console.log('invalid slotHeight future', JSON.stringify({slotHeight, block_height, from: from?.toString()}, null, 2));
+        return;
+      }
+
+      if (slotHeight < block_height - roundLength + 1) {
+        console.log('invalid slotHeight too old', JSON.stringify({slotHeight, block_height, from: from?.toString()}, null, 2));
+        return;
+      }
+
       let updateCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.headHeight
-
-        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-        
         updateCtx = telemetry.continueTracedEvent(`waiting for node to be up to date ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
@@ -840,9 +852,6 @@ export class WitnessServiceV2 {
         })
       }
       
-      const block_height = this.self.chainBridge.streamParser.stream.headHeight
-      const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-
       //This doesn't help IF node is slightly behind the requester node as slotHeight is calcuated from the local block data rather than what's being requested at the block level
       //This should always pass unless there is a tiny amount of lag in the parsing section of the code
       for(let attempts = 0; attempts < 12 && this.self.chainBridge.streamParser.lastParsed < slotHeight; attempts++) {
@@ -860,10 +869,6 @@ export class WitnessServiceV2 {
 
       let verifyingCtx: ReturnType<typeof telemetry['continueTracedEvent']> | null = null
       if (message?.traceInfo) {
-        const block_height = this.self.chainBridge.streamParser.stream.headHeight
-
-        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-        
         verifyingCtx = telemetry.continueTracedEvent(`verifying block proposal ${slotHeight}`, message.traceInfo, {
           block_height: slotHeight,
           latest_block: block_height,
@@ -882,12 +887,9 @@ export class WitnessServiceV2 {
         //Validate #1
         //Verify witness is in runner
 
-        const block_height = this.self.chainBridge.streamParser.stream.headHeight
-        
-        
-        
-        const slotHeight = (block_height - (block_height % networks[this.self.config.get('network.id')].roundLength)) //+ networks[this.self.config.get('network.id')].roundLength
-        const schedule = await this.getBlockSchedule(block_height)
+        const schedule = await this.getBlockSchedule(slotHeight)
+
+        console.log('schedule info:', JSON.stringify({block_height, slotHeight, scheduled: schedule.find(slot => slot.bn === slotHeight)}, null, 2))
 
         
         const fromWitness = (await this.self.chainBridge.witnessDb.findOne({

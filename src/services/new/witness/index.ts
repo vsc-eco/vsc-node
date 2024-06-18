@@ -902,7 +902,7 @@ export class WitnessServiceV2 {
 
         const schedule = await this.getBlockSchedule(slotHeight)
 
-        console.log('schedule info:', JSON.stringify({block_height, slotHeight, scheduled: schedule.find(slot => slot.bn === slotHeight)}, null, 2))
+        // console.log('schedule info:', JSON.stringify({block_height, slotHeight, scheduled: schedule.find(slot => slot.bn === slotHeight)}, null, 2))
 
         
         const fromWitness = (await this.self.chainBridge.witnessDb.findOne({

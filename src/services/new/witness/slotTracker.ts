@@ -19,7 +19,7 @@ export class SlotTracker {
             return;
         }
 
-        if (this.self.chainBridge.blockLag >= BLOCKS_TO_WAIT) {
+        if (this.self.chainBridge.parseLag >= BLOCKS_TO_WAIT) {
             return;
         }
 

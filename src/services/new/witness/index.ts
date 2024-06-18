@@ -4,7 +4,7 @@ import networks from "../../../services/networks";
 import { NewCoreService } from "..";
 import { HiveClient, sleep } from "../../../utils";
 import { BlsCircuit, BlsDID } from '../utils/crypto/bls-did';
-import { Collection } from 'mongodb';
+import { Collection, WithId } from 'mongodb';
 import { CID } from 'multiformats';
 import IPLDDag from 'ipld-dag-cbor'
 import ShuffleSeed from 'shuffle-seed'
@@ -970,9 +970,23 @@ export class WitnessServiceV2 {
           throw DONE_ERROR
         })()
 
-        const offchainTxsUnfiltered = await Promise.all(
+        const offchainTxsUnChecked = await Promise.all(
           txs.map(id => this.self.transactionPool.txDb.findOne({id, status: TransactionDbStatus.unconfirmed}))
         );
+
+        const offchainTxsUnfiltered = offchainTxsUnChecked.filter((tx, i): tx is WithId<TransactionDbRecordV2> => {
+          if (!tx) {
+            console.log('could not find tx with id:', txs[i]);
+            return false
+          }
+          return true
+        });
+
+        if (offchainTxsUnChecked.length !== offchainTxsUnfiltered.length) {
+          // error logs handled above
+          throw DONE_ERROR
+        }
+
         const block = await this.createBlock({start_height, end_height, offchainTxsUnfiltered});
 
         if (block.rawData.txs.length === 0) {

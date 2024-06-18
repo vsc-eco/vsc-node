@@ -157,25 +157,25 @@ export class WitnessServiceV2 {
       offchainTxsUnfiltered?: TransactionDbRecordV2[]
     }): Promise<BlockContainer> {
       const {end_height, start_height} = args;
-      console.log('Gettting transactions query', {
-        status: TransactionDbStatus.included,
-        'anchored_height': {
-          $lte: end_height,
-          $gte: start_height - 1 //Account for calculated anchored_height. Note: revise this in the future.
-        },
-        $or: [
-          {
-            //Make sure transactions are locked in the future
-            'headers.lock_block': {
-              $gt: start_height
-            }
-          }, {
-            'headers.lock_block': {
-              $exists: false
-            }
-          }
-        ]
-      })
+      // console.log('Gettting transactions query', {
+      //   status: TransactionDbStatus.included,
+      //   'anchored_height': {
+      //     $lte: end_height,
+      //     $gte: start_height - 1 //Account for calculated anchored_height. Note: revise this in the future.
+      //   },
+      //   $or: [
+      //     {
+      //       //Make sure transactions are locked in the future
+      //       'headers.lock_block': {
+      //         $gt: start_height
+      //       }
+      //     }, {
+      //       'headers.lock_block': {
+      //         $exists: false
+      //       }
+      //     }
+      //   ]
+      // })
       const transactions = await this.self.transactionPool.txDb.find({
         status: TransactionDbStatus.included,
         'anchored_height': {
@@ -200,7 +200,7 @@ export class WitnessServiceV2 {
           anchored_index: 1
         }
       }).toArray()
-      console.log('TO EXECUTE', transactions)
+      // console.log('TO EXECUTE', transactions)
 
       const offchainTxsUnfiltered = args.offchainTxsUnfiltered || await this.self.transactionPool.txDb.find({
         status: TransactionDbStatus.unconfirmed,
@@ -306,7 +306,7 @@ export class WitnessServiceV2 {
       }
       const contractIds = Object.keys(contractIdsOut)
 
-      console.log(contractIds)
+      // console.log(contractIds)
 
       let contractOutputs: {
         id: string,
@@ -981,7 +981,7 @@ export class WitnessServiceV2 {
 
         const blockHeader = await block.toHeader();
 
-        console.log('blockHeader - before sign', blockHeader, await this.self.ipfs.dag.put(blockHeader))
+        // console.log('blockHeader - before sign', blockHeader, await this.self.ipfs.dag.put(blockHeader))
         const signData = await this.self.consensusKey.signRaw((await this.self.ipfs.dag.put(blockHeader, {
           pin: true
         })).bytes)

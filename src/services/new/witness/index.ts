@@ -26,6 +26,7 @@ import { ExecuteStopMessage } from '../vm/types';
 import { ContractErrorType } from '../vm/utils';
 
 import {z} from 'zod'
+import { SlotTracker } from './slotTracker';
 
 const Constants = {
   block_version: 1
@@ -136,6 +137,7 @@ export class WitnessServiceV2 {
     delayMonitor: DelayMonitor;
     multisig: MultisigSystem;
     balanceKeeper: BalanceKeeper;
+    slotTracker: SlotTracker;
 
     constructor(self: NewCoreService) {
         this.self = self;
@@ -144,7 +146,7 @@ export class WitnessServiceV2 {
         this.delayMonitor = new DelayMonitor(this.self, this)
         this.multisig = new MultisigSystem(this.self, this)
         this.balanceKeeper = new BalanceKeeper(this.self)
-
+        this.slotTracker = new SlotTracker(self, this);
 
         this.blockParser = this.blockParser.bind(this)
         this.handleProposeBlockMsg = this.handleProposeBlockMsg.bind(this)
@@ -807,6 +809,7 @@ export class WitnessServiceV2 {
             // const start_height = lastHeader ? lastHeader.end_block : networks[this.self.config.get('network.id')].genesisDay
       
             if(scheduleSlot.account === process.env.HIVE_ACCOUNT) {
+              this.slotTracker.lastValidSlot = +block_height;
               await this.proposeBlock(+block_height)
             }
           }
@@ -925,6 +928,8 @@ export class WitnessServiceV2 {
           throw DONE_ERROR;
         }
 
+        this.slotTracker.lastValidSlot = slotHeight;
+
         const lastHeader = await this.blockHeaders.findOne({
         
       }, {
@@ -1021,6 +1026,7 @@ export class WitnessServiceV2 {
       this.blockHeaders = this.self.db.collection('block_headers')
       await this.multisig.init()
       await this.balanceKeeper.init()
+      await this.slotTracker.init()
 
       // this.self.chainBridge.registerTickHandle('witness.blockTick', this.blockTick, {
       //   type: 'block',

@@ -662,7 +662,10 @@ export class WitnessServiceV2 {
       let votedWeight = 0;
       let totalWeight = lastElection.weight_total
       for(let member of circuit.aggPubKeys.keys()) { 
-        const memberNode = lastElection.members.find(e => e.key === member)
+        const memberNode = lastElection.members.find(e => e.key === member);
+        if (!memberNode) {
+          continue
+        }
         votedWeight += lastElection.weights[lastElection.members.indexOf(memberNode)]
       }
 

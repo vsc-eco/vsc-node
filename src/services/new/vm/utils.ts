@@ -311,7 +311,7 @@ export class VmContainer {
     } satisfies AnySentMessage);
     const timeoutPid = setInterval(() => {
       const lag = new Date().getTime() - startTime.getTime();
-      if(lag > 50) {
+      if(lag > 150) {
         this.events.emit('timeout', {
           type: 'timeout'
         })

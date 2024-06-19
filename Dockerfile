@@ -13,7 +13,9 @@ RUN npm install --legacy-peer-deps
 # RUN npm ci --only=production
 
 # Bundle app source
-COPY tsconfig.json src/ .git/ ./
+COPY tsconfig.json src/ ./
 
 RUN npm run build
+
+COPY .git/ ./.git/
 ENTRYPOINT [ "npm", "run", "start" ]

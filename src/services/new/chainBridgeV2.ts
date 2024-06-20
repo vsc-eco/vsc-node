@@ -355,7 +355,7 @@ export class ChainBridgeV2 {
 
                                     if(!isValid) {
                                         console.log('singature is NOT valid')
-                                        throw new Error('Signature is not valid')
+                                        continue;
                                     }
                                     
                                     const voteMajority = 2/3
@@ -382,7 +382,7 @@ export class ChainBridgeV2 {
                                     
                                     if((votedWeight / totalWeight) < voteMajority) {
                                         console.log('Not hitting vote majority')
-                                        throw new Error('Not hitting vote majority')
+                                        continue;
                                     }
                                     const anchorId = (await this.self.ipfs.dag.put(json.signed_block, {
                                         onlyHash: true
@@ -402,7 +402,8 @@ export class ChainBridgeV2 {
                                     })
  
                                     if(alreadyIncludedBlock) {
-                                        throw new Error('Already includedInBlock')
+                                        console.log(new Error('Already includedInBlock'))
+                                        continue;
                                     }
                                     
                                     console.log([startBlock, endBlock])
@@ -432,8 +433,10 @@ export class ChainBridgeV2 {
 
                                     console.log(block_full)
 
+                                    // TODO pin block_full somewhere
                                     let nonceMap = {}
-                                    for(let tx of block_full.txs) {
+                                    for(let i = 0; i < block_full.txs.length; i++) {
+                                        const tx = block_full.txs[i];
                                         this.pinQueue.add(async() => {
                                             // console.log(json.block_hash)
                                             await this.self.ipfs.pin.add(IPFS.CID.parse(tx.id), {
@@ -451,6 +454,7 @@ export class ChainBridgeV2 {
                                                 id: tx.id,
                                             }, {
                                                 $set: {
+                                                    anchored_index: i,
                                                     anchored_height: blkHeight,
                                                     anchored_id: anchorId,
                                                     anchored_block: block_id,
@@ -548,7 +552,8 @@ export class ChainBridgeV2 {
                                                     first_seen: new Date(),
                                                     anchored_height: endBlock,
                                                     anchored_block: block_id,
-                                                    anchored_id: block_id, //Same for Hive
+                                                    anchored_id: anchorId, 
+                                                    anchored_index: i,
                                                     src: "vsc"
                                                 })
                                             } catch (e) {
@@ -567,11 +572,12 @@ export class ChainBridgeV2 {
                                                         anchored_height: endBlock,
                                                         anchored_block: block_id,
                                                         anchored_id: anchorId,
+                                                        anchored_index: i,
                                                       },
                                                     },
                                                   )
                                                 } else {
-                                                    throw e
+                                                    console.log(e)
                                                 }
                                             }
                                         }

@@ -9,7 +9,7 @@ function seedRand(func: () => number, min: number, max: number): number {
   return Math.floor(func() * (max - min + 1)) + min
 }
 
-function shuffle<T>(arr: T[], seed: string): T[] {
+export function shuffle<T>(arr: T[], seed: string): T[] {
   const size = arr.length
   const rng = seedrandom(seed)
   const resp: T[] = []

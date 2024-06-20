@@ -197,10 +197,10 @@ export class WitnessServiceV2 {
           }
         ]
       }, {
-        sort: {
-          anchored_height: 1,
-          anchored_index: 1
-        }
+        sort: [
+          ['anchored_height', 1],
+          ['anchored_index', 1],
+        ]
       }).toArray()
       // console.log('TO EXECUTE', transactions)
 

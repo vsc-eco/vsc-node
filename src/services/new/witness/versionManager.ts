@@ -2,11 +2,12 @@ import networks from "../../../services/networks";
 import { NewCoreService } from "..";
 import { HiveClient } from "../../../utils";
 import { Collection } from "mongodb";
+import { TransactionDbStatus } from "../types";
 
 
 
 export const VersionConfig = {
-    index_reset_id: 18,
+    index_reset_id: 19,
 
      /**
       * should only be increased, but it can be decremented when trying a previous block reset
@@ -150,7 +151,9 @@ export class VersionManager {
             await this.witnessHistory.deleteMany({})
             await this.nonceMap.deleteMany({})
             await this.blockHeaders.deleteMany({})
-            await this.txDb.deleteMany({})
+            await this.txDb.deleteMany({
+                status: {$ne: TransactionDbStatus.unconfirmed}, // don't delete mempool
+            })
             await this.electionResults.deleteMany({})
             await this.withdrawDb.deleteMany({})
             await this.ledgerDb.deleteMany({})

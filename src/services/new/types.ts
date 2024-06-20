@@ -245,6 +245,7 @@ export interface TransactionDbRecordV2 {
     //Full block ID of Hive block including anchor record
     anchored_block?: string
     anchored_height?: number
+    anchored_index?: number
     //Witness data
     sig_hash?: string
 }

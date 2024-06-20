@@ -1,0 +1,506 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`createBlock should create consistent output for the same input with many contract calls 1`] = `-254`;
+
+exports[`createBlock should create consistent output for the same input with many contract calls 2`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "TEh3mHQedmhtKy-GnMjv09uikPLzX4Z2yrkZycDWxKU",
+    "sig_root": "Yy-kozWLKgJrPdZHzgRnxG9Y2CguMLMfJX2lXjsZg54",
+    "txs": [
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create consistent output for the same input with no input 1`] = `1`;
+
+exports[`createBlock should create consistent output for the same input with no input 2`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "y6uZ4_wbTETEvKlGKXBsb0IXDXPdvigMw4nOn95pXsA",
+    "sig_root": null,
+    "txs": [
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create consistent output for the same input with very many contract calls 1`] = `-1728`;
+
+exports[`createBlock should create consistent output for the same input with very many contract calls 2`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "6hPG0yYU8MUkpiEiPgPlWPItafzCLBr7KNAUMhr5iTA",
+    "sig_root": "voZM2n8VDHm1GK5xsb9BO8GMOyXnke8_xneg8FAL6Ew",
+    "txs": [
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicxqtgf7wz3d6dxzju5xqrcfaau3y3d5uqmi6tsmua2t6ghxtwftq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreihrgoc3uingpntmlbcvwta7q7h7cppeykeeg3ld6u5h2bkuhr6lvq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiglk2mgiqhsffutp23ym2bhlkfeinpkvy265iv6vhas5hm4gigz4e",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicbb2jo44uzahr2e67wet45trjngc6kmhqdbmmumcgoasujywlpke",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiau63ookeim7oejypmtl33xmp3vbyumjbj5fhgalfjifmxz67bvn4",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreido725sh37l6su73c7ly62vtfhzxvnr6tlnds3nox553loibwcs2m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreidnzz52qqojy4mzjnykkteakmhdlg55yg4uv7qypkosliz4i6mp6a",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreifq2evbxt2xs5fxldedv6mdye6fyurl2exfpwundbb7d3bdqwwrty",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicbf4il2wzjvr2pxac6zas3qigszgt2ycnmhp62bhwfl4dppz5gjq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreieghdlx266eqkqtm245qc5bpu6xbxzmu32d36x3shhgdvnfqs7hnu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiap4fmnth3sosv6rr4yay3t3mprjagzst7auvsp5w3jkhojny7p2u",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreid2qsixgkyzb6q4pbvpxghnsfngmv2nc4kdwb7l7sa3qaumjcvg4m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreictg2v7jlhkxuytyf27np6lksltg2l5u6ap7ymhvuiyqgs5ba4bei",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreignqw7fbqqq6wxqvr5bdwkgp526ek7d6vx47vkmopk4cfjd6ldpii",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with many contract calls 1`] = `-254`;
+
+exports[`createBlock should create differ output for the same but jumbled input with many contract calls 2`] = `-253`;
+
+exports[`createBlock should create differ output for the same but jumbled input with many contract calls 3`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "TEh3mHQedmhtKy-GnMjv09uikPLzX4Z2yrkZycDWxKU",
+    "sig_root": "Yy-kozWLKgJrPdZHzgRnxG9Y2CguMLMfJX2lXjsZg54",
+    "txs": [
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with many contract calls 4`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "Ln0CejY-X4JvP0Dn0HFuan_baX-JeP3yJujvkehaVUU",
+    "sig_root": "ygaIDkVDW3a8cOKpA9EHFKSf5duFgsEokYpOoeLWSqQ",
+    "txs": [
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreia6ljwjlqpjlrb5ojllalgekgck6mz3s3l7w6ssz5s6x2tjljujcu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with no input 1`] = `1`;
+
+exports[`createBlock should create differ output for the same but jumbled input with no input 2`] = `1`;
+
+exports[`createBlock should create differ output for the same but jumbled input with no input 3`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "y6uZ4_wbTETEvKlGKXBsb0IXDXPdvigMw4nOn95pXsA",
+    "sig_root": null,
+    "txs": [
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with no input 4`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "y6uZ4_wbTETEvKlGKXBsb0IXDXPdvigMw4nOn95pXsA",
+    "sig_root": null,
+    "txs": [
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with very many contract calls 1`] = `-1723`;
+
+exports[`createBlock should create differ output for the same but jumbled input with very many contract calls 2`] = `-1726`;
+
+exports[`createBlock should create differ output for the same but jumbled input with very many contract calls 3`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "IWjlzL26LVrL29FjXs_zel-WGOc0Je_2Y3WTVIsBi1s",
+    "sig_root": "-ptu05jLgsiZkRBhVbnRJBQYWHkhuThWoQYta--_Xao",
+    "txs": [
+      {
+        "id": "bafyreid2qsixgkyzb6q4pbvpxghnsfngmv2nc4kdwb7l7sa3qaumjcvg4m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiglk2mgiqhsffutp23ym2bhlkfeinpkvy265iv6vhas5hm4gigz4e",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreido725sh37l6su73c7ly62vtfhzxvnr6tlnds3nox553loibwcs2m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreifo2caumdy2wnpwbbubyxdx4ordsok6jmtu4rvsegpnotczdshbd4",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicxqtgf7wz3d6dxzju5xqrcfaau3y3d5uqmi6tsmua2t6ghxtwftq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreieghdlx266eqkqtm245qc5bpu6xbxzmu32d36x3shhgdvnfqs7hnu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiagaam5wkkmooo5s2jpp6baxcnefuaewydg32f5uhpfqsx72brotu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreignqw7fbqqq6wxqvr5bdwkgp526ek7d6vx47vkmopk4cfjd6ldpii",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreidnzz52qqojy4mzjnykkteakmhdlg55yg4uv7qypkosliz4i6mp6a",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicbf4il2wzjvr2pxac6zas3qigszgt2ycnmhp62bhwfl4dppz5gjq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiau63ookeim7oejypmtl33xmp3vbyumjbj5fhgalfjifmxz67bvn4",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreifq2evbxt2xs5fxldedv6mdye6fyurl2exfpwundbb7d3bdqwwrty",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiap4fmnth3sosv6rr4yay3t3mprjagzst7auvsp5w3jkhojny7p2u",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicj6uzqw4xhb6geev6k5ax4n3n7pduwmqh5wfxisubptuoqzn7jiy",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreigcyjl43mvuecmfn7xtsh6fsdxzboanjsnkbyh7xnqf4vusy6meye",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreictg2v7jlhkxuytyf27np6lksltg2l5u6ap7ymhvuiyqgs5ba4bei",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiblwknqy6spdfmkoe7x3m2alyqaapi62z2drgskisr6twp7rqnw4m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreihrgoc3uingpntmlbcvwta7q7h7cppeykeeg3ld6u5h2bkuhr6lvq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicbb2jo44uzahr2e67wet45trjngc6kmhqdbmmumcgoasujywlpke",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;
+
+exports[`createBlock should create differ output for the same but jumbled input with very many contract calls 4`] = `
+BlockContainer {
+  "rawData": {
+    "__t": "vsc-block",
+    "__v": "0.1",
+    "headers": {
+      "prevb": "bafyreifndgmch5ex2dmgoltnq7nn2mrtjjsvbicbcfzgemesomdem2jgte",
+    },
+    "merkle_root": "96E2FWVgRCixyEY57MDw6Xa32vzXll2XEwk3fn9ZsJA",
+    "sig_root": "1yfhw-XxRZ7boGpcZX9ltriJdqjgfOwBUU2IHCSq3V4",
+    "txs": [
+      {
+        "id": "bafyreiglk2mgiqhsffutp23ym2bhlkfeinpkvy265iv6vhas5hm4gigz4e",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreid2qsixgkyzb6q4pbvpxghnsfngmv2nc4kdwb7l7sa3qaumjcvg4m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreihrgoc3uingpntmlbcvwta7q7h7cppeykeeg3ld6u5h2bkuhr6lvq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiap4fmnth3sosv6rr4yay3t3mprjagzst7auvsp5w3jkhojny7p2u",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreidz6lgett5eiq4j7tdk74wf4h5fgzqgutdz2xchhxpsvarnmdjkey",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicgfn4kkkdaovz3dmjsjoaf2iywoyuym7uv2v7q4v4qlemwlw5n5u",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreiau63ookeim7oejypmtl33xmp3vbyumjbj5fhgalfjifmxz67bvn4",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicljav3fbfge6crbpox43vngfksbapxupajye5bns27k442yrtsjm",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicxqtgf7wz3d6dxzju5xqrcfaau3y3d5uqmi6tsmua2t6ghxtwftq",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreicbb2jo44uzahr2e67wet45trjngc6kmhqdbmmumcgoasujywlpke",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreihmtgg7snwhbts2d7gj5ia5codc2fysfpo5xiqfecai3hh7zabeje",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreidnzz52qqojy4mzjnykkteakmhdlg55yg4uv7qypkosliz4i6mp6a",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreido725sh37l6su73c7ly62vtfhzxvnr6tlnds3nox553loibwcs2m",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreignqw7fbqqq6wxqvr5bdwkgp526ek7d6vx47vkmopk4cfjd6ldpii",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreia6ljwjlqpjlrb5ojllalgekgck6mz3s3l7w6ssz5s6x2tjljujcu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreigyebux25pfac24mzuxb53efhbsd5l5pshexd4m76tifdjudecegi",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "id": "bafyreieghdlx266eqkqtm245qc5bpu6xbxzmu32d36x3shhgdvnfqs7hnu",
+        "op": "call_contract",
+        "type": 1,
+      },
+      {
+        "contract_id": "vs41q9c3ygynfp6kl86qnlaswuwvam748s5lvugns5schg4hte5vhusnx7sg5u8falrt",
+        "id": "bafyreib4m744jssm2bt5bqpvz27567orqfljnicrrvjb6rocldd55ogkwu",
+        "type": 2,
+      },
+    ],
+  },
+  "ref_end": 86424500,
+  "ref_start": 86407311,
+}
+`;

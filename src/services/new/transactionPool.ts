@@ -311,7 +311,7 @@ export class TransactionPoolV2 {
                         const json = JSON.parse(opBody.json)
             
                         if(json.net_id !== this.self.config.get('network.id')) {
-                            return;
+                            continue;
                         }
             
                         const required_auths = []

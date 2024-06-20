@@ -554,6 +554,7 @@ export class ChainBridgeV2 {
                                                     anchored_block: block_id,
                                                     anchored_id: anchorId, 
                                                     anchored_index: i,
+                                                    anchored_op_index: 0,
                                                     src: "vsc"
                                                 })
                                             } catch (e) {
@@ -573,6 +574,7 @@ export class ChainBridgeV2 {
                                                         anchored_block: block_id,
                                                         anchored_id: anchorId,
                                                         anchored_index: i,
+                                                        anchored_op_index: 0,
                                                       },
                                                     },
                                                   )

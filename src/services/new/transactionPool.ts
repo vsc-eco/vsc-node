@@ -304,7 +304,8 @@ export class TransactionPoolV2 {
              
             const {tx, blkHeight} = args.data
 
-            for(let [op, opBody] of tx.operations) {
+            for(let i = 0; i < tx.operations.length; i++) {
+                const [op, opBody] = tx.operations[i]
                 if(op === 'custom_json') {
                     // console.log('picked up TX', tx, fullTx)
                     if(opBody.id === 'vsc.announce_tx' || opBody.id === 'vsc.tx') {
@@ -323,10 +324,11 @@ export class TransactionPoolV2 {
                         }))
                         const txData = {
                             status: TransactionDbStatus.included,
-                            id: `${tx.transaction_id}-${tx.index}`,
+                            id: `${tx.transaction_id}-${i}`,
                             required_auths,
                             anchored_height: blkHeight,
                             anchored_index: tx.index,
+                            anchored_op_index: i,
                             headers: {
                                 // lock_block: fullTx.block_height + 120,
                             },

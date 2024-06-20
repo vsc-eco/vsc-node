@@ -246,6 +246,7 @@ export interface TransactionDbRecordV2 {
     anchored_block?: string
     anchored_height?: number
     anchored_index?: number
+    anchored_op_index?: number
     //Witness data
     sig_hash?: string
 }

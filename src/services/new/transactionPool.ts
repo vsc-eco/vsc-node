@@ -132,7 +132,7 @@ export class TransactionPoolV2 {
         sig: string
         broadcast?: boolean
     }) {
-        if(typeof args.broadcast !== 'undefined') {
+        if(typeof args.broadcast === 'undefined') {
             //default to broadcast yes
             args.broadcast = true
         }

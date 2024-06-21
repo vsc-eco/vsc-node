@@ -122,6 +122,20 @@ const REQUIRED_ELECTION_MEMBERS = [
     'lassecashwitness',
 ]
 
+/**
+ * This is the minimum number of nodes that are not part of `REQUIRED_ELECTION_MEMBERS`.
+ * By setting this minimum, a single node will only be able to have a vote weight
+ * percentage within the range 8.2%-15.6%.
+ * 
+ * Perhaps, we should increase this number if we every increase the number of
+ * required election members, but, for the time being, this adds a lot of safety
+ * for preventing a single point of failure for network operation, especially if
+ * there is a protocol upgrade.
+ */
+const MINIMUM_OPTIONAL_NODE_COUNT = 8;
+
+const MINIMUM_ELECTION_MEMBER_COUNT = REQUIRED_ELECTION_MEMBERS.length + MINIMUM_OPTIONAL_NODE_COUNT;
+
 const EPOCH_122_BLOCK_HEIGHT = 85060812;
 
 const DEFAULT_NEW_NODE_WEIGHT = 10;
@@ -331,7 +345,7 @@ export class ElectionManager {
         
         console.log('electionData - holding election', electionData)
 
-        if(electionData.members.length < 8) {
+        if(electionData.members.length < MINIMUM_ELECTION_MEMBER_COUNT) {
             console.log("Minimum network config not met for election. Skipping.")
             return; 
         }

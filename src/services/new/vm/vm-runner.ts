@@ -1031,6 +1031,7 @@ void (async () => {
       for await (let result of vmRunner.finish()) {
         process.send!(result satisfies AnyReceivedMessage)
       }
+      process.exit(0)
     }
   })
 })()

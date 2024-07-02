@@ -733,6 +733,9 @@ class VmRunner {
             unit: args.asset
           })
 
+          return {
+            result: "SUCCESS"
+          }
         } else {
           return {
             result: "INSUFFICIENT_FUNDS"

@@ -643,7 +643,7 @@ class VmRunner {
           account: string
           tag?: string
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshot(`${args.account}${args.tag ? '#' + args.tag.replace('#', '') : ''}`, 84021084)
+        const snapshot = await this.getBalanceSnapshot(`${args.account}${args.tag ? '#' + args.tag.replace('#', '') : ''}`, block_height)
 
         return {
           result: snapshot.tokens

@@ -40,10 +40,13 @@ export const DebugResolvers = {
 
 export const Resolvers = {
   contractState: async (_, args) => {
-    // const data = await appContainer.self.contractEngine.contractDb.findOne({
-    //   id: args.id,
-    // })
-    const data = null
+    const data = await appContainer.self.newService.chainBridge.contractOutputDb.findOne({
+      id: args.id,
+    }, {
+      sort: {
+        anchored_height: -1
+      }
+    })
 
     if(!data) {
       return null;

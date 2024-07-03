@@ -163,13 +163,12 @@ export const Resolvers = {
     }
 
 
-    // const txs = await appContainer.self.transactionPool.transactionPool.find({
-    //   ...query
-    // }, {
-    //   limit: 100,
-    //   skip: 0
-    // }).toArray()
-    const txs = []
+    const txs = await appContainer.self.newService.transactionPool.txDb.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
 
     return {
       txs: txs.map(e => {

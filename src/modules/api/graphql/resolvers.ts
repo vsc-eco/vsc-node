@@ -172,19 +172,19 @@ export const Resolvers = {
 
     return {
       txs: txs.map(e => {
-        let type;
-        if(TransactionDbType.input === e.type) {
-          type = 'INPUT'
-        } else if(TransactionDbType.output === e.type) {
-          type = 'OUTPUT'
-        } else {
-          type = 'NULL'
-        }
+        // let type;
+        // if(TransactionDbType.input === e.type) {
+        //   type = 'INPUT'
+        // } else if(TransactionDbType.output === e.type) {
+        //   type = 'OUTPUT'
+        // } else {
+        //   type = 'NULL'
+        // }
         
         return {
           ...e,
           first_seen: e.first_seen.toISOString(),
-          type: type
+          // type: type
         }
       })
     }

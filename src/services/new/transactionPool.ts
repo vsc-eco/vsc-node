@@ -7,9 +7,18 @@ import { PrivateKey } from "@hiveio/dhive";
 import { encodePayload } from 'dag-jose-utils'
 import { CID } from "kubo-rpc-client";
 import { verifyTx } from "./utils";
-import { convertTxJws } from "@vsc.eco/client/dist/utils";
-import DAGCbor from 'ipld-dag-cbor'
+import { convertEIP712Type } from "@vsc.eco/client/dist/utils";
+import * as DagCbor from '@ipld/dag-cbor'
 import NodeSchedule from 'node-schedule'
+import {recoverTypedDataAddress, hashTypedData} from 'viem'
+import { AccountId } from "caip";
+import { DID, DagJWS, GeneralJWS } from "dids";
+import * as Block from 'multiformats/block'
+import * as codec from '@ipld/dag-cbor'
+import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'
+import {recover} from 'web3-eth-accounts'
+
+
 
 interface TxAnnounceMsg {
     //ref_tx = only CID of TX useful for TXs under 2kb
@@ -25,6 +34,145 @@ const CONSTANTS = {
     //TXs over pubsub direct are faster and incurr less receive latency.
     //Delivery is guaranteed.
     max_broadcast_size: 8_000
+}
+
+type SigJWS = {
+    t: undefined
+    alg: string
+    kid: string
+    sig: Buffer
+}
+
+type SigEIP191 = {
+    t: 'eip191',
+    s: string
+}
+
+type Sig = SigJWS |  SigEIP191
+
+async function convertSigToJWS(txCid: CID, sigVal): Promise<DagJWS> {
+
+    return {
+        payload: Buffer.from(txCid.bytes).toString('base64url'),
+        signatures: [
+            {
+                protected: Buffer.from(JSON.stringify({
+                    alg: sigVal.alg,
+                    kid: [sigVal.kid, sigVal.kid.split(':')[2]].join('#')
+                })).toString('base64url'),
+                signature: sigVal.sig
+            }
+        ],
+        //dids library is using bad type for CID
+        link: txCid as any
+    }
+}
+
+
+
+async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
+    boolean,
+    string?
+]> {
+
+    //Decode TX
+    const txBuf = Buffer.from(tx, 'base64url')
+    const decodedTx = DagCbor.decode(txBuf) as TransactionContainerV2
+    const hash = await sha256.digest(txBuf)
+    const txCid = CID.create(1, codec.code, hash)
+
+    //Decode sig
+    const sigBuf = Buffer.from(sig, 'base64url')
+    const sigDecoded = DagCbor.decode(sigBuf) as {
+        __t: 'vsc-sig',
+        sigs: Sig[]
+        eip712_type?: object
+    }
+    
+    for(let sig of sigDecoded.sigs) {
+        //Check if equal to eip191, OR leave as undefined for JWS suport
+        const recoveredAuths = []
+        if(sig.t === 'eip191') {
+            //Verify via EIP191 
+
+            const typedData = sigDecoded.eip712_type || convertEIP712Type(decodedTx)
+
+            const signature = (sig as SigEIP191).s
+            const hash = hashTypedData({
+                ...typedData as any
+            })
+
+            //0xHex64bytes
+            const addressMetamask = await recoverTypedDataAddress({
+                ...typedData,
+                //as any because it wants 0x string type
+                signature
+            } as any)
+            const address = recover(hash, signature)
+
+            const resolveAddresses = [address, addressMetamask]
+
+            //Filter for relevant DID auths
+            const filteredAuths = decodedTx.headers.required_auths.map(e => { 
+                return e.split('?')[0]
+            }).filter(e => { 
+                return e.startsWith('did:pkh:eip155')
+            })
+
+            const evmAddresses = filteredAuths.map(e => { 
+                return AccountId.parse(e.replace('did:pkh:', '')).address
+            })
+
+            //If not included in list of DID auths
+            //There is a signing difference between Metamask and direct private key signing
+            //This is a temporary workaround until further investigate is done.
+            //For now, this will support for metamask and direct private key signing
+            let resolvAddr;
+            for(let addr of resolveAddresses) {
+                if(evmAddresses.includes(addr)) {
+                    resolvAddr = addr
+                    break
+                }
+            }
+            if(!resolvAddr) { 
+                return [false, "INCORRECT_SIG"];
+            }
+
+            recoveredAuths.push(`did:pkh:eip155:1:${address}`)
+        } else {
+            //Verify via JWS
+            const formattedJws = await convertSigToJWS(txCid, sig as SigJWS)
+            console.log('Verifying signature', formattedJws)
+            //No longer needed as JWS is reconstructed
+            // if(formattedJws.payload !== Buffer.from(cid.bytes).toString('base64url')) {
+            //     return false;
+            // }
+            let signedDid;
+            try {
+                const verifyResult = await did.verifyJWS(formattedJws)
+        
+                signedDid = verifyResult.kid.split('#')[0]
+            } catch (ex) {
+                console.log(ex)
+                return [false, "INCORRECT_SIG"];
+            }
+        
+            if(!decodedTx.headers.required_auths.map(e => {
+                //Ensure there is no extra query fragments
+                return e.split('?')[0]
+            }).includes(signedDid) && !(decodedTx.headers.payer === signedDid)) {
+                return [false, "WRONG_AUTH"]
+            }
+
+            recoveredAuths.push(signedDid)
+        }
+        for(let signer of decodedTx.headers.required_auths) { 
+            if(!recoveredAuths.includes(signer)) {
+                return [false, "MISSING_AUTH"]
+            }
+        }
+    }
+    return [true];
 }
 
 export class TransactionPoolV2 {
@@ -51,10 +199,10 @@ export class TransactionPoolV2 {
         if(message.type === 'ref_tx') {
             tx_id = message.id
             rawTx = (await this.self.ipfs.block.get(tx_id))
-            decodedTx = DAGCbor.util.deserialize(rawTx)
+            decodedTx = DagCbor.decode(rawTx)
         } else if(message.type = 'direct_tx') {
             rawTx = Buffer.from(message.data, 'base64url');
-            decodedTx = DAGCbor.util.deserialize(rawTx)
+            decodedTx = DagCbor.decode(rawTx)
             tx_id = (await this.self.ipfs.block.put(rawTx, {
                 pin: false,
                 format: 'dag-cbor'
@@ -70,33 +218,14 @@ export class TransactionPoolV2 {
                 return;
             }
             //Run validation pipeline!
-            
-            const jwsList = await convertTxJws({
-                sig: sig_data,
-                tx: rawTx.toString('base64url')
-            })
             const cid = await CID.parse(tx_id)
         
-            for(let jws of jwsList) {
-                if(jws.jws.payload !== Buffer.from(cid.bytes).toString('base64url')) {
-                    return;
-                }
-                let signedDid;
-                try {
-                    const verifyResult = await this.self.identity.verifyJWS(jws.jws)
-            
-                    signedDid = verifyResult.kid.split('#')[0]
-                } catch (ex) {
-                    return;
-                }
-            
-                if(!decodedTx.headers.required_auths.map(e => {
-                    //Ensure there is no extra query fragments
-                    return e.split('?')[0]
-                }).includes(signedDid) && !(decodedTx.headers.payer === signedDid)) {
-                    return;
-                }
+            const [isValidSig] = await verifyTxSignature(this.self.identity, rawTx.toString('base64url'), sig_data)
+
+            if(isValidSig === false) { 
+                return false;
             }
+           
             //TODO: Do nonce validation
 
             await this.txDb.insertOne({
@@ -137,37 +266,32 @@ export class TransactionPoolV2 {
             args.broadcast = true
         }
 
-        const jwsList = await convertTxJws({
-            sig: args.sig,
-            tx: args.tx
-        })
+       
         const buf = Buffer.from(args.tx, 'base64url')
-        const cid = await DAGCbor.util.cid(buf)
-        const decodedTx = DAGCbor.util.deserialize(buf) as TransactionContainerV2
+       
+
+        const hash = await sha256.digest(buf)
+        const cid = CID.create(1, codec.code, hash)
+        const decodedTx = DagCbor.decode(buf) as TransactionContainerV2
     
-        for(let jws of jwsList) {
-            console.log(jws.jws.payload, Buffer.from(cid.bytes).toString('base64url'))
-            if(jws.jws.payload !== Buffer.from(cid.bytes).toString('base64url')) {
-                throw new Error('Invalid Signature')
-            }
-            let signedDid;
-            try {
-                const verifyResult = await this.self.identity.verifyJWS(jws.jws)
         
-                signedDid = verifyResult.kid.split('#')[0]
-            } catch {
+
+        const [isValidSig, sigError] = await verifyTxSignature(this.self.identity, args.tx, args.sig)
+
+        if(isValidSig === false) { 
+            if(sigError === "INCORRECT_SIG") {
                 throw new Error('Invalid Signature')
-            }
-        
-            if(!decodedTx.headers.required_auths.map(e => {
-                //Ensure there is no extra query fragments
-                return e.split('?')[0]
-            }).includes(signedDid) && !(decodedTx.headers.payer === signedDid)) {
+            } else if(sigError === "WRONG_AUTH") { 
                 throw new Error('Incorrectly signed by wrong authority. Not included in "required_auths"')
+            } else if(sigError === "MISSING_AUTH") {
+                throw new Error('Missing required authority')
+            } else {
+                throw new Error('Unknown Signature Validation Error')
             }
         }
-        //TODO: Do nonce validation
 
+
+        //TODO: Do nonce validation
         const txRecord = await this.txDb.findOne({
             id: cid.toString()
         })

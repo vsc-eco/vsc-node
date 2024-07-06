@@ -14,6 +14,7 @@ import { Version } from 'multiformats'
 import {pathToFileURL} from 'node:url';
 import { mongo } from './services/db'
 import https from 'node:https'
+import Moment from 'moment'
 
 
 export function truthy<T>(v: T): v is Exclude<T, false | '' | null | undefined> {
@@ -816,4 +817,131 @@ export function makeSimpleObjectText(obj: any) {
   }
   
   return text;
+}
+
+function normalizeHiveValue(value) {
+  let unit;
+  if (value.nai === '@@000000021') {
+    unit = 'HIVE'
+  } else if (value.nai === '@@000000013') {
+    unit = 'HBD'
+  }
+  let amount = Number(value.amount) / Math.pow(10, value.precision);
+
+  return {
+    unit,
+    amount
+  }
+}
+
+export async function getHBDInterest(txId: string) {
+  const txInfo = await HiveClient.database.getTransaction(txId)
+  console.log(txInfo)
+
+  //Not typed within the library
+  const blockNum = (txInfo as any).block_num
+
+  const blockInfo = await HiveClient.call('account_history_api', 'get_ops_in_block', {block_num: blockNum, only_virtual: true})
+
+  console.log(blockInfo)
+  const txOp = blockInfo.ops.find(e => e.trx_id === txId)
+  console.log(txOp.op.value.interest)
+  
+  const interestNormal = normalizeHiveValue(txOp.op.value.interest)
+  console.log(interestNormal)
+
+  return interestNormal;
+}
+
+
+
+
+export class FungibleInterest {
+  tCount: number
+  tBal: number
+  balance: number
+  prevBlock: number
+  startBlock: number
+
+  constructor() {
+    this.tBal = 0
+    this.prevBlock = 0;
+    this.startBlock = 0;
+    this.balance = 0;
+  }
+
+  
+  average(blockHeight: number) {
+    
+    const diff = blockHeight - this.prevBlock
+    const range = blockHeight - this.startBlock;
+    const total = this.balance * diff
+    return (this.tBal + total) / range
+  }
+
+ 
+  setBal(amount: number, blockHeight: number) {
+    
+    this.tBal = this.tBal + (this.balance * (blockHeight - this.prevBlock))
+    this.balance = amount;
+  }
+
+}
+
+export class DifferentialAverage {
+  cumulativeSum: number
+  count: number
+  startHeight: number
+  prevHeight: number
+  balance: any
+  constructor(startHeight: number) {
+      this.count = 0;
+      this.cumulativeSum = 0;
+      this.balance = 0;
+      this.startHeight = startHeight;
+      this.prevHeight = startHeight;
+  }
+
+  set(value, blockHeight) {
+    const diff = blockHeight - this.prevHeight;
+    const range = blockHeight - this.startHeight;
+    
+
+    const adj = (diff / range) || 1
+    
+    // Update the cumulative sum of differences
+    this.cumulativeSum += this.balance * adj;
+
+    // Increment count
+    this.count++;
+
+
+    this.balance = value;
+    this.prevHeight = blockHeight;
+  }
+
+  average(blockHeight) {
+    const diff = blockHeight - this.prevHeight;
+    const range = blockHeight - this.startHeight;
+    
+
+    const adj = (diff / range) || 1
+    
+    console.log('adj', adj, range)
+    const balAdj = this.balance * adj;
+    return (this.cumulativeSum + balAdj) / this.count;
+  }
+
+  estimateInterest(blockHeight) {
+    const range = blockHeight - this.startHeight;
+    const interestDuration = Moment.duration('1', 'year').asSeconds() / 3
+    const interestPct = (0.2 * (range / interestDuration)) + 1
+    
+    const balAvg = this.average(blockHeight)
+
+    return {
+      interestPct,
+      interest: balAvg * interestPct
+    }
+  }
 }

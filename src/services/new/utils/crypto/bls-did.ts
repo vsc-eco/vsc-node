@@ -5,11 +5,18 @@ import type { PublicKey, SecretKey, Signature } from '@chainsafe/bls/types'
 import BitSet from 'bitset'
 import { CID } from 'kubo-rpc-client'
 import { encodePayload } from 'dag-jose-utils'
-import { encodeBase64Url, decodeBase64, encodeBase64 } from 'dids/lib/utils'
 import * as u8a from 'uint8arrays'
 import { parse } from 'did-resolver'
 import { SignaturePacked, SignatureType } from '../../types'
 
+
+function decodeBase64(data: string) {
+  return Buffer.from(data, 'base64')
+}
+
+function encodeBase64(data: Uint8Array) {
+  return Buffer.from(data).toString('base64')
+}
 
 /**
  * Light implementation of BLS DIDs
@@ -49,7 +56,7 @@ export class BlsDID {
     } else {
       msg = msg
     }
-    return signature.verify(this.pubKey, msg)
+    return signature.verify(this.pubKey, msg as Uint8Array)
   }
 
   async sign(msg: Record<string, any>): Promise<string> {

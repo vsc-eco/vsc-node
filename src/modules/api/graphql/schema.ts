@@ -131,6 +131,9 @@ export const schema = `
     type FindtransactionResult {
         txs: [Transaction]
     }
+    type AnchorProducer {
+        nextSlot(account: String): JSON
+    }
     input FindTransactionFilter {
         byId: String
         byAccount: String
@@ -164,5 +167,7 @@ export const schema = `
 
         witnessActiveScore(height: Int): JSON
         mockGenerateElection: JSON
+
+        anchorProducer: AnchorProducer
     }
 `

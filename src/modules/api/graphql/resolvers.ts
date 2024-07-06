@@ -359,5 +359,25 @@ export const Resolvers = {
   mockGenerateElection: async (_, args) => { 
     const bh = await HiveClient.blockchain.getCurrentBlockNum()
     return await appContainer.self.newService.electionManager.generateElection(bh)
+  },
+  anchorProducer: async (_, args) => {
+    let {account} = args 
+    if(!account) {
+      account = process.env.HIVE_ACCOUNT
+    }
+    const blockNum = await HiveClient.blockchain.getCurrentBlockNum();
+
+    const schedule = await appContainer.self.newService.witness.getBlockSchedule(blockNum)
+
+    const nextSlot = schedule.find(e => {
+      return e.bn > blockNum && e.account === account
+      // console.log(e)
+    })
+
+    return {
+      nextSlot: {
+        blocksTilSlot: nextSlot ? nextSlot.bn - blockNum : null,
+      }
+    }
   }
 }

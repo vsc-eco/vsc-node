@@ -40,10 +40,13 @@ export const DebugResolvers = {
 
 export const Resolvers = {
   contractState: async (_, args) => {
-    // const data = await appContainer.self.contractEngine.contractDb.findOne({
-    //   id: args.id,
-    // })
-    const data = null
+    const data = await appContainer.self.newService.chainBridge.contractOutputDb.findOne({
+      id: args.id,
+    }, {
+      sort: {
+        anchored_height: -1
+      }
+    })
 
     if(!data) {
       return null;
@@ -160,29 +163,28 @@ export const Resolvers = {
     }
 
 
-    // const txs = await appContainer.self.transactionPool.transactionPool.find({
-    //   ...query
-    // }, {
-    //   limit: 100,
-    //   skip: 0
-    // }).toArray()
-    const txs = []
+    const txs = await appContainer.self.newService.transactionPool.txDb.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
 
     return {
       txs: txs.map(e => {
-        let type;
-        if(TransactionDbType.input === e.type) {
-          type = 'INPUT'
-        } else if(TransactionDbType.output === e.type) {
-          type = 'OUTPUT'
-        } else {
-          type = 'NULL'
-        }
+        // let type;
+        // if(TransactionDbType.input === e.type) {
+        //   type = 'INPUT'
+        // } else if(TransactionDbType.output === e.type) {
+        //   type = 'OUTPUT'
+        // } else {
+        //   type = 'NULL'
+        // }
         
         return {
           ...e,
           first_seen: e.first_seen.toISOString(),
-          type: type
+          // type: type
         }
       })
     }

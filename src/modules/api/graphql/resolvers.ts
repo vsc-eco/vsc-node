@@ -135,57 +135,61 @@ export const Resolvers = {
       },
     }
   },
+  findContractOutput: async (_, args) => {
+    let query = {}
+
+    if (args.filterOptions?.byInput) {
+      query['inputs'] = { $in: [args.filterOptions.byInput] };
+    }
+
+    if (args.filterOptions?.byOutput) {
+      query['id'] = args.filterOptions.byOutput
+    }
+
+    const txs = await appContainer.self.newService.chainBridge.contractOutputDb.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
+
+    return {
+      outputs: txs
+    }
+  },
   findTransaction: async (_, args) => {
     let query = {}
-    let txs = []
 
-    if (args.filterOptions?.byInput || args.filterOptions?.byOutput) {
-      if (args.filterOptions?.byInput) {
-        query['inputs'] = { $in: [args.filterOptions.byInput] };
-      }
-
-      if (args.filterOptions?.byOutput) {
-        query['id'] = args.filterOptions.byOutput
-      }
-
-      txs = await appContainer.self.newService.chainBridge.contractOutputDb.find({
-        ...query
-      }, {
-        limit: 100,
-        skip: 0
-      }).toArray()
-    } else {
-      if (args.filterOptions?.byId) {
-        query['id'] = args.filterOptions.byId
-      }
-
-      if (args.filterOptions?.byStatus) {
-        query['status'] = args.filterOptions.byStatus
-      }
-
-      if (args.filterOptions?.byContract) {
-        query['data.contract_id'] = args.filterOptions.byContract
-      }
-
-      if (args.filterOptions?.byAccount) {
-        query['required_auths'] = { $elemMatch: { value: args.filterOptions.byAccount } };
-      }
-
-      if (args.filterOptions?.byOpCategory) {
-        query['data.op'] = args.filterOptions.byOpCategory
-      }
-
-      if (args.filterOptions?.byAction) {
-        query['data.action'] = args.filterOptions.byAction
-      }
-
-      txs = await appContainer.self.newService.transactionPool.txDb.find({
-        ...query
-      }, {
-        limit: 100,
-        skip: 0
-      }).toArray()
+    if (args.filterOptions?.byId) {
+      query['id'] = args.filterOptions.byId
     }
+
+    if (args.filterOptions?.byStatus) {
+      query['status'] = args.filterOptions.byStatus
+    }
+
+    if (args.filterOptions?.byContract) {
+      query['data.contract_id'] = args.filterOptions.byContract
+    }
+
+    if (args.filterOptions?.byAccount) {
+      query['required_auths'] = { $elemMatch: { value: args.filterOptions.byAccount } };
+    }
+
+    if (args.filterOptions?.byOpCategory) {
+      query['data.op'] = args.filterOptions.byOpCategory
+    }
+
+    if (args.filterOptions?.byAction) {
+      query['data.action'] = args.filterOptions.byAction
+    }
+
+    const txs = await appContainer.self.newService.transactionPool.txDb.find({
+      ...query
+    }, {
+      limit: 100,
+      skip: 0
+    }).toArray()
 
     return {
       txs: txs.map(e => {

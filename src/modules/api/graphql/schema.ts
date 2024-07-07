@@ -25,16 +25,54 @@ export const schema = `
         CORE
     }
     type Transaction {
-        id: String
-        op: String
-        status: TransactionStatus
-        local: Boolean
+        id: String!
+        status: String!
+        headers: Headers
+        required_auths: [Auth!]
+        data: TransactionData
+        sig_hash: String
+        src: String
         first_seen: String
-        type: TransactionType
-        included_in: String
-        executed_in: String
-        decoded_tx: JSON
-        redeem: JSON
+        local: Boolean
+        accessible: Boolean
+        anchored_block: String
+        anchored_height: Int
+        anchored_id: String
+        anchored_index: Int
+        anchored_op_index: Int
+        output: TransactionOutput
+    }
+    type Headers {
+        nonce: Int
+    }
+    type Auth {
+        value: String!
+    }
+    type TransactionData {
+        op: String!
+        action: String
+        payload: JSON
+        contract_id: String
+    }
+    type TransactionOutput {
+        index: Int
+        id: String
+    }
+    type ContractOutput {
+        id: String!
+        anchored_block: String
+        anchored_height: Int
+        anchored_id: String
+        anchored_index: Int
+        contract_id: String
+        gas: Gas
+        inputs: [String!]!
+        results: [JSON]!
+        side_effects: JSON
+        state_merkle: String
+    }
+    type Gas {
+        IO: Int
     }
     type ContractState {
         id: String
@@ -128,8 +166,11 @@ export const schema = `
 
         tokens: GetBalanceTokens
     }
-    type FindtransactionResult {
+    type FindTransactionResult {
         txs: [Transaction]
+    }
+    type FindContractOutputResult {
+        outputs: [ContractOutput]
     }
     type AnchorProducer {
         nextSlot(account: String): JSON
@@ -141,14 +182,16 @@ export const schema = `
         byStatus: String
         byOpCategory: String
         byAction: String
+    }
+    input FindContractOutputFilter {
         byInput: String
         byOutput: String
     }
-    
     type Query {
         contractState(id: String): ContractState
-        findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindtransactionResult
-        findLedgerTXs(byContractId: String, byToFrom: String): FindtransactionResult
+        findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindTransactionResult
+        findContractOutput(filterOptions: FindContractOutputFilter, decodedFilter: JSON): FindContractOutputResult
+        findLedgerTXs(byContractId: String, byToFrom: String): FindTransactionResult
 
         getAccountBalance(account: String): GetBalanceResult
         

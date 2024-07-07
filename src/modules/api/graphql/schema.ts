@@ -182,10 +182,13 @@ export const schema = `
         byStatus: String
         byOpCategory: String
         byAction: String
+        limit: Int
     }
     input FindContractOutputFilter {
         byInput: String
         byOutput: String
+        byContract: String
+        limit: Int
     }
     type Query {
         contractState(id: String): ContractState

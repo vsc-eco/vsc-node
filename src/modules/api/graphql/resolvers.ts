@@ -137,6 +137,7 @@ export const Resolvers = {
   },
   findContractOutput: async (_, args) => {
     let query = {}
+    let limit = 100
 
     if (args.filterOptions?.byInput) {
       query['inputs'] = { $in: [args.filterOptions.byInput] };
@@ -146,11 +147,22 @@ export const Resolvers = {
       query['id'] = args.filterOptions.byOutput
     }
 
+    if (args.filterOptions?.byContract) {
+      query['contract_id'] = args.filterOptions.byContract
+    }
+
+    if (args.filterOptions?.limit && args.filterOptions?.limit < 100) {
+      limit = args.filterOptions.limit
+    }
+
     const txs = await appContainer.self.newService.chainBridge.contractOutputDb.find({
       ...query
     }, {
-      limit: 100,
-      skip: 0
+      limit: limit,
+      skip: 0,
+      sort: {
+        anchored_height: -1
+      }
     }).toArray()
 
     return {
@@ -159,6 +171,7 @@ export const Resolvers = {
   },
   findTransaction: async (_, args) => {
     let query = {}
+    let limit = 100
 
     if (args.filterOptions?.byId) {
       query['id'] = args.filterOptions.byId
@@ -184,10 +197,14 @@ export const Resolvers = {
       query['data.action'] = args.filterOptions.byAction
     }
 
+    if (args.filterOptions?.limit && args.filterOptions?.limit < 100) {
+      limit = args.filterOptions.limit
+    }
+
     const txs = await appContainer.self.newService.transactionPool.txDb.find({
       ...query
     }, {
-      limit: 100,
+      limit: limit,
       skip: 0
     }).toArray()
 

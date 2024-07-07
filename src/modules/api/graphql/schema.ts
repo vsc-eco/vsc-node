@@ -141,6 +141,8 @@ export const schema = `
         byStatus: String
         byOpCategory: String
         byAction: String
+        byInput: String
+        byOutput: String
     }
     
     type Query {

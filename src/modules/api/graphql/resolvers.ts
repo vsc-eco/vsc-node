@@ -4,7 +4,7 @@ import { GraphQLError } from 'graphql';
 import * as IPFS from 'kubo-rpc-client'
 import sift from 'sift'
 import DAGCbor from 'ipld-dag-cbor'
-import {convertTxJws} from '@vsc.eco/client/dist/utils'
+import { convertTxJws } from '@vsc.eco/client/dist/utils'
 import Ajv from "ajv"
 import { TransactionDbStatus, TransactionDbType } from '../../../types';
 import { computeKeyId, verifyTx } from '../../../services/new/utils';
@@ -29,12 +29,12 @@ ajv.compile({
 
 
 
-export const DebugResolvers = { 
+export const DebugResolvers = {
   peers: async (_, args) => {
 
   },
   openChannels: async (_, args) => {
-    
+
   }
 }
 
@@ -48,7 +48,7 @@ export const Resolvers = {
       }
     })
 
-    if(!data) {
+    if (!data) {
       return null;
     }
 
@@ -62,7 +62,7 @@ export const Resolvers = {
             path: key,
           })
           const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
-          if(obj2.value.Links) {
+          if (obj2.value.Links) {
             return obj2.value.Links.map(e => {
               return {
                 ...e,
@@ -72,7 +72,7 @@ export const Resolvers = {
           } else {
             return []
           }
-        } catch(ex) {
+        } catch (ex) {
           console.log(ex)
           return null;
         }
@@ -84,7 +84,7 @@ export const Resolvers = {
             path: key,
           })
           const obj2 = await appContainer.self.ipfs.dag.get(objCid.cid)
-          if(obj2.value.Links) {
+          if (obj2.value.Links) {
             const out = await Promise.all(obj2.value.Links/*.map(e => {
               return e.Hash
             })*/.map(async (e) => {
@@ -95,7 +95,7 @@ export const Resolvers = {
             }));
 
             // console.log(out, args.query)
-            if(args.query) {
+            if (args.query) {
               return out.filter(sift(args.query))
             } else {
               return out
@@ -103,7 +103,7 @@ export const Resolvers = {
           } else {
             return []
           }
-        } catch(ex) {
+        } catch (ex) {
           console.log(ex)
           return null;
         }
@@ -111,17 +111,17 @@ export const Resolvers = {
       state: async (args) => {
         try {
           let key = args.key ? `${args.key}` : null
-          
+
           const obj = await appContainer.self.ipfs.dag.resolve(data.state_merkle, {
             path: key,
           })
           const out = await appContainer.self.ipfs.dag.get(obj.cid)
           console.log(out)
 
-          
-          if(key === null) {
+
+          if (key === null) {
             let recursiveOutput = {}
-            for(let key of out.value.Links) {
+            for (let key of out.value.Links) {
               const dagVal = await appContainer.self.ipfs.dag.get(key.Hash)
               recursiveOutput[key.Name] = dagVal.value
             }
@@ -137,54 +137,61 @@ export const Resolvers = {
   },
   findTransaction: async (_, args) => {
     let query = {}
+    let txs = []
 
-    if(args.filterOptions?.byId) {
-      query['id'] = args.filterOptions.byId
+    if (args.filterOptions?.byInput || args.filterOptions?.byOutput) {
+      if (args.filterOptions?.byInput) {
+        query['inputs'] = { $in: [args.filterOptions.byInput] };
+      }
+
+      if (args.filterOptions?.byOutput) {
+        query['id'] = args.filterOptions.byOutput
+      }
+
+      txs = await appContainer.self.newService.chainBridge.contractOutputDb.find({
+        ...query
+      }, {
+        limit: 100,
+        skip: 0
+      }).toArray()
+    } else {
+      if (args.filterOptions?.byId) {
+        query['id'] = args.filterOptions.byId
+      }
+
+      if (args.filterOptions?.byStatus) {
+        query['status'] = args.filterOptions.byStatus
+      }
+
+      if (args.filterOptions?.byContract) {
+        query['data.contract_id'] = args.filterOptions.byContract
+      }
+
+      if (args.filterOptions?.byAccount) {
+        query['required_auths'] = { $elemMatch: { value: args.filterOptions.byAccount } };
+      }
+
+      if (args.filterOptions?.byOpCategory) {
+        query['data.op'] = args.filterOptions.byOpCategory
+      }
+
+      if (args.filterOptions?.byAction) {
+        query['data.action'] = args.filterOptions.byAction
+      }
+
+      txs = await appContainer.self.newService.transactionPool.txDb.find({
+        ...query
+      }, {
+        limit: 100,
+        skip: 0
+      }).toArray()
     }
-
-    if(args.filterOptions?.byStatus) {
-      query['status'] = args.filterOptions.byStatus
-    }
-
-    if(args.filterOptions?.byContract) {
-      query['headers.contract_id'] = args.filterOptions.byContract
-    }
-
-    if(args.filterOptions?.byAccount) {
-      query['account_auth'] = args.filterOptions.byAccount
-    }
-    
-    if(args.filterOptions?.byOpCategory) {
-      query['decoded_tx.op_cateogry'] = args.filterOptions.byOpCategory
-    }
-
-    if(args.filterOptions?.byAction) {
-      query['decoded_tx.action'] = args.filterOptions.byAction
-    }
-
-
-    const txs = await appContainer.self.newService.transactionPool.txDb.find({
-      ...query
-    }, {
-      limit: 100,
-      skip: 0
-    }).toArray()
 
     return {
       txs: txs.map(e => {
-        // let type;
-        // if(TransactionDbType.input === e.type) {
-        //   type = 'INPUT'
-        // } else if(TransactionDbType.output === e.type) {
-        //   type = 'OUTPUT'
-        // } else {
-        //   type = 'NULL'
-        // }
-        
         return {
           ...e,
           first_seen: e.first_seen.toISOString(),
-          // type: type
         }
       })
     }
@@ -192,11 +199,11 @@ export const Resolvers = {
   findLedgerTXs: async (_, args) => {
     let query = {}
 
-    if(args.byContractId) {
+    if (args.byContractId) {
       query['headers.contract_id'] = args.byContractId
     }
 
-    if(args.byToFrom) {
+    if (args.byToFrom) {
       query['$or'] = [
         {
           'decoded_tx.from': args.byToFrom
@@ -222,8 +229,8 @@ export const Resolvers = {
     const dedup = {}
     const out = []
     txs.forEach(e => {
-      if((e as any).decoded_tx.tx_id) {
-        if(!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
+      if ((e as any).decoded_tx.tx_id) {
+        if (!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
           out.push(e)
           dedup[(e as any).decoded_tx.tx_id] = true
         }
@@ -247,13 +254,13 @@ export const Resolvers = {
             // })
             // console.log(contractInfo)
             // try {
-              
+
             //   const redeemId = (e as any).decoded_tx.redeem_id
-              
+
             //   const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
             //     path: `redeems/${redeemId}`,
             //   })
-              
+
             //   return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
             // } catch (ex) {
             //   if (!ex.message.includes('no link named')) {
@@ -275,7 +282,7 @@ export const Resolvers = {
     }
   },
   witnessNodes: async (_, args): Promise<WitnessDbRecord[]> => {
-    if(!args.height) { 
+    if (!args.height) {
       args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
     }
     //Use getWitnessesAtBlock to get witnesses in general
@@ -283,29 +290,29 @@ export const Resolvers = {
     return await appContainer.self.newService.chainBridge.getWitnessesAtBlock(args.height)
   },
   activeWitnessNodes: async (_, args) => {
-    if(!args.height) { 
+    if (!args.height) {
       args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
     }
     return await appContainer.self.newService.electionManager.getMembersOfBlock(args.height)
   },
   witnessSchedule: async (_, args) => {
-    if(!args.height) { 
+    if (!args.height) {
       args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
     }
     return await appContainer.self.newService.witness.getBlockSchedule(args.height)
   },
   nextWitnessSlot: async (_, args) => {
     let account
-    if(args.self) {
+    if (args.self) {
       account = process.env.HIVE_ACCOUNT
     }
 
-    if(!args.height) { 
+    if (!args.height) {
       args.height = await appContainer.self.newService.chainBridge.getLatestBlock()
     }
 
     const nextSlot = (await appContainer.self.newService.witness.getBlockSchedule(args.height)).find(e => {
-      if(account) {
+      if (account) {
         return e.in_past === false && e.account === account;
       } else {
         return e.in_past === false;
@@ -314,7 +321,7 @@ export const Resolvers = {
     return nextSlot;
   },
   submitTransactionV1: async (_, args) => {
-    const {id} = await appContainer.self.newService.transactionPool.ingestTx({
+    const { id } = await appContainer.self.newService.transactionPool.ingestTx({
       tx: args.tx,
       sig: args.sig,
       broadcast: true
@@ -328,7 +335,7 @@ export const Resolvers = {
       id: await computeKeyId(args.keyGroup)
     })
     let nonce;
-    if(nonceData) {
+    if (nonceData) {
       nonce = nonceData.nonce
     } else {
       nonce = 0;
@@ -358,13 +365,13 @@ export const Resolvers = {
     const bh = args.height
     return await appContainer.self.newService.witness.getWitnessActiveScore(bh)
   },
-  mockGenerateElection: async (_, args) => { 
+  mockGenerateElection: async (_, args) => {
     const bh = await HiveClient.blockchain.getCurrentBlockNum()
     return await appContainer.self.newService.electionManager.generateElection(bh)
   },
   anchorProducer: async (_, args) => {
-    let {account} = args 
-    if(!account) {
+    let { account } = args
+    if (!account) {
       account = process.env.HIVE_ACCOUNT
     }
     const blockNum = await HiveClient.blockchain.getCurrentBlockNum();

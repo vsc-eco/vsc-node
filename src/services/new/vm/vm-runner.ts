@@ -622,8 +622,9 @@ class VmRunner {
     const { wasmRunner, stateAccess } = state
 
     const contractEnv = {
-      ...args.env
+      ...args.env,
       //Fill in with custom args or anything else in the future.
+      contract_id
     }
 
     /**

@@ -505,7 +505,7 @@ class VmRunner {
     console.log('verifying INTENT', this.intents)
 
 
-    for(let intent of this.intents) { 
+    intentLoop: for(let intent of this.intents) { 
       if(intent.name !== name) {
         continue;
       }
@@ -517,7 +517,7 @@ class VmRunner {
         if(!filter(
           intent.args[conditionName]
         )) {
-          return false;
+          continue intentLoop;
         }
       }
       return true;

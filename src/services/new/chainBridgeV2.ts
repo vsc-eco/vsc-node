@@ -449,6 +449,12 @@ export class ChainBridgeV2 {
                                         console.log('Finished Fetching IPFS CID:', tx.id, Date.now() - start)
                                         
                                         if(tx.type === TransactionDbType.output) {
+                                            await this.self.contractEngine.contractDb.findOneAndUpdate({
+                                                id: txData.contract_id,
+                                            }, {
+                                                state_merkle: txData.state_merkle,
+                                            })
+
                                             //Process as output
                                             await this.contractOutputDb.findOneAndUpdate({
                                                 id: tx.id,
@@ -542,7 +548,7 @@ export class ChainBridgeV2 {
                                                 await this.self.transactionPool.txDb.insertOne({
                                                     status: TransactionDbStatus.included,
                                                     id: tx.id,
-                                                    required_auths: txData.headers.required_auths,
+                                                    required_auths: txData.headers.required_auths, // TODO input validation
                                                     headers: {
                                                         nonce: txData.headers.nonce
                                                     },

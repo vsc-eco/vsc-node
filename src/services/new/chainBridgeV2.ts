@@ -452,7 +452,9 @@ export class ChainBridgeV2 {
                                             await this.self.contractEngine.contractDb.findOneAndUpdate({
                                                 id: txData.contract_id,
                                             }, {
-                                                state_merkle: txData.state_merkle,
+                                                $set: {
+                                                    state_merkle: txData.state_merkle,
+                                                },
                                             })
 
                                             //Process as output

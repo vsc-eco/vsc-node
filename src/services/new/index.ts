@@ -7,7 +7,7 @@ import { Collection, Db } from 'mongodb';
 import { Config } from "../nodeConfig";
 import { ChainBridgeV2 } from "./chainBridgeV2";
 import { NodeIdentity } from "./nodeIdentity";
-import { BlsDID } from "./utils/crypto/bls-did";
+import { BlsDID, initBls } from "./utils/crypto/bls-did";
 import { CoreService } from '..';
 import { WitnessServiceV2 } from './witness';
 import { getLogger } from '../../logger';
@@ -71,6 +71,7 @@ export class NewCoreService {
 
         this.oldService = oldService
         await this.config.open()
+        await initBls();
         const privateKey = Buffer.from(this.config.get('identity.nodePrivate'), 'base64')
         this.consensusKey = BlsDID.fromSeed(privateKey)
 

@@ -176,29 +176,39 @@ export class ContractEngineV2 {
                             typeof json.storage_proof?.hash !== 'string' ||
                             typeof json.storage_proof?.signature !== 'object' ||
                             typeof json.storage_proof?.signature?.sig !=='string' ||
-                            typeof json.storage_proof?.signature?.bv !=='string'
+                            typeof json.storage_proof?.signature?.bv !=='string' ||
+                            typeof json.code !== 'string'
                         ) {
                             continue;
                         }
                         try {
-                            const cid = CID.parse(json.storage_proof.hash)
-                            const {value: msg} = await this.self.ipfs.dag.get(cid)
-                            if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availability') {
-                                continue;
-                            }
-                            if (msg.cid !== json.code) {
+                            const sigCid = await this.self.ipfs.dag.put(
+                                {
+                                    type: 'data-availablity',
+                                    cid: json.code,
+                                },
+                                { onlyHash: true },
+                            );
+                            if (!CID.parse(json.storage_proof.hash).equals(sigCid)) {
                                 continue;
                             }
                             members ??= (await this.self.electionManager.getMembersOfBlock(blkHeight))
                                 .map((m) => m.key);
-                            const isValid = await BlsCircuit.deserialize({hash: cid.bytes, signature: json.storage_proof.signature}, members)
-                                                            .verify(cid.bytes);
+                            const isValid = await BlsCircuit.deserialize({hash: sigCid.bytes, signature: json.storage_proof.signature}, members)
+                                                            .verify(sigCid.bytes);
                             if (!isValid) {
                                 this.self.logger.info(
                                 `contract storage proof is invalid for op ${index} tx ${tx.transaction_id}`,
                                 )
                                 continue
                             }
+                            await this.self.ipfs.dag.put(
+                                {
+                                    type: 'data-availablity',
+                                    cid: json.code,
+                                },
+                                { pin: true },
+                            );
                         } catch (e) {
                             this.self.logger.error(`failed to verify contract storage proof for op ${index} tx ${tx.transaction_id}: ${e}`)
                             continue;

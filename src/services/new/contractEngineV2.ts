@@ -69,8 +69,8 @@ class VmContext {
                     anchored_height: -1
                 }
             })
-            args.state[contractId] = contractRecord.state_merkle
-            args.modules[contractId] = contractOuput ? contractOuput.state_merkle : contractRecord.code
+            args.modules[contractId] = contractRecord.code
+            args.state[contractId] = contractOuput ? contractOuput.state_merkle : contractRecord.state_merkle
         }
         this.vm = new VmContainer(args)
 

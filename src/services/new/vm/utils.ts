@@ -295,6 +295,10 @@ export class VmContainer {
     action: string
     payload: string
     intents?: Array<string>
+    balance_map?: Record<string, {
+      HBD: number
+      HIVE: number
+    }>
     env: Env
   }) {
     let reqId = Crypto.randomBytes(8).toString('base64url')
@@ -307,6 +311,7 @@ export class VmContainer {
       intents: args.intents || [],
       env: args.env,
       contract_id: args.contract_id,
+      balance_map: args.balance_map,
       reqId
     } satisfies AnySentMessage);
     const timeoutPid = setInterval(() => {

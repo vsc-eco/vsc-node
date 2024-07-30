@@ -7,6 +7,9 @@ import { mongo } from "@/services/db"
 import { txs } from "@/vsc-new.transaction_pool-part"
 import { txsFull } from "@/vsc-new.transaction_pool-full"
 import { shuffle } from "./schedule"
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoClient } from "mongodb"
+
 
 const mock = <T extends object>(name: string, handler: ProxyHandler<T>) => new Proxy({} as T, new Proxy(handler, {
         get(target, method, receiver) {
@@ -20,14 +23,32 @@ const mock = <T extends object>(name: string, handler: ProxyHandler<T>) => new P
         },
     }))
 
+let mongod
+let client
+beforeAll(async () => {
+    mongod = await MongoMemoryServer.create();
+
+    const uri = mongod.getUri();
+    
+    client = new MongoClient(uri)
+})
+
+afterAll(async () => {
+    await mongod.stop()
+})
+
 describe('createBlock', () => {
     // suppress all console.log's for now
     const log = console.log.bind(console);
     console.log = () => {}
 
+
+
+
     // mocks
     const db = createMongoDBClient('new')
     const ipfs = createIPFSClient({url: 'http://127.0.0.1:5101'})
+    let realTxData = true
     const core: NewCoreService = mock('core', {
         get(target, p, receiver) {
             switch(p) {
@@ -37,7 +58,10 @@ describe('createBlock', () => {
                     return mock('transactionPool', {
                         get(target, p, receiver) {
                             if (p === 'txDb') {
-                                return db.collection('transaction_pool')
+                                if (realTxData) {
+                                    return db.collection('transaction_pool')
+                                }
+                                return client.db('vsc-new').collection('transaction_pool')
                             }
                             throw new Error('hmm2')
                         },
@@ -144,4 +168,21 @@ describe('createBlock', () => {
         })
 
     }
+
+    describe('balanceSystem', () => {
+        beforeAll(() => {
+            realTxData = false
+        })
+        // beforeEach(async () => {})
+        afterEach(async () => {
+            await core.transactionPool.txDb.deleteMany({})
+        })
+
+        it('transfer event', async () => {
+            await core.transactionPool.txDb.insertMany([ 
+                
+            ])
+
+        })
+    })
 })

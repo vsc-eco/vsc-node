@@ -11,7 +11,6 @@ import { BlsCircuit } from './utils/crypto/bls-did';
 import BitSet from 'bitset';
 import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils';
 import { CID } from 'multiformats';
-import { EventOp, TxEventOp } from './witness';
 
 
 interface BlockHeaderDbRecord {
@@ -553,8 +552,7 @@ export class ChainBridgeV2 {
                                                     id: tx.id,
                                                     required_auths: txData.headers.required_auths, // TODO input validation
                                                     headers: {
-                                                        nonce: txData.headers.nonce,
-                                                        type: txData.headers.type
+                                                        nonce: txData.headers.nonce
                                                     },
                                                     data: txData.tx,
                                                     local: false,
@@ -590,52 +588,6 @@ export class ChainBridgeV2 {
                                                   )
                                                 } else {
                                                     console.log(e)
-                                                }
-                                            }
-                                        } else if(tx.type === TransactionDbType.events) {
-
-                                            //Recalculate the balance of these account in snapshot
-                                            const balancesAffected = []
-
-                                            const blockEvents:{
-                                                __t: 'vsc-events',
-                                                txs: Array<string>
-                                                txs_map: Array<Array<number>>
-                                                events: Array<EventOp>
-                                            } = (await this.self.ipfs.dag.get(CID.parse(tx.id))).value
-                                            await this.self.witness.balanceKeeper.processEvents({
-                                                ...blockEvents,
-                                            }, {
-                                                blockId: block_id,
-                                                blockHeight: endBlock,
-                                            })
-
-                                            
-
-                                            const includedTxs = await this.self.transactionPool.txDb.find({
-                                                status: TransactionDbStatus.included,
-                                                anchored_height: {
-                                                    $gte: startBlock,
-                                                    $lte: endBlock
-                                                }
-                                            }).toArray()
-
-                                            //Fail check if no event has been dispatched 
-                                            for(let tx of includedTxs) {
-                                                if(blockEvents.txs.includes(tx.id)) {
-                                                    await this.self.transactionPool.txDb.findOneAndUpdate({ 
-                                                        id: tx.id
-                                                    }, {
-                                                        $set: {
-                                                            status: TransactionDbStatus.confirmed
-                                                        }
-                                                    })
-                                                } else {
-                                                    await this.self.transactionPool.txDb.findOneAndUpdate({ 
-                                                        id: tx.id
-                                                    }, {
-                                                        status: TransactionDbStatus.failed
-                                                    })
                                                 }
                                             }
                                         }

@@ -52,7 +52,8 @@ class VmContext {
             },
             modules: {
 
-            }
+            },
+            timeout: 5_000
         }
         for(let contractId of this.args.contractList) {
             const contractRecord = await this.engine.contractDb.findOne({id: contractId})

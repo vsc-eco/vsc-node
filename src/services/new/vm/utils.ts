@@ -309,14 +309,12 @@ export class VmContainer {
       contract_id: args.contract_id,
       reqId
     } satisfies AnySentMessage);
-    const timeoutPid = setInterval(() => {
-      const lag = new Date().getTime() - startTime.getTime();
-      if(lag > 150) {
-        this.events.emit('timeout', {
-          type: 'timeout'
-        })
-      }
-    }, this.opts.timeout || 2)
+    const timeoutPid = setTimeout(() => {
+      
+      this.events.emit('timeout', {
+        type: 'timeout'
+      })
+    }, this.opts.timeout || 1_000)
     const executeStop = await new Promise<ExecuteStopMessage | {type: 'timeout'}>((resolve, reject) => {
       this.events.once('execute-stop', (result0) => {
         resolve(result0)

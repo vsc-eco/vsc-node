@@ -66,9 +66,12 @@ export enum TransactionDbType {
     null,
     input,
     output,
+    //Events
     virtual,
+    //Transfers, withdraws, etc
     core,
     anchor_ref,
+    events
 }
 
 export interface BlockHeader extends VSCSignedData {
@@ -233,6 +236,7 @@ export interface TransactionDbRecordV2 {
         contract_id?: string
         lock_block?: number
         nonce?: number
+        type: TransactionDbType
         intents?: Array<string>
     }
     data: any | null

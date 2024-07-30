@@ -62,8 +62,15 @@ class VmContext {
                 continue
             }
             //Replace with proper state storage
+            const contractOuput = await this.engine.contractOutputs.findOne({ 
+                contract_id: contractId
+            }, {
+                sort: {
+                    anchored_height: -1
+                }
+            })
             args.state[contractId] = contractRecord.state_merkle
-            args.modules[contractId] = contractRecord.code
+            args.modules[contractId] = contractOuput ? contractOuput.state_merkle : contractRecord.code
         }
         this.vm = new VmContainer(args)
 
@@ -147,7 +154,16 @@ export class ContractEngineV2 {
     self: NewCoreService;
     addrsDb: Collection<AddrRecord>;
     contractDb: Collection<ContractInfo>;
-    
+    contractOutputs: Collection<{
+        id: string
+        anchored_block: string
+        anchored_id: string
+        anchored_index: number
+        contract_id: string
+
+        state_merkle: string
+    }>
+
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -257,6 +273,7 @@ export class ContractEngineV2 {
     async init() {
         this.addrsDb = this.self.db.collection('addrs')
         this.contractDb = this.self.db.collection('contracts')
+        this.contractOutputs = this.self.db.collection('contract_outputs')
         this.self.chainBridge.streamParser.addParser({
             name: "contract-engine",
             type: 'tx',

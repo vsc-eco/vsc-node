@@ -190,6 +190,9 @@ export class ContractEngineV2 {
                     if (proofRequired) {
                         // validate proof
                         if (
+                            typeof json !== 'object' ||
+                            json === null ||
+                            typeof json.storage_proof !== 'object' ||
                             typeof json.storage_proof?.hash !== 'string' ||
                             typeof json.storage_proof?.signature !== 'object' ||
                             typeof json.storage_proof?.signature?.sig !=='string' ||
@@ -199,16 +202,7 @@ export class ContractEngineV2 {
                             continue;
                         }
                         try {
-                            const sigCid = await this.self.ipfs.dag.put(
-                                {
-                                    type: 'data-availablity',
-                                    cid: json.code,
-                                },
-                                { onlyHash: true },
-                            );
-                            if (!CID.parse(json.storage_proof.hash).equals(sigCid)) {
-                                continue;
-                            }
+                            const sigCid = CID.parse(json.storage_proof.hash)
                             members ??= (await this.self.electionManager.getMembersOfBlock(blkHeight))
                                 .map((m) => m.key);
                             const isValid = await BlsCircuit.deserialize({hash: sigCid.bytes, signature: json.storage_proof.signature}, members)
@@ -219,13 +213,16 @@ export class ContractEngineV2 {
                                 )
                                 continue
                             }
-                            await this.self.ipfs.dag.put(
-                                {
-                                    type: 'data-availablity',
-                                    cid: json.code,
-                                },
-                                { pin: true },
+                            const {value} = await this.self.ipfs.dag.get(
+                                sigCid
                             );
+                            if (value?.type !== 'data-availability' || value?.cid !== json.code) {
+                                this.self.logger.info(
+                                    `contract storage proof data is invalid for op ${index} tx ${tx.transaction_id}`,
+                                )
+                                continue;
+                            }
+                            await this.self.ipfs.pin.add(sigCid);
                         } catch (e) {
                             this.self.logger.error(`failed to verify contract storage proof for op ${index} tx ${tx.transaction_id}: ${e}`)
                             continue;

@@ -307,7 +307,6 @@ class VmRunner {
     this.modules = args.modules
 
     this.ledgerStack = []
-    //Temporary ledger stack for use in contract execution. Pushed to ledgerStack for permanent storage
     this.outputStack = []
     this.balanceSnapshots = new Map()
 

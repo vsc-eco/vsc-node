@@ -1,5 +1,4 @@
-import { LedgerType } from "../types";
-import { ContractErrorType } from "./utils";
+import { ContractErrorType } from "./utils.js";
 
 type Message = {type: string};
 
@@ -41,7 +40,7 @@ export type ExecuteStopMessage = Message & {
     logs:( string | number | boolean)[],
     IOGas: number,
     reqId: string,
-    ledger: LedgerOp[],
+    ledger: EventOp[],
 }
 
 export type CallMessage = Message & {
@@ -67,7 +66,7 @@ export type AnySentMessage = CallMessage | FinishMessage
 export type AnyReceivedMessage = PartialResultMessage | FinishResultMessage | ReadyMessage | ExecuteStopMessage
 
 
-export enum TxEventOp {
+export enum EventOpType {
     'ledger:transfer' = 110_001,
     'ledger:withdraw' = 110_002,
     'ledger:deposit' = 110_003,
@@ -84,10 +83,10 @@ export enum TxEventOp {
   }
   
   
-  export interface LedgerOp {
+  export interface EventOp {
     owner: string
     tk: 'HBD' | 'HIVE'
-    t: TxEventOp
+    t: EventOpType
     amt: number
     memo?: string
     

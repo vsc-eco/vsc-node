@@ -1,6 +1,6 @@
-import { CID } from 'multiformats/cid'
+import { CID } from 'multiformats/cid.js'
 import * as dagPB from '@ipld/dag-pb'
-import { sha256 } from 'multiformats/hashes/sha2'
+import { sha256 } from 'multiformats/hashes/sha2.js'
 
 /**
  * @typedef {object} PersistOptions

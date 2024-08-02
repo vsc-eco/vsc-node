@@ -2,14 +2,13 @@ import * as IPFS from 'kubo-rpc-client'
 import sift, { BasicValueQuery, Query } from 'sift'
 
 import { Collection, MongoClient } from 'mongodb'
-import { addLink } from '../../../ipfs-utils/add-link'
-import { removeLink } from '../../../ipfs-utils/rm-link'
-import { ContractErrorType, instantiate } from './utils'
+import { addLink } from '../../../ipfs-utils/add-link.js'
+import { removeLink } from '../../../ipfs-utils/rm-link.js'
+import { ContractErrorType, instantiate } from './utils.js'
 
 //Crypto imports
-import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto'
-import { LedgerType } from '../types'
-import { TxEventOp, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type LedgerOp, type PartialResultMessage, type ReadyMessage } from './types'
+import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto.js'
+import { EventOpType, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type LedgerOp, type PartialResultMessage, type ReadyMessage } from './types.js'
 
 const CID = IPFS.CID
 
@@ -434,10 +433,8 @@ class VmRunner {
   }
 
   applyLedgerOp(op: LedgerOp) {
-    console.log('applyLedgerOp', op)
     this.ledgerStack.push(op)
 
-    this.getBalanceSnapshot(op.owner, 1000)
   }
 
   /**
@@ -710,13 +707,13 @@ class VmRunner {
 
         if(snapshot.tokens[args.asset] >= args.amount) {
           this.applyLedgerOp({
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             owner: args.from,
             amt: -args.amount,
             tk: args.asset
           })
           this.applyLedgerOp({
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             //Tag using contract address #tag
             owner: args.tag ? `${contract_id}#${args.tag}` : contract_id,
             amt: args.amount,
@@ -767,14 +764,14 @@ class VmRunner {
         const snapshot = await this.getBalanceSnapshot(normalizedFrom, block_height)
         if(snapshot.tokens[args.asset] >= args.amount) { 
           this.applyLedgerOp({
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             owner: normalizedFrom,
             amt: -args.amount,
             tk: args.asset
           })
 
           this.applyLedgerOp({
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             owner: normalizedDest,
             amt: args.amount,
             tk: args.asset,
@@ -823,13 +820,13 @@ class VmRunner {
 
         if(snapshot.tokens[args.asset] >= args.amount) {
           this.applyLedgerOp({
-            t: TxEventOp['ledger:withdraw'],
+            t: EventOpType['ledger:withdraw'],
             owner: normalizedFrom,
             amt: -args.amount,
             tk: args.asset,
           })
           this.applyLedgerOp({
-            t: TxEventOp['ledger:withdraw'],
+            t: EventOpType['ledger:withdraw'],
             owner: `#withdraw?to=${normalizedDest}`,
             amt: args.amount,
             tk: args.asset,
@@ -1072,6 +1069,7 @@ void (async () => {
       stateCid,
     }
   }
+  console.log('stateParsed', stateParsed)
   const vmRunner = new VmRunner({
     state: state,
     modules: JSON.parse(process.env.modules),

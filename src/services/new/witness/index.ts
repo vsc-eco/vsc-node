@@ -22,7 +22,7 @@ import { BalanceKeeper } from './balanceKeeper';
 import telemetry from '../../../telemetry';
 import { Schedule, getBlockSchedule } from './schedule';
 import { MessageHandleOpts } from '../p2pService';
-import { ExecuteStopMessage } from '../vm/types';
+import { EventOp, ExecuteStopMessage, EventOpType } from '../vm/types';
 import { ContractErrorType } from '../vm/utils';
 
 import {z} from 'zod'
@@ -125,35 +125,13 @@ export class BlockContainer {
 }
 
 
-export enum TxEventOp {
-  'ledger:transfer' = 110_001,
-  'ledger:withdraw' = 110_002,
-  'ledger:deposit' = 110_003,
-
-  //Reserved for future, DO NOT USE
-  'ledger:stake_hbd' = 110_004,
-  'ledger:unstake_hbd' = 110_005,
-  'ledger:claim_hbd' = 110_006,
-  
-  //Reserved for future, DO NOT USE
-  'consensus:stake' = 100_001,
-  'consensus:unstake' = 100_002
-
-  
-}
-
-interface TxEvent {
-  op: TxEventOp
-
-}
-
 interface TxEventContainer {
   //List of TXs
   txs: Array<string>
   //Indexes of TXs where these events apply for.
   idx: Array<number>
   merkle_root: string
-  events: Array<TxEvent>
+  events: Array<EventOp>
 }
 
 
@@ -172,14 +150,6 @@ interface BlockArgs {
 
 }
 
-export interface EventOp {
-  owner: string
-  tk: 'HBD' | 'HIVE'
-  t: TxEventOp
-  amt: number
-  memo?: string
-  
-}
 
 export class TxContext {
 
@@ -371,7 +341,7 @@ export class TxContext {
           {
             owner: from,
             tk: tk,
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             amt: -amount,
             ...(memo ? {memo} : {})
           },
@@ -379,7 +349,7 @@ export class TxContext {
           {
             owner: to,
             tk: tk,
-            t: TxEventOp['ledger:transfer'],
+            t: EventOpType['ledger:transfer'],
             amt: amount,
             ...(memo ? {memo} : {})
           },
@@ -411,7 +381,7 @@ export class TxContext {
           {
             owner: from,
             tk: tk,
-            t: TxEventOp['ledger:withdraw'],
+            t: EventOpType['ledger:withdraw'],
             amt: -amount,
             ...(memo ? {memo} : {})
           },
@@ -419,7 +389,7 @@ export class TxContext {
           {
             owner: `#withdraw?to=${to}`,
             tk: tk,
-            t: TxEventOp['ledger:withdraw'],
+            t: EventOpType['ledger:withdraw'],
             amt: amount,
             ...(memo ? {memo} : {})
           },
@@ -734,10 +704,10 @@ export class WitnessServiceV2 {
           }
         }),
         ...contractOutputs,
-        {
+        ...(eventsList ? (eventsList.events.length > 0 ? [{
           id: (await this.self.ipfs.dag.put(eventsList)).toString(),
           type: TransactionDbType.events
-        },
+        }] : []) : []),
         ...(hiveMerkleProof ? [hiveMerkleProof] : [])
       ]
       
@@ -1527,7 +1497,5 @@ export class WitnessServiceV2 {
     async start() {
 
       await this.delayMonitor.start();
-
-      this.#testBuildBlock()
     }
 }

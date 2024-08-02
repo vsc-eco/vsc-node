@@ -5,9 +5,8 @@ import { fileURLToPath } from 'url';
 import EventEmitter from 'events'
 import Crypto from 'crypto'
 import Pushable from 'it-pushable';
-import { MONGODB_URL } from '../../db';
-import { LedgerType } from '../types';
-import type { AnyReceivedMessage, AnySentMessage, Env, ExecuteStopMessage, FinishResultMessage, PartialResultMessage } from './types';
+import { MONGODB_URL } from '../../db.js';
+import type { AnyReceivedMessage, AnySentMessage, Env, ExecuteStopMessage, FinishResultMessage, PartialResultMessage } from './types.js';
 
 export const CONTRACT_TIMEOUT_ERROR = new Error('contract execution timeout')
 

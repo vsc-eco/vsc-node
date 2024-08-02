@@ -11,7 +11,7 @@ import { BlsCircuit } from './utils/crypto/bls-did';
 import BitSet from 'bitset';
 import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils';
 import { CID } from 'multiformats';
-import { EventOp, TxEventOp } from './witness';
+import { EventOp, EventOpType } from './vm/types';
 
 
 interface BlockHeaderDbRecord {

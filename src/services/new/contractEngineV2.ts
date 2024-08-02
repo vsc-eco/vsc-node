@@ -22,6 +22,7 @@ interface ContractInfo {
     name: string
     description:string
     creator: string
+    owner: string | null
     state_merkle: string
 }
 
@@ -74,7 +75,7 @@ export class VmContext {
             modules: {
 
             },
-            timeout: 20
+            timeout: 5_000
         }
         for(let contractId of this.args.contractList) {
             const contractRecord = await this.engine.contractDb.findOne({id: contractId})
@@ -88,9 +89,16 @@ export class VmContext {
                 }
                 continue
             }
+            const contractOuput = await this.engine.contractOutputs.findOne({ 
+                contract_id: contractId
+            }, {
+                sort: {
+                    anchored_height: -1
+                }
+            })
             //Replace with proper state storage
-            args.state[contractId] = contractRecord.state_merkle
             args.modules[contractId] = contractRecord.code
+            args.state[contractId] = contractOuput ? contractOuput.state_merkle : contractRecord.state_merkle
         }
         this.vm = new VmContainer(args)
 
@@ -242,6 +250,15 @@ export class ContractEngineV2 {
     addrsDb: Collection<AddrRecord>;
     contractDb: Collection<ContractInfo>;
     contractVersionDb: Collection<ContractVersion>;
+    contractOutputs: Collection<{
+        id: string
+        anchored_block: string
+        anchored_id: string
+        anchored_index: number
+        contract_id: string
+
+        state_merkle: string
+    }>
     
     constructor(self: NewCoreService) {
         this.self = self;
@@ -322,6 +339,9 @@ export class ContractEngineV2 {
                             name: json.name,
                             description: json.description,
                             creator: op.required_auths[0],
+                            //Default to null owner IF not available
+                            //Aka immutable
+                            owner: json.owner ? json.owner : null,
                             state_merkle: (await this.self.ipfs.object.new({ template: 'unixfs-dir' })).toString(),
                             ref_id: tx.transaction_id,
                             created_height: blkHeight
@@ -399,7 +419,8 @@ export class ContractEngineV2 {
                     }
 
                     //TODO: figure out modifying contract owners in the future
-                    if(contractInfo.creator !== op.required_auths[0]) { 
+                    //Assume first required_auth is owner. (it shouldn't be anything else)
+                    if(contractInfo.owner !== op.required_auths[0]) { 
                         this.self.logger.error(`contract creator does not match with the transaction sender`)
                         continue
                     }
@@ -407,7 +428,10 @@ export class ContractEngineV2 {
                     await this.contractVersionDb.findOneAndUpdate({ 
                         id: json.id,
                         height: blkHeight,
-                        index: Number(index)
+                        //Index in block
+                        index: Number(args.data.idx),
+                        //Index of operate if multiple ops in index
+                        opIndex: Number(index)
                     }, {
                         $set: {
                             code: json.code,
@@ -430,6 +454,8 @@ export class ContractEngineV2 {
     async init() {
         this.addrsDb = this.self.db.collection('addrs')
         this.contractDb = this.self.db.collection('contracts')
+        this.contractOutputs = this.self.db.collection('contract_outputs')
+
         this.self.chainBridge.streamParser.addParser({
             name: "contract-engine",
             type: 'tx',

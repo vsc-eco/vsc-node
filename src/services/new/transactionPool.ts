@@ -193,7 +193,7 @@ export class TransactionPoolV2 {
      */
     async onTxAnnounce({message}: MessageHandleOpts) {
         let decodedTx;
-        let rawTx;
+        let rawTx: Uint8Array;
         let tx_id;
         let sig_data = message.sig_data; //Must always be defined
         if(message.type === 'ref_tx') {
@@ -220,7 +220,7 @@ export class TransactionPoolV2 {
             //Run validation pipeline!
             const cid = await CID.parse(tx_id)
         
-            const [isValidSig] = await verifyTxSignature(this.self.identity, rawTx.toString('base64url'), sig_data)
+            const [isValidSig] = await verifyTxSignature(this.self.identity, Buffer.from(rawTx).toString('base64url'), sig_data)
 
             if(isValidSig === false) { 
                 return false;

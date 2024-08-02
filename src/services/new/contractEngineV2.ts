@@ -74,7 +74,7 @@ export class VmContext {
             modules: {
 
             },
-            timeout: 20
+            timeout: 5_000
         }
         for(let contractId of this.args.contractList) {
             const contractRecord = await this.engine.contractDb.findOne({id: contractId})
@@ -89,8 +89,15 @@ export class VmContext {
                 continue
             }
             //Replace with proper state storage
-            args.state[contractId] = contractRecord.state_merkle
+            const contractOuput = await this.engine.contractOutputs.findOne({ 
+                contract_id: contractId
+            }, {
+                sort: {
+                    anchored_height: -1
+                }
+            })
             args.modules[contractId] = contractRecord.code
+            args.state[contractId] = contractOuput ? contractOuput.state_merkle : contractRecord.state_merkle
         }
         this.vm = new VmContainer(args)
 
@@ -242,7 +249,16 @@ export class ContractEngineV2 {
     addrsDb: Collection<AddrRecord>;
     contractDb: Collection<ContractInfo>;
     contractVersionDb: Collection<ContractVersion>;
-    
+    contractOutputs: Collection<{
+        id: string
+        anchored_block: string
+        anchored_id: string
+        anchored_index: number
+        contract_id: string
+
+        state_merkle: string
+    }>
+
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -269,32 +285,39 @@ export class ContractEngineV2 {
                     if (proofRequired) {
                         // validate proof
                         if (
+                            typeof json !== 'object' ||
+                            json === null ||
+                            typeof json.storage_proof !== 'object' ||
                             typeof json.storage_proof?.hash !== 'string' ||
                             typeof json.storage_proof?.signature !== 'object' ||
                             typeof json.storage_proof?.signature?.sig !=='string' ||
-                            typeof json.storage_proof?.signature?.bv !=='string'
+                            typeof json.storage_proof?.signature?.bv !=='string' ||
+                            typeof json.code !== 'string'
                         ) {
                             continue;
                         }
                         try {
-                            const cid = CID.parse(json.storage_proof.hash)
-                            const {value: msg} = await this.self.ipfs.dag.get(cid)
-                            if (typeof msg?.cid !== 'string' || msg?.type !== 'data-availability') {
-                                continue;
-                            }
-                            if (msg.cid !== json.code) {
-                                continue;
-                            }
+                            const sigCid = CID.parse(json.storage_proof.hash)
                             members ??= (await this.self.electionManager.getMembersOfBlock(blkHeight))
                                 .map((m) => m.key);
-                            const isValid = await BlsCircuit.deserialize({hash: cid.bytes, signature: json.storage_proof.signature}, members)
-                                                            .verify(cid.bytes);
+                            const isValid = await BlsCircuit.deserialize({hash: sigCid.bytes, signature: json.storage_proof.signature}, members)
+                                                            .verify(sigCid.bytes);
                             if (!isValid) {
                                 this.self.logger.info(
                                 `contract storage proof is invalid for op ${index} tx ${tx.transaction_id}`,
                                 )
                                 continue
                             }
+                            const {value} = await this.self.ipfs.dag.get(
+                                sigCid
+                            );
+                            if (value?.type !== 'data-availability' || value?.cid !== json.code) {
+                                this.self.logger.info(
+                                    `contract storage proof data is invalid for op ${index} tx ${tx.transaction_id}`,
+                                )
+                                continue;
+                            }
+                            await this.self.ipfs.pin.add(sigCid);
                         } catch (e) {
                             this.self.logger.error(`failed to verify contract storage proof for op ${index} tx ${tx.transaction_id}: ${e}`)
                             continue;
@@ -430,6 +453,7 @@ export class ContractEngineV2 {
     async init() {
         this.addrsDb = this.self.db.collection('addrs')
         this.contractDb = this.self.db.collection('contracts')
+        this.contractOutputs = this.self.db.collection('contract_outputs')
         this.self.chainBridge.streamParser.addParser({
             name: "contract-engine",
             type: 'tx',

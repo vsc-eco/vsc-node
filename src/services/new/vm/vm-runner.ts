@@ -887,7 +887,7 @@ class VmRunner {
             const key = (insta as any).exports.__getString(keyPtr)
             const val = (insta as any).exports.__getString(valPtr)
 
-            IOGas = IOGas + key.length + val.length
+            IOGas = IOGas + key.length + (val?.length || 0)
 
             wasmRunner.tmpState.set(key, val)
             return 1

@@ -8,7 +8,7 @@ import { ContractErrorType, instantiate } from './utils.js'
 
 //Crypto imports
 import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto.js'
-import { EventOpType, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type LedgerOp, type PartialResultMessage, type ReadyMessage } from './types.js'
+import { EventOp, EventOpType, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type PartialResultMessage, type ReadyMessage } from './types.js'
 
 const CID = IPFS.CID
 
@@ -282,7 +282,7 @@ class VmRunner {
   balanceDb: Collection
   ledgerDb: Collection
 
-  ledgerStack: LedgerOp[]
+  ledgerStack: EventOp[]
   outputStack: any[]
   balanceSnapshots: Map<string, any>
 
@@ -408,14 +408,14 @@ class VmRunner {
     if(this.balanceSnapshots.has(account)) { 
       const balance = this.balanceSnapshots.get(account)
       // const combinedLedger = [...this.ledgerStack, ...this.ledgerStackTemp]
-      // const hbdBal = combinedLedger.filter(e => e.amount && e.unit === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HBD'])
-      // const hiveBal = combinedLedger.filter(e => e.amount && e.unit === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HIVE'])
+      const hbdBal = this.ledgerStack.filter(e => e.amt && e.tk === 'HBD').map(e => e.amt).reduce((acc, cur) => acc + cur, balance.tokens['HBD'])
+      const hiveBal = this.ledgerStack.filter(e => e.amt && e.tk === 'HIVE').map(e => e.amt).reduce((acc, cur) => acc + cur, balance.tokens['HIVE'])
 
       return {
         account: account,
         tokens: {
-          HIVE: balance.HIVE,
-          HBD: balance.HBD
+          HIVE: balance.HIVE + hiveBal,
+          HBD: balance.HBD + hbdBal
         },
         block_height: block_height,
       }
@@ -431,7 +431,7 @@ class VmRunner {
     this.balanceSnapshots = new Map(Object.entries(balances))
   }
 
-  applyLedgerOp(op: LedgerOp) {
+  applyLedgerOp(op: EventOp) {
     this.ledgerStack.push(op)
 
   }
@@ -734,12 +734,12 @@ class VmRunner {
           //$self#tag
           dest: string
           //Transfer tag
-          from?: string
+          from_tag?: string
           memo?: string
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        let normalizedFrom = args.from ? `${contract_id}#${args.from}` : contract_id
+        let normalizedFrom = args.from_tag ? `${contract_id}#${args.from_tag}` : contract_id
         let normalizedDest;
 
         if(!['HIVE', 'HBD'].includes(args.asset)) { 
@@ -792,12 +792,12 @@ class VmRunner {
       'hive.withdraw': async (value) => { 
         const args:{
           dest: string
-          from?: string
+          from_tag?: string
           memo?: string
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        let normalizedFrom = args.from ? `${contract_id}#${args.from}` : contract_id
+        let normalizedFrom = args.from_tag ? `${contract_id}#${args.from_tag}` : contract_id
         let normalizedDest;
 
         if(!['HIVE', 'HBD'].includes(args.asset)) { 
@@ -1068,7 +1068,6 @@ void (async () => {
       stateCid,
     }
   }
-  console.log('stateParsed', stateParsed)
   const vmRunner = new VmRunner({
     state: state,
     modules: JSON.parse(process.env.modules),

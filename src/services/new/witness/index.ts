@@ -22,11 +22,13 @@ import { BalanceKeeper } from './balanceKeeper';
 import telemetry from '../../../telemetry';
 import { Schedule, getBlockSchedule } from './schedule';
 import { MessageHandleOpts } from '../p2pService';
-import { ExecuteStopMessage } from '../vm/types';
+import { EventOp, ExecuteStopMessage, EventOpType } from '../vm/types';
 import { ContractErrorType } from '../vm/utils';
 
 import {z} from 'zod'
 import { SlotTracker } from './slotTracker';
+import { ContractEngineV2, VmContext } from '../contractEngineV2';
+import { KuboRpcClientApi } from 'kubo-rpc-client/dist/src/types';
 
 const Constants = {
   block_version: 1
@@ -122,6 +124,347 @@ export class BlockContainer {
     }
 }
 
+
+interface TxEventContainer {
+  //List of TXs
+  txs: Array<string>
+  //Indexes of TXs where these events apply for.
+  idx: Array<number>
+  merkle_root: string
+  events: Array<EventOp>
+}
+
+
+interface TxContextResult {
+  outputs: Array<any>
+  events: TxEventContainer
+}
+
+interface BlockArgs {
+  br: [number, number]
+  contractIds: string[]
+  mockBalance?: Record<string, { 
+    HBD: number
+    HIVE: number
+  }>
+
+}
+
+
+export class TxContext {
+
+  balances: Map<string, {
+    HBD: number
+    HIVE: number
+  }>
+  ledger: Array<EventOp>
+  txs: Array<string>
+  //Mapping of indexOf(id) -> [indexOf(event[0])...indexOf(event[i])]
+  txsMap: Array<Array<number>>
+  contextArgs: BlockArgs;
+  contractIds: string[];
+
+  //Contract output results
+  results: Record<string, Array<any>>
+
+  private balanceKeeper: BalanceKeeper
+  private contractVM: VmContext | null;
+  private contractEngine: ContractEngineV2;
+  private _initalized: boolean;
+  constructor(
+    contextArgs: BlockArgs,
+    balanceKeeper: BalanceKeeper,
+    contractEngine: ContractEngineV2
+  ) {
+    this.contextArgs = contextArgs
+    this.balanceKeeper = balanceKeeper
+    this.contractEngine = contractEngine
+
+
+    this.balances = new Map()
+
+    this.ledger = []
+    this.txs = []
+    this.txsMap = []
+    
+    this.results = {}
+    
+    this.contractIds = this.contextArgs.contractIds
+    this.contractVM = null
+    this._initalized = false
+  }
+
+  async getBalance(id: string, token: "HBD" | "HIVE"): Promise<number> {
+    if(this.balances.has(id)) {
+
+      const snapshot = this.balances.get(id)
+
+      let bal = snapshot[token]
+
+      //Apply virtual ops no longer needed
+
+      // const ledgerOps = this.ledger.filter(e => {
+      //   return id === e.owner && e.tk === token
+      // })
+
+      // const diff = ledgerOps.map(e => e.amt).reduce((a, b) => a + b, 0)
+
+      return bal;
+    } else if(this.contextArgs.mockBalance && this.contextArgs.mockBalance[id]) {
+      //For mocks and testing
+      return this.contextArgs.mockBalance[id][token]
+    } else {
+      const snapshot = await this.balanceKeeper.getSnapshot(id, this.contextArgs.br[1])
+      this.balances.set(id, snapshot.tokens)
+      return snapshot.tokens[token]
+    }
+  }
+
+  async getSnapshot(id: string): Promise<{ 
+    HBD: number
+    HIVE: number
+  }> {
+    if(this.balances.has(id)) { 
+      return this.balances.get(id)
+    } else {
+      const snapshot = await this.balanceKeeper.getSnapshot(id, this.contextArgs.br[1])
+      this.balances.set(id, snapshot.tokens)
+      return snapshot.tokens
+    }
+  }
+
+  async validateBalance(id: string, token: "HBD" | "HIVE", amount: number): Promise<boolean> {
+    const amt = await this.getBalance(id, token)
+    if(amount <= amt) { 
+      return true
+    } else {
+      return false
+    }
+  }
+
+  async validateLedgerOp(): Promise<boolean | void> {
+
+  }
+
+  async executeContract(tx: TransactionDbRecordV2) { 
+
+  }
+
+  /**
+   * Applies ledger op (updates snapshot balances)
+   * Returns index of applied op
+   * @param op 
+   * @returns 
+   */
+  async applyLedgerOp(op: EventOp): Promise<number> {
+
+    const {owner, tk, t, amt, memo} = op;
+
+    //If owner starts with # it is an internal address
+    if(!owner.startsWith('#')) {
+      const snapshot = await this.getSnapshot(owner)
+      let modifiedAmount = snapshot[tk] + amt
+      this.balances.set(owner, { 
+        ...snapshot,
+        [tk]: modifiedAmount
+      })
+    }
+
+    
+    return this.ledger.push(op) - 1
+  }
+
+  async executeTx(tx: TransactionDbRecordV2): Promise<{
+    ok: boolean
+    err?: number | null
+  }> {
+    if(this._initalized === false) { 
+      throw new Error('TxContext not initialized')
+    }
+
+
+    const {op, payload} = tx.data
+    if(op === "call_contract") {
+      const contract_id = tx.data.contract_id
+      
+      let balMap = {}
+      for(let key of this.balances.keys()) { 
+        balMap[key] = this.balances.get(key)
+      }
+      const contractCallResult = await this.contractVM.processTx(tx, balMap)
+      console.log(contractCallResult)
+      if(!this.results[contract_id]) {
+        this.results[contract_id] = []
+      }
+
+      if (contractCallResult.type === 'timeout') {
+        this.results[contract_id].push({
+          id: tx.id,
+          result: {
+            ret: null,
+            error: 'timeout',
+            errorType: ContractErrorType.TIMEOUT,
+            logs: [],
+            // TODO prob shouldn't be 0
+            // ..it should meter gas once possible @v 
+            IOGas: 0, 
+          }
+        })
+      } else {
+        const {reqId, type, ...result} = contractCallResult;
+        this.results[contract_id].push({
+          id: tx.id,
+          result,
+        })
+
+        let eventIdxs = []
+        for (let e of result.ledger) { 
+          eventIdxs.push(await this.applyLedgerOp(e))
+        }
+        this.txs.push(tx.id)
+        
+        //Do this after done pushing to this.ledger
+        this.txsMap.push(eventIdxs)
+      }
+    } else if(op === 'transfer') {
+      //Execute transfer, etc
+      const {to, from, amount, tk, memo} = payload
+
+      
+      const amt = await this.getBalance(from, tk)
+
+      const validatedResult = await this.validateBalance(from, tk, amount)
+      console.log('validatedResult', validatedResult, from, tk, amount)
+      if(validatedResult) {
+        const leddOps: Array<EventOp> = [
+          //Debit
+          {
+            owner: from,
+            tk: tk,
+            t: EventOpType['ledger:transfer'],
+            amt: -amount,
+            ...(memo ? {memo} : {})
+          },
+          //Credit
+          {
+            owner: to,
+            tk: tk,
+            t: EventOpType['ledger:transfer'],
+            amt: amount,
+            ...(memo ? {memo} : {})
+          },
+        ]
+
+        let eventIdxs = []
+        for (let e of leddOps) { 
+          eventIdxs.push(await this.applyLedgerOp(e))
+        }
+        this.txs.push(tx.id)
+        
+        //Do this after done pushing to this.ledger
+        this.txsMap.push(eventIdxs)
+        return {
+          ok: true
+        }
+      } else {
+        //Handle fail case
+        return { 
+          ok: false
+        };
+      }
+    } else if(op === 'withdraw') {
+      const {to, from, amount, tk, memo} = payload
+
+      if(await this.validateBalance(from, tk, amount)) { 
+        const leddOps: Array<EventOp> = [
+          //Debit
+          {
+            owner: from,
+            tk: tk,
+            t: EventOpType['ledger:withdraw'],
+            amt: -amount,
+            ...(memo ? {memo} : {})
+          },
+          //Credit
+          {
+            owner: `#withdraw?to=${to}`,
+            tk: tk,
+            t: EventOpType['ledger:withdraw'],
+            amt: amount,
+            ...(memo ? {memo} : {})
+          },
+        ]
+
+        let eventIdxs = []
+        for (let e of leddOps) { 
+          eventIdxs.push(await this.applyLedgerOp(e))
+        }
+        this.txs.push(tx.id)
+        
+        //Do this after done pushing to this.ledger
+        this.txsMap.push(eventIdxs)
+        return {
+          ok: true,
+          err: null
+        }
+      } else {
+        return {
+          ok: false
+        }
+      }
+    }
+  }
+
+  /**
+   * Setups contract VM for execution
+   */
+  async init() {
+    this.contractVM = this.contractEngine.vmContext(this.contractIds)
+    await this.contractVM.init()
+    this._initalized = true
+  }
+
+  async finalize(ipfs: KuboRpcClientApi)  {
+    const contractOutputs = []
+
+    for(let out of await this.contractVM.finish()) {
+
+      const outputData = {
+        __t: 'vsc-output',
+        __v: '0.1',
+
+        
+        contract_id: out.contract_id,
+        remote_calls: [],
+        //Either TX ID or @remote/<index>
+        inputs: this.results[out.contract_id].map(e => e.id),
+        results: this.results[out.contract_id].map(e => e.result),
+        state_merkle: out.stateMerkle,
+        io_gas: this.results[out.contract_id].map(e => e.result.IOGas).reduce((a, b) => {
+          return a + b;
+        })
+      }
+      contractOutputs.push({
+        id: (await ipfs.dag.put(outputData)).toString(),
+        contract_id: outputData.contract_id,
+        type: TransactionDbType.output
+      })
+    }
+
+    const eventData = {
+      __t: 'vsc-events',
+
+      txs: this.txs,
+      txs_map: this.txsMap,
+      events: this.ledger
+    }
+    console.log(JSON.stringify(eventData, null, 2))
+    return {
+      outputs: contractOutputs,
+      events: eventData
+    }
+  }
+}
 
 
 export class WitnessServiceV2 {
@@ -316,70 +659,25 @@ export class WitnessServiceV2 {
         contract_id: string,
         type: TransactionDbType,
       }[] = []
-      if(transactions.length > 0 && contractIds.length > 0) {
-        
-        console.log('contractIds', contractIds)
-        const vmContext = this.self.contractEngine.vmContext(contractIds);
-        await vmContext.init()
-        console.log('initalized vm')
-        
-        let results: Record<string, Array<{id: string; result: Omit<ExecuteStopMessage, 'type' | 'reqId'>}>> = {
 
-        }
-  
+      const txExecutor = new TxContext({
+        br: [start_height, end_height],
+        contractIds
+      }, this.balanceKeeper, this.self.contractEngine)
+      await txExecutor.init()
+
+
+      // txExecutor.
+      let eventsList = null
+      if(transactions.length > 0) {
         for(let tx of transactions) {
-          if(tx.data.contract_id) {
-            const contract_id = tx.data.contract_id
-            console.log('processing tx', JSON.stringify(tx, null, 2))
-            const contractCallResult = await vmContext.processTx(tx)
-            console.log('completed tx', JSON.stringify(contractCallResult, null, 2))
-            if(!results[contract_id]) {
-              results[contract_id] = []
-            }
-            if (contractCallResult.type === 'timeout') {
-              results[contract_id].push({
-                id: tx.id,
-                result: {
-                  ret: null,
-                  error: 'timeout',
-                  errorType: ContractErrorType.TIMEOUT,
-                  logs: [],
-                  IOGas: 0, // TODO prob shouldn't be 0
-                }
-              })
-            } else {
-              const {reqId, type, ...result} = contractCallResult;
-              results[contract_id].push({
-                id: tx.id,
-                result,
-              })
-            }
-          }
+          //All the fancy logic now happens in txContext
+          await txExecutor.executeTx(tx)
         }
-        for(let out of await vmContext.finish()) {
 
-          const outputData = {
-            __t: 'vsc-output',
-            __v: '0.1',
-
-            
-            contract_id: out.contract_id,
-            remote_calls: [],
-            //Either TX ID or @remote/<index>
-            inputs: results[out.contract_id].map(e => e.id),
-            results: results[out.contract_id].map(e => e.result),
-            state_merkle: out.stateMerkle,
-            io_gas: results[out.contract_id].map(e => e.result.IOGas).reduce((a, b) => {
-              return a + b;
-            })
-          }
-          console.log(outputData, out)
-          contractOutputs.push({
-            id: (await this.self.ipfs.dag.put(outputData)).toString(),
-            contract_id: outputData.contract_id,
-            type: TransactionDbType.output
-          })
-        }
+        const {outputs, events} = await txExecutor.finalize(this.self.ipfs)
+        contractOutputs = outputs;
+        eventsList = events;
       }
       
       // for(let contractId of contractIds) {
@@ -406,6 +704,10 @@ export class WitnessServiceV2 {
           }
         }),
         ...contractOutputs,
+        ...(eventsList ? (eventsList.events.length > 0 ? [{
+          id: (await this.self.ipfs.dag.put(eventsList)).toString(),
+          type: TransactionDbType.events
+        }] : []) : []),
         ...(hiveMerkleProof ? [hiveMerkleProof] : [])
       ]
       
@@ -664,17 +966,19 @@ export class WitnessServiceV2 {
 
       let votedWeight = 0;
       let totalWeight = lastElection.weight_total
+      let signerList = []
       for(let member of circuit.aggPubKeys.keys()) { 
         const memberNode = lastElection.members.find(e => e.key === member);
         if (!memberNode) {
           continue
         }
         votedWeight += lastElection.weights[lastElection.members.indexOf(memberNode)]
+        signerList.push(memberNode.account)
       }
 
 
       console.log('votedWeight', votedWeight, 'requiredWeight', totalWeight * voteMajority , 'totalWeight', totalWeight)
-
+      console.log('signerList', signerList)
       //Did it pass minimum?   
       let error: any
       let thrown = false
@@ -985,7 +1289,6 @@ export class WitnessServiceV2 {
 
         const offchainTxsUnfiltered = offchainTxsUnChecked.filter((tx, i): tx is WithId<TransactionDbRecordV2> => {
           if (!tx) {
-            console.log('could not find tx with id:', txs[i]);
             return false
           }
           return true
@@ -1023,6 +1326,151 @@ export class WitnessServiceV2 {
       }
     }
 
+    /**
+     * Tests new building functionality.
+     */
+    async #testBuildBlock() {
+      
+      
+      const demoTransactions: Array<TransactionDbRecordV2> = [
+        {
+          status: TransactionDbStatus.included,
+          id: '#tx.test-1',
+
+          required_auths: [
+            {
+              type: 'active',
+              value: 'hive:vaultec'
+            }
+          ],
+          headers: {
+            type: TransactionDbType.core,
+          },
+          data: {
+            op: "transfer",
+            payload: {
+              to: 'hive:geo52rey',
+              from: 'hive:vaultec',
+              amount: 1500,
+              memo: "What's up!",
+              tk: 'HBD'
+            }
+          },
+          local: false,
+          accessible: true,
+          first_seen: new Date(),
+          src: 'hive',
+          anchored_id: 'bafyreih3heoeeagnyw7op6jfr7amr4jdiu32dezipr32ytekvmndzhuxgu',
+          anchored_block: 'test',
+          anchored_height: 81614001,
+          anchored_index: 0,
+          anchored_op_index: 0,
+        },
+        {
+          status: TransactionDbStatus.included,
+          id: '#tx.test-2',
+
+          required_auths: [
+            {
+              type: 'active',
+              value: 'hive:vaultec'
+            }
+          ],
+          headers: {
+            type: TransactionDbType.core,
+          },
+          data: {
+            op: "withdraw",
+            payload: {
+              to: 'hive:geo52rey',
+              from: 'hive:geo52rey',
+              amount: 500,
+              tk: 'HBD'
+            }
+          },
+          local: false,
+          accessible: true,
+          first_seen: new Date(),
+          src: 'hive',
+          anchored_id: 'bafyreih3heoeeagnyw7op6jfr7amr4jdiu32dezipr32ytekvmndzhuxgu',
+          anchored_block: 'test',
+          anchored_height: 81614001,
+          anchored_index: 1,
+          anchored_op_index: 0,
+        },
+        {
+          status: TransactionDbStatus.included,
+          id: '#tx.test-3',
+          
+          required_auths: [
+            {
+              type: 'active',
+              value: 'hive:vaultec'
+            }
+          ],
+          headers: {
+            type: TransactionDbType.input,
+            intents: [
+              "hive.allow_transfer?limit=1500&token=hbd"
+            ]
+          },
+          data: {
+            op: "call_contract",
+            contract_id: "vs41q9c3ygxjdas756pxjj0x82c6a8tttrvr4kxdnkdgvyjwfuwslphdwsgfjg2f7tc3",
+            action: "pullBalance",
+            payload: {
+              from: "hive:geo52rey",
+              amount: 500,
+              asset: 'HBD'
+            }
+          },
+          local: false,
+          accessible: true,
+          first_seen: new Date(),
+          src: 'hive',
+          anchored_id: 'bafyreih3heoeeagnyw7op6jfr7amr4jdiu32dezipr32ytekvmndzhuxgu',
+          anchored_block: 'test',
+          anchored_height: 81614001,
+          anchored_index: 2,
+          anchored_op_index: 0,
+        },
+      ]
+
+      const contractIds = demoTransactions.filter(e => e.data.op === 'call_contract').map(e => e.data.contract_id)
+      const txContext = new TxContext({
+        br: [81614000, 81614010],
+        contractIds: [
+          '#virtual.test.pull',
+          ...contractIds
+        ],
+        mockBalance: {
+          'hive:vaultec': {
+            HBD: 3_000,
+            HIVE: 0,
+          }
+        },
+      }, this.balanceKeeper, this.self.contractEngine)
+  
+      await txContext.init()
+      
+      
+      for(let tx of demoTransactions) {
+        const txResult = await txContext.executeTx(tx)
+        console.log('txResult', txResult)
+      }
+
+      const finalizedResult = await txContext.finalize(this.self.ipfs)
+      
+      console.log('finalizedResult', finalizedResult)
+
+      this.balanceKeeper.processEvents({
+        ...finalizedResult.events as any
+      }, {
+        blockHeight: await HiveClient.blockchain.getCurrentBlockNum(),
+        blockId: 'mock-block'
+      })
+    }
+    
     async init() {
       this.blockHeaders = this.self.db.collection('block_headers')
       await this.multisig.init()

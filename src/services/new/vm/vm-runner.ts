@@ -2,18 +2,19 @@ import * as IPFS from 'kubo-rpc-client'
 import sift, { BasicValueQuery, Query } from 'sift'
 
 import { Collection, MongoClient } from 'mongodb'
-import { addLink } from '../../../ipfs-utils/add-link'
-import { removeLink } from '../../../ipfs-utils/rm-link'
-import { ContractErrorType, instantiate } from './utils'
+import { addLink } from '../../../ipfs-utils/add-link.js'
+import { removeLink } from '../../../ipfs-utils/rm-link.js'
+import { ContractErrorType, instantiate } from './utils.js'
 
 //Crypto imports
-import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto'
-import { LedgerType } from '../types'
-import type { AnyReceivedMessage, AnySentMessage, Env, ExecuteStopMessage, FinishResultMessage, PartialResultMessage, ReadyMessage } from './types'
+import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto.js'
+import { EventOp, EventOpType, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type PartialResultMessage, type ReadyMessage } from './types.js'
 
 const CID = IPFS.CID
 
 const ipfs = IPFS.create({ url: process.env.IPFS_HOST || 'http://127.0.0.1:5001' })
+
+
 
 
 const intentFieldMap = {
@@ -281,8 +282,7 @@ class VmRunner {
   balanceDb: Collection
   ledgerDb: Collection
 
-  ledgerStack: LedgerType[]
-  ledgerStackTemp: LedgerType[]
+  ledgerStack: EventOp[]
   outputStack: any[]
   balanceSnapshots: Map<string, any>
 
@@ -297,15 +297,19 @@ class VmRunner {
     args: Record<string, any>
   }>
 
+  op: null | {
+    block_height: number
+  }
+
   constructor(args) {
     this.state = args.state
     this.modules = args.modules
 
     this.ledgerStack = []
-    //Temporary ledger stack for use in contract execution. Pushed to ledgerStack for permanent storage
-    this.ledgerStackTemp = []
     this.outputStack = []
     this.balanceSnapshots = new Map()
+
+    this.op = null
   }
 
   /**
@@ -403,15 +407,15 @@ class VmRunner {
   async getBalanceSnapshot(account: string, block_height: number) { 
     if(this.balanceSnapshots.has(account)) { 
       const balance = this.balanceSnapshots.get(account)
-      const combinedLedger = [...this.ledgerStack, ...this.ledgerStackTemp]
-      const hbdBal = combinedLedger.filter(e => e.amount && e.unit === 'HBD').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HBD'])
-      const hiveBal = combinedLedger.filter(e => e.amount && e.unit === 'HIVE').map(e => e.amount).reduce((acc, cur) => acc + cur, balance.tokens['HIVE'])
+      // const combinedLedger = [...this.ledgerStack, ...this.ledgerStackTemp]
+      const hbdBal = this.ledgerStack.filter(e => e.amt && e.tk === 'HBD').map(e => e.amt).reduce((acc, cur) => acc + cur, balance.tokens['HBD'])
+      const hiveBal = this.ledgerStack.filter(e => e.amt && e.tk === 'HIVE').map(e => e.amt).reduce((acc, cur) => acc + cur, balance.tokens['HIVE'])
 
       return {
         account: account,
         tokens: {
-          HIVE: hiveBal,
-          HBD: hbdBal
+          HIVE: balance.HIVE + hiveBal,
+          HBD: balance.HBD + hbdBal
         },
         block_height: block_height,
       }
@@ -422,35 +426,46 @@ class VmRunner {
     }
   }
 
-  applyLedgerOp(op: LedgerType) {
-    console.log('applyLedgerOp', op)
-    this.ledgerStackTemp.push(op)
+  
+  setBalances(balances: Object) {
+    this.balanceSnapshots = new Map(Object.entries(balances))
+  }
+
+  applyLedgerOp(op: EventOp) {
+    this.ledgerStack.push(op)
+
   }
 
   /**
    * Saves ledger to perm memory
    * TODO: create updated balance snapshot
    */
-  saveLedger() {
-    this.ledgerStack.push(...this.ledgerStackTemp)
-    this.ledgerStackTemp = []
-  }
+  // saveLedger() {
+  //   this.ledgerStack.push(...this.ledgerStackTemp)
+  //   this.ledgerStackTemp = []
+  // }
 
   /**
    * Revert current OP
    * TODO: reset remote call stack when implemented
    */
   revertOp() {
-    this.ledgerStackTemp = []
+    this.ledgerStack = []
     for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
       wasmRunner?.revertState()
     }
   }
 
   finishOp() {
-    this.saveLedger()
+    // this.saveLedger()
+    const ledger = [...this.ledgerStack]
+    this.ledgerStack = []
+
     for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
       wasmRunner?.finishState()
+    }
+    return {
+      ledger
     }
   }
 
@@ -617,6 +632,7 @@ class VmRunner {
         errorType: ContractErrorType.INVALID_CONTRACT,
         logs: [],
         IOGas: 0,
+        ledger: []
       }
     }
     const { wasmRunner, stateAccess } = state
@@ -646,6 +662,8 @@ class VmRunner {
         } = JSON.parse(value)
         const snapshot = await this.getBalanceSnapshot(`${args.account}${args.tag ? '#' + args.tag.replace('#', '') : ''}`, block_height)
 
+
+
         return {
           result: snapshot.tokens
         }
@@ -656,21 +674,19 @@ class VmRunner {
           from: string
           amount: number
           asset: "HIVE" | "HBD"
+          tag?: string
         } = JSON.parse(value)
         const snapshot = await this.getBalanceSnapshot(args.from, block_height)
-        console.log('snapshot result', snapshot)
 
         //Total amount drawn from ledgerStack during this execution
-        const totalAmountDrawn = Math.abs(this.ledgerStackTemp.filter(sift({
+        const totalAmountDrawn = Math.abs(this.ledgerStack.filter(sift({
           owner: args.from,
           to: contract_id,
           unit: args.asset
-        })).reduce((acc, cur) => acc + cur.amount, 0))
+        })).reduce((acc, cur) => acc + cur.amt, 0))
 
 
-        console.log('totalAmountDrawn', totalAmountDrawn)
-
-        console.log('totalAmountDrawn.limit', args.amount + totalAmountDrawn)
+        
 
         const allowedByIntent = this.verifyIntent('hive.allow_transfer', {
           token: {
@@ -690,18 +706,19 @@ class VmRunner {
 
         if(snapshot.tokens[args.asset] >= args.amount) {
           this.applyLedgerOp({
+            t: EventOpType['ledger:transfer'],
             owner: args.from,
-            to: contract_id,
-            amount: -args.amount,
-            unit: args.asset
+            amt: -args.amount,
+            tk: args.asset
           })
           this.applyLedgerOp({
-            from: args.from,
-            owner: contract_id,
-            amount: args.amount,
-            unit: args.asset
+            t: EventOpType['ledger:transfer'],
+            //Tag using contract address #tag
+            owner: args.tag ? `${contract_id}#${args.tag}` : contract_id,
+            amt: args.amount,
+            tk: args.asset
           })
-          console.log(this.ledgerStackTemp)
+          
           return {
             result: "SUCCESS"
           }
@@ -714,24 +731,51 @@ class VmRunner {
       //Transfer tokens owned by contract to another user or 
       'hive.transfer': async(value) => { 
         const args: {
+          //$self#tag
           dest: string
+          //Transfer tag
+          from_tag?: string
+          memo?: string
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshot(contract_id, block_height)
+        let normalizedFrom = args.from_tag ? `${contract_id}#${args.from_tag}` : contract_id
+        let normalizedDest;
+
+        if(!['HIVE', 'HBD'].includes(args.asset)) { 
+          return {
+            result: "INVALID_ASSET"
+          }
+        }
+
+        if(args.dest === '$self') { 
+          const [, tag] = args.dest.split('#')
+          normalizedDest = tag ? `${contract_id}#${tag}` : contract_id 
+        } else {
+          if(args.dest.startsWith('did:') || args.dest.startsWith('hive:')) { 
+            normalizedDest = args.dest
+          } else {
+            return {
+              result: "INVALID_DEST"
+            }
+          }
+        }
+        const snapshot = await this.getBalanceSnapshot(normalizedFrom, block_height)
         if(snapshot.tokens[args.asset] >= args.amount) { 
+          this.applyLedgerOp({
+            t: EventOpType['ledger:transfer'],
+            owner: normalizedFrom,
+            amt: -args.amount,
+            tk: args.asset
+          })
 
           this.applyLedgerOp({
-            owner: contract_id,
-            to: args.dest,
-            amount: -args.amount,
-            unit: args.asset
-          })
-          this.applyLedgerOp({
-            owner: args.dest,
-            from: contract_id,
-            amount: args.amount,
-            unit: args.asset
+            t: EventOpType['ledger:transfer'],
+            owner: normalizedDest,
+            amt: args.amount,
+            tk: args.asset,
+            //Memo will always be in last op to save space. Indexing makes it easier to search for memos
+            ...(args.memo ? {memo: args.memo} : {})
           })
 
           return {
@@ -748,28 +792,46 @@ class VmRunner {
       'hive.withdraw': async (value) => { 
         const args:{
           dest: string
+          from_tag?: string
+          memo?: string
           amount: number
           asset: "HIVE" | "HBD"
         } = JSON.parse(value)
-        const snapshot = await this.getBalanceSnapshot(contract_id, block_height)
+        let normalizedFrom = args.from_tag ? `${contract_id}#${args.from_tag}` : contract_id
+        let normalizedDest;
+
+        if(!['HIVE', 'HBD'].includes(args.asset)) { 
+          return {
+            result: "INVALID_ASSET"
+          }
+        }
+        
+        if(args.dest.startsWith('hive:')) { 
+          normalizedDest = args.dest
+        } else {
+          return {
+            result: "INVALID_DEST"
+          }
+        }
+
+        const snapshot = await this.getBalanceSnapshot(normalizedFrom, block_height)
         console.log('snapshot result', snapshot)
 
         if(snapshot.tokens[args.asset] >= args.amount) {
           this.applyLedgerOp({
-            owner: contract_id,
-            to: '#withdraw',
-            amount: -args.amount,
-            unit: args.asset,
-            dest: args.dest
+            t: EventOpType['ledger:withdraw'],
+            owner: normalizedFrom,
+            amt: -args.amount,
+            tk: args.asset,
           })
-          // this.applyLedgerOp({
-          //   from: contract_id,
-          //   to: '#withdraw',
-          //   dest: args.dest,
-          //   amount: args.amount,
-          //   unit: args.asset
-          // })
-          console.log(this.ledgerStackTemp)
+          this.applyLedgerOp({
+            t: EventOpType['ledger:withdraw'],
+            owner: `#withdraw?to=${normalizedDest}`,
+            amt: args.amount,
+            tk: args.asset,
+            ...(args.memo ? {memo: args.memo} : {})
+          })
+          console.log(this.ledgerStack)
           return {
             result: "SUCCESS"
           }
@@ -886,6 +948,7 @@ class VmRunner {
           logs,
           // reqId: message.reqId,
           IOGas: 0,
+          ledger: []
         }
       }
       let ptr
@@ -897,7 +960,7 @@ class VmRunner {
         const str = (insta as any).exports.__getString(ptr)
 
         //Assume successful, save any ledger results.
-        this.finishOp()
+        const {ledger} = this.finishOp()
 
         //For testing determining use..
 
@@ -909,6 +972,7 @@ class VmRunner {
           errorType: null,
           // reqId: message.reqId,
           IOGas,
+          ledger
         }
       } catch (ex) {
         if (ex.name === 'RuntimeError' && ex.message === 'unreachable') {
@@ -923,6 +987,7 @@ class VmRunner {
             logs,
             // reqId: message.reqId,
             IOGas,
+            ledger: []
           }
         } else {
           this.revertOp()
@@ -934,6 +999,7 @@ class VmRunner {
             logs,
             // reqId: message.reqId,
             IOGas,
+            ledger: []
           }
         }
       }
@@ -947,6 +1013,7 @@ class VmRunner {
         errorType: ContractErrorType.RUNTIME_SETUP,
         // reqId: message.reqId,
         IOGas,
+        ledger: []
       }
     }
   }
@@ -976,7 +1043,6 @@ class VmRunner {
         contract_id,
         index,
         stateMerkle: stateAccess.finish().stateMerkle.toString(),
-        ledgerResults: this.ledgerStack
       }
     }
     yield {
@@ -1015,6 +1081,9 @@ void (async () => {
 
   process.on('message', async (message: AnySentMessage) => {
     if (message.type === 'call') {
+
+      vmRunner.setBalances(message.balance_map)
+      
       const executeResult = await vmRunner.executeCall({
         contract_id: message.contract_id,
         payload: message.payload,

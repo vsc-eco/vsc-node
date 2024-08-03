@@ -30,6 +30,7 @@ export type ParserFuncArgs<Type extends 'block' | 'tx'> = {
     data:     {
         tx: EventRecord['transactions'][0]
         blkHeight: number
+        idx: number
     } & Pick<EventRecord, 'block_id' | 'timestamp'>
 })
 
@@ -238,7 +239,8 @@ export class StreamParser {
                     }
                 }
 
-                for (let tx of blk.transactions) {
+                for (let idx in blk.transactions) {
+                    const tx = blk.transactions[idx]
                     for(let parser of parser2) {
                         try {
                             await parser.func({
@@ -248,7 +250,8 @@ export class StreamParser {
                                     //Fix: to underscore case.
                                     blkHeight: Number(blk.key),
                                     block_id: blk.block_id,
-                                    timestamp: blk.timestamp
+                                    timestamp: blk.timestamp,
+                                    idx: Number(idx)
                                 },
                                 halt: this.halt
                             })

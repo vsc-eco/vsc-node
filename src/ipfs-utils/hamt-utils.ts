@@ -3,7 +3,7 @@ import {
   Bucket,
   createHAMT
 } from 'hamt-sharding'
-import { DirSharded } from './dir-sharded'
+import { DirSharded } from './dir-sharded.js'
 import { logger } from '@libp2p/logger'
 import { UnixFS } from 'ipfs-unixfs'
 import last from 'it-last'
@@ -13,7 +13,7 @@ import {
   hamtHashFn,
   hamtBucketBits
 } from './hamt-constants.js'
-import { map } from './add-link'
+import { map } from './add-link.js'
 
 const log = logger('ipfs:mfs:core:utils:hamt-utils')
 

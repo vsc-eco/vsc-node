@@ -1,12 +1,12 @@
 import { encode, prepare } from '@ipld/dag-pb'
 import { UnixFS } from 'ipfs-unixfs'
-import { persist } from './persist'
+import { persist } from './persist.js'
 import { createHAMT, Bucket } from 'hamt-sharding'
 import {
   hamtHashCode,
   hamtHashFn,
   hamtBucketBits
-} from './hamt-constants'
+} from './hamt-constants.js'
 
 /**
  * @typedef {import('interface-blockstore').Blockstore} Blockstore

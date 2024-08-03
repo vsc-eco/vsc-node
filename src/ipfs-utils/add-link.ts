@@ -2,7 +2,7 @@ import * as dagPB from '@ipld/dag-pb'
 import { CID } from 'multiformats/cid'
 import { logger } from '@libp2p/logger'
 import { UnixFS } from 'ipfs-unixfs'
-import { DirSharded } from './dir-sharded'
+import { DirSharded } from './dir-sharded.js'
 import {
   updateHamtDirectory,
   recreateHamtLevel,
@@ -10,7 +10,7 @@ import {
   createShard,
   toPrefix,
   addLinksToHamtBucket
-} from './hamt-utils'
+} from './hamt-utils.js'
 import errCode from 'err-code'
 import last from 'it-last'
 

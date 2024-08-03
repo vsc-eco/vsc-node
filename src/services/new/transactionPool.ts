@@ -232,7 +232,8 @@ export class TransactionPoolV2 {
                 id: cid.toString(),
                 status: TransactionDbStatus.unconfirmed,
                 headers: {
-                    nonce: decodedTx.headers.nonce
+                    nonce: decodedTx.headers.nonce,
+                    type: decodedTx.headers.type,
                 },
                 required_auths: decodedTx.headers.required_auths.map(e => {
                     const [value, query] = e.split('?')
@@ -300,7 +301,8 @@ export class TransactionPoolV2 {
                 id: cid.toString(),
                 status: TransactionDbStatus.unconfirmed,
                 headers: {
-                    nonce: decodedTx.headers.nonce
+                    nonce: decodedTx.headers.nonce,
+                    type: decodedTx.headers.type,
                 },
                 required_auths: decodedTx.headers.required_auths.map(e => {
                     const [value, query] = e.split('?')
@@ -455,6 +457,7 @@ export class TransactionPoolV2 {
                             anchored_op_index: i,
                             headers: {
                                 // lock_block: fullTx.block_height + 120,
+                                type: json.tx.type
                             },
                             data: {
                                 contract_id: json.tx.contract_id,

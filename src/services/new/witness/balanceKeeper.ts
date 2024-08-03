@@ -7,6 +7,10 @@ import { CID } from 'kubo-rpc-client'
 import networks from '../../../services/networks';
 import { HiveClient, HiveClient2, makeSimpleObjectText } from '../../../utils';
 import moment from 'moment';
+import eip55 from 'eip55';
+import { EventOp, EventOpType  } from '../vm/types';
+import { TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from '../types';
+import { ParserFuncArgs } from '../utils';
 const PrivateKey = HiveTx.PrivateKey;
 
 interface TxReceipt {
@@ -44,9 +48,23 @@ export class BalanceKeeper {
     self: NewCoreService;
     balanceDb: Collection<BalanceType>
     withdrawDb: Collection;
-    ledgerDb: Collection;
+    ledgerDb: Collection<{
+        id: string
+        dest: string
+        amount: number
+        tk: "HIVE" | "HBD"
+        height: number
+        idx: number
+        memo?: string
+        t: 'deposit' | 'transfer' | 'withdraw'
+
+        //Receip
+        receipt_id?: string
+    }>;
     constructor(self: NewCoreService) {
         this.self = self;
+
+        this.getSnapshot = this.getSnapshot.bind(this)
     }
 
     get multisigAccount () {
@@ -64,7 +82,7 @@ export class BalanceKeeper {
     }
 
     async getSnapshot(account: string, block_height: number) { 
-        const lastBalance = await this.balanceDb.findOne({account: 'fakeaccoun'})
+        const lastBalance = await this.balanceDb.findOne({account})
 
         const balanceTemplate = lastBalance ? {
             account: account,
@@ -83,7 +101,7 @@ export class BalanceKeeper {
         }
 
         const hiveDeposits = await this.ledgerDb.find({
-            unit: 'HIVE',
+            tk: 'HIVE',
             owner: account,
             block_height: {
                 $lte: block_height
@@ -94,7 +112,7 @@ export class BalanceKeeper {
             }
         }).toArray()
         const hbdDeposits = await this.ledgerDb.find({
-            unit: 'HBD',
+            tk: 'HBD',
             owner: account,
             block_height: {
                 $lte: block_height
@@ -122,6 +140,107 @@ export class BalanceKeeper {
             },
             block_height: block_height
         };
+    }
+
+    async processEvents(blockEvents: 
+        {
+            __t: 'vsc-events',
+            txs: Array<string>
+            txs_map: Array<Array<number>>
+            events: Array<EventOp>
+        }, blockInfo: {
+            blockId: string
+            blockHeight: number
+        }
+    ) {
+        const {blockHeight, blockId} = blockInfo
+        //List of accounts whos balances have changed
+        const balancesUpdated = {}
+
+        console.log('blockEvents', blockEvents)
+
+        const allEvents = []
+        for(let idx in blockEvents.txs) {
+            const txMap = blockEvents.txs_map[idx]
+
+            allEvents.push(...txMap.map(e => {
+                return blockEvents.events[e]
+            }))
+        }
+        for(let eventIdx in allEvents) {
+            const event = allEvents[eventIdx] 
+            
+            if(EventOpType['ledger:transfer'] === event.t) {
+                await this.ledgerDb.findOneAndUpdate({
+                    id: `${blockId}-${eventIdx}`,
+                }, {
+                    $set: {
+                        t: 'transfer',
+                        owner: event.owner,
+                        amount: event.amt,
+                        tk: event.tk,
+                        block_height: blockHeight,
+                        memo: event.memo
+                    }
+
+                }, {
+                    upsert: true
+                })
+                balancesUpdated[event.owner] = true
+            } else if(EventOpType['ledger:withdraw'] === event.t) {
+                if(event.owner.startsWith("#withdraw")) {
+                    const [,queryString] = event.owner.split('?')
+                    
+                    await this.withdrawDb.findOneAndUpdate({ 
+                        id: `${blockId}-${eventIdx}`
+                    }, {
+                        $set: {
+                            t: 'withdraw',
+                            dest: new URLSearchParams(queryString).get('to'),
+                            amount: event.amt,
+                            tk: event.tk,
+
+                            height: blockHeight,
+                            idx: Number(eventIdx),
+                            block_height: blockHeight,
+                        }
+                    }, {
+                        upsert: true
+                    })
+                } else {
+                    await this.ledgerDb.findOneAndUpdate({
+                        id: `${blockId}-${eventIdx}`,
+                    }, {
+                        $set: {
+                            t: 'transfer',
+                            owner: event.owner,
+                            amount: event.amt,
+                            tk: event.tk,
+                            block_height: blockHeight,
+                            memo: event.memo
+                        }
+                    }, {
+                        upsert: true
+                    })
+                    balancesUpdated[event.owner] = true
+                }
+            }
+        }
+        for(let owner of Object.keys(balancesUpdated)) {
+            const ownershipInfo = await this.getSnapshot(owner, blockHeight)
+            console.log('owner, ownershipInfo', owner, ownershipInfo)
+
+            await this.balanceDb.findOneAndUpdate({
+                account: owner,
+                block_height: blockHeight
+            }, {
+                $set: {
+                    tokens: ownershipInfo.tokens
+                }
+            }, {
+                upsert: true
+            })
+        }
     }
 
     /**
@@ -244,9 +363,11 @@ export class BalanceKeeper {
         }
     }
 
-    async handleTxTick(args) {
+    async handleTxTick(args: ParserFuncArgs<'tx'>) {
         const {tx} = args.data;
 
+
+        
 
         const headerOp = tx.operations[0]
 
@@ -295,7 +416,7 @@ export class BalanceKeeper {
             idx = idx + 1;
             const [type, opBody] = op;
             if(type === 'transfer') {
-                const [amount, unit] = opBody.amount.split(' ')
+                const [amount, unit] = (opBody.amount as string).split(' ')
                 if(this.multisigAccount === opBody.to) {
                     //Decode JSON or query string
                     let decodedMemo = {};
@@ -307,12 +428,47 @@ export class BalanceKeeper {
                             decodedMemo[key] = value
                         }
                     }
+                    
+                    let normalDest;
                     //Parse out the owner of the deposit or intended owner.
                     //Default to sender if no memo is attached
-                    if(decodedMemo['to']?.startsWith('did:') || decodedMemo['to']?.startsWith('@')) {
-                        decodedMemo['owner'] = decodedMemo['to']
+                    //Make sure it is only a valid Hive account or DID
+                    const ethReg = new RegExp('^(0x)?[0-9a-fA-F]{40}$')
+                    const hiveReg = new RegExp('^(?=.{3,16}$)[a-z][0-9a-z\-]{1,}[0-9a-z]([\.][a-z][0-9a-z\-]{1,}[0-9a-z]){0,}$')
+
+                    if(decodedMemo['to']?.startsWith('did:key')) {
+                        normalDest = decodedMemo['to']
+                    } else if (decodedMemo['to']?.startsWith('did:pkh:eip155:1')) {
+                        
+                        //Valid matching regex
+                        if(ethReg.test(decodedMemo['to'].replace('did:pkh:eip155:1:', ''))) {
+                            normalDest = decodedMemo['to']
+                        } else {
+                            normalDest = `hive:${opBody.from}`
+                        }
+                    } else if(decodedMemo['to']?.startsWith('@')) {
+                        const [,username] = decodedMemo['to'].split('@')[":"]
+
+                        if(hiveReg.test(username)) { 
+                            normalDest = `hive:${username}`
+                        } else {
+                            //Make sure it defaults correctly
+                            normalDest = `hive:${opBody.from}`
+                        }
+                    } else if(decodedMemo['to']?.startsWith('hive:')) {
+                        //In the future apply hive regex to verify proper deposit
+                        const [,username] = decodedMemo['to'].split('hive:')[":"]
+
+                        if(hiveReg.test(username)) { 
+                            normalDest = decodedMemo['to']
+                        } else {
+                            //Make sure it defaults correctly
+                            normalDest = `hive:${opBody.from}`
+                        }
+                    } else if(ethReg.test(decodedMemo['to'])) {
+                        normalDest = `did:pkh:eip155:1:${eip55.encode(decodedMemo['to'])}`
                     } else {
-                        decodedMemo['owner'] = opBody.from
+                        normalDest = `hive:${opBody.from}`
                     }
 
                     if(decodedMemo['action'] === 'donate_fill') {
@@ -336,80 +492,61 @@ export class BalanceKeeper {
                         const withdrawlAmount = requestedAmount + sentAmount
                         const dest = decodedMemo['to'] || opBody.from
 
-                        if(balanceSnapshot.tokens[unit] >= withdrawlAmount) {
-                            //Withdraw funds
-                            
-                            const withdrawRecord = await this.withdrawDb.findOne({
-                                id: `${tx.transaction_id}-${idx}`
-                            })
-                            if(!withdrawRecord) { 
-                                await this.withdrawDb.findOneAndUpdate({
-                                    id: `${tx.transaction_id}-${idx}`,
-                                }, {
-                                    $set: {
-                                        status: "PENDING",
-                                        amount: withdrawlAmount,
-                                        unit,
-                                        from: opBody.from,
-                                        dest,
-                                    }
-                                }, {
-                                    upsert: true
-                                })
-                            }
-
-                            await this.ledgerDb.findOneAndUpdate({
-                                id: `${tx.transaction_id}-${idx}`,
-                                owner: opBody.from,
-                            }, {
-                                $set: {
-                                    amount: -requestedAmount,
-                                    unit,
-                                    dest: opBody.from,
-                                    block_height: args.data.blkHeight
-                                }
-                            }, {
-                                upsert: true
-                            })
-                        } else {
-                            //Insufficient funds. Log deposit amount
-                            const withdrawRecord = await this.withdrawDb.findOne({
-                                id: `${tx.transaction_id}-${idx}`
-                            })
-                            if(!withdrawRecord) {
-                                await this.withdrawDb.findOneAndUpdate({
-                                    id: `${tx.transaction_id}-${idx}`,
-                                }, {
-                                    $set: {
-                                        status: "PENDING",
-                                        amount: sentAmount,
-                                        unit,
-                                        dest,
-                                        type: "INSUFFICIENT_FUNDS",
-                                        block_height: args.data.blkHeight
-                                    }
-                                }, {
-                                    upsert: true
-                                })
-                            }
-                        }
-                        
-                    } else {
-                        //Insert deposit IF not withdraw
-                        await this.ledgerDb.findOneAndUpdate({
+                        await this.self.transactionPool.txDb.findOneAndUpdate({
                             id: `${tx.transaction_id}-${idx}`,
                         }, {
                             $set: {
-                                amount: Number(amount) * 1_000,
-                                unit: unit,
-                                from: opBody.from,
-                                owner: decodedMemo['owner'],
-                                block_height: args.data.blkHeight
+                                status: TransactionDbStatus.included,
+                                required_auths: [
+                                    {
+                                        value: `hive:${opBody.from}`,
+                                        type: 'active'
+                                    }
+                                ],
+                                headers: {
+                                    type: TransactionDbType.input
+                                },
+                                data: {
+                                    op: "withdraw",
+                                    payload: {
+                                        from: `hive:${opBody.from}`,
+                                        to: normalDest,
+                                        amount: withdrawlAmount,
+                                        tk: unit,
+                                    }
+                                },
+                                first_seen: new Date(), //Fix this
+                                local: false,
+                                accessible: false,
+                                src: 'hive',
+                                anchored_block: args.data.block_id,
+                                anchored_height: args.data.blkHeight,
+                                anchored_id: args.data.block_id,
+                                anchored_index: args.data.idx
                             }
                         }, {
                             upsert: true
                         })
                     }
+                    //Insert deposit always
+                    await this.ledgerDb.findOneAndUpdate({
+                        id: `${tx.transaction_id}-${idx}`,
+                    }, {
+                        $set: {
+                            t: 'deposit',
+                            amount: Number(amount) * 1_000,
+                            //Must be HIVE or HBD
+                            //TODO: fix upstream type
+                            tk: unit as "HIVE" | "HBD",
+                            from: opBody.from,
+                            owner: normalDest,
+                            block_height: args.data.blkHeight,
+
+                            tx_id: tx.transaction_id
+                        }
+                    }, {
+                        upsert: true
+                    })
                 }
             }
         }

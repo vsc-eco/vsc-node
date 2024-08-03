@@ -1,5 +1,4 @@
-import { LedgerType } from "../types";
-import { ContractErrorType } from "./utils";
+import { ContractErrorType } from "./utils.js";
 
 type Message = {type: string};
 
@@ -18,7 +17,6 @@ export type PartialResultMessage = Message & {
     contract_id: string,
     index: string, // TODO change to number
     stateMerkle: string,
-    ledgerResults: LedgerType[],
 };
 
 export type FinishResultMessage = Message & {
@@ -42,6 +40,7 @@ export type ExecuteStopMessage = Message & {
     logs:( string | number | boolean)[],
     IOGas: number,
     reqId: string,
+    ledger: EventOp[],
 }
 
 export type CallMessage = Message & {
@@ -50,6 +49,10 @@ export type CallMessage = Message & {
     payload: string,
     action: string,
     intents: string[],
+    balance_map: Record<string, {
+        HBD: number
+        HIVE: number
+    }>
     env: Env,
     reqId: string,
 }
@@ -61,3 +64,30 @@ export type FinishMessage = Message & {
 export type AnySentMessage = CallMessage | FinishMessage
 
 export type AnyReceivedMessage = PartialResultMessage | FinishResultMessage | ReadyMessage | ExecuteStopMessage
+
+
+export enum EventOpType {
+    'ledger:transfer' = 110_001,
+    'ledger:withdraw' = 110_002,
+    'ledger:deposit' = 110_003,
+  
+    //Reserved for future, DO NOT USE
+    'ledger:stake_hbd' = 110_004,
+    'ledger:unstake_hbd' = 110_005,
+    'ledger:claim_hbd' = 110_006,
+    
+    //Reserved for future, DO NOT USE
+    'consensus:stake' = 100_001,
+    'consensus:unstake' = 100_002
+    
+  }
+  
+  
+  export interface EventOp {
+    owner: string
+    tk: 'HBD' | 'HIVE'
+    t: EventOpType
+    amt: number
+    memo?: string
+    
+  }

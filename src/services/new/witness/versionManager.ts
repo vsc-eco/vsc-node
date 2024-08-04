@@ -7,7 +7,7 @@ import { TransactionDbStatus } from "../types";
 
 
 export const VersionConfig = {
-    index_reset_id: 23,
+    index_reset_id: 24,
 
      /**
       * should only be increased, but it can be decremented when trying a previous block reset

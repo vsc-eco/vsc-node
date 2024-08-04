@@ -516,6 +516,7 @@ export class ChainBridgeV2 {
                                                         })
                                                         if(!withdrawRecord) {
                                                             await this.self.witness.balanceKeeper.withdrawDb.insertOne({ 
+                                                                status: "PENDING",
                                                                 id: `${tx.id}-${idx}`,
                                                                 amount: ledgerEntry.amount,
                                                                 from: ledgerEntry.from,

@@ -506,40 +506,7 @@ export class ChainBridgeV2 {
                                                     console.error(e)
                                                 }
                                             }
-                                            if(txData.ledger_results) {
-                                                for(let idx in txData.ledger_results) {
-                                                    const ledgerEntry = txData.ledger_results[idx]
-                                                    if(ledgerEntry.to === "#withdraw") {
-                                                        //Safety for when replaying
-                                                        const withdrawRecord = await this.self.witness.balanceKeeper.withdrawDb.findOne({
-                                                            id: `${tx.id}-${idx}`
-                                                        })
-                                                        if(!withdrawRecord) {
-                                                            await this.self.witness.balanceKeeper.withdrawDb.insertOne({ 
-                                                                status: "PENDING",
-                                                                id: `${tx.id}-${idx}`,
-                                                                amount: ledgerEntry.amount,
-                                                                from: ledgerEntry.from,
-                                                                dest: ledgerEntry.dest,
-                                                                type: "CONTRACT_WITHDRAW"
-                                                            })
-                                                        }
-                                                    } 
-                                                    await this.self.witness.balanceKeeper.ledgerDb.findOneAndUpdate({
-                                                        id: `${tx.id}-${idx}`
-                                                    }, {
-                                                        $set: {
-                                                            amount: ledgerEntry.amount,
-                                                            from: ledgerEntry.from,
-                                                            to: ledgerEntry.to,
-                                                            dest: ledgerEntry.dest,
-                                                            owner: ledgerEntry.owner,
-                                                        }
-                                                    }, {
-                                                        upsert: true
-                                                    })
-                                                }
-                                            }
+                                           
                                         } else if(tx.type === TransactionDbType.input) {
                                             nonceMap[await computeKeyId(txData.headers.required_auths)] = txData.headers.nonce
 

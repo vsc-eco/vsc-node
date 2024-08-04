@@ -195,6 +195,7 @@ export class BalanceKeeper {
                         id: `${blockId}-${eventIdx}`
                     }, {
                         $set: {
+                            status: "PENDING",
                             t: 'withdraw',
                             dest: new URLSearchParams(queryString).get('to'),
                             amount: event.amt,

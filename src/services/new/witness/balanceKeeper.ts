@@ -47,7 +47,17 @@ interface BalanceType {
 export class BalanceKeeper {
     self: NewCoreService;
     balanceDb: Collection<BalanceType>
-    withdrawDb: Collection;
+    withdrawDb: Collection<{
+        id: string
+        amount: number
+        block_height: number
+        dest: string
+        height: number
+        idx: number
+        status: 'PENDING' | 'COMPLETE'
+        t:"withdraw"
+        tk: "HIVE" | "HBD"
+    }>;
     ledgerDb: Collection<{
         id: string
         dest: string
@@ -274,7 +284,7 @@ export class BalanceKeeper {
                 return {
                     id: e.id,
                     amount: e.amount,
-                    unit: e.unit,
+                    unit: e.tk,
                     dest: e.dest
                 }
             })
@@ -301,11 +311,11 @@ export class BalanceKeeper {
                 {
                     from: this.multisigAccount,
                     to: e.dest,
-                    amount: `${(e.amount / 1_000).toFixed(3)} ${e.unit}`,
+                    amount: `${(e.amount / 1_000).toFixed(3)} ${e.tk}`,
                     memo: 'Withdrawal from VSC network'
                 }
-            ]
-           }) as any
+            ] as const
+           })
             
         ], block_height, moment.duration(30, 'seconds').asMilliseconds())
 

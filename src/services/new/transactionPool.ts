@@ -6,7 +6,7 @@ import { HiveClient, unwrapDagJws } from "../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { encodePayload } from 'dag-jose-utils'
 import { CID } from "kubo-rpc-client";
-import { verifyTx } from "./utils";
+import { computeKeyId, verifyTx } from "./utils";
 import { convertEIP712Type } from "@vsc.eco/client/dist/utils";
 import * as DagCbor from '@ipld/dag-cbor'
 import NodeSchedule from 'node-schedule'
@@ -99,12 +99,14 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
 
             const signature = (sig as SigEIP191).s
             const hash = hashTypedData({
-                ...typedData as any
+                ...typedData as any,
+                message: decodedTx
             })
 
             //0xHex64bytes
             const addressMetamask = await recoverTypedDataAddress({
                 ...typedData,
+                message: decodedTx,
                 //as any because it wants 0x string type
                 signature
             } as any)
@@ -122,6 +124,7 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
             const evmAddresses = filteredAuths.map(e => { 
                 return AccountId.parse(e.replace('did:pkh:', '')).address
             })
+            console.log('recoveredAuths', resolveAddresses, evmAddresses)
 
             //If not included in list of DID auths
             //There is a signing difference between Metamask and direct private key signing
@@ -129,16 +132,18 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
             //For now, this will support for metamask and direct private key signing
             let resolvAddr;
             for(let addr of resolveAddresses) {
-                if(evmAddresses.includes(addr)) {
-                    resolvAddr = addr
+                const idx = evmAddresses.indexOf(addr)
+                if(idx !== -1) {
+                    resolvAddr = evmAddresses[idx]
                     break
                 }
             }
+            
             if(!resolvAddr) { 
                 return [false, "INCORRECT_SIG"];
             }
 
-            recoveredAuths.push(`did:pkh:eip155:1:${address}`)
+            recoveredAuths.push(`did:pkh:eip155:1:${resolvAddr}`)
         } else {
             //Verify via JWS
             const formattedJws = await convertSigToJWS(txCid, sig as SigJWS)
@@ -166,7 +171,8 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
 
             recoveredAuths.push(signedDid)
         }
-        for(let signer of decodedTx.headers.required_auths) { 
+        for(let signer of decodedTx.headers.required_auths) {
+            console.log('recoveredAuths, signer', recoveredAuths, signer)
             if(!recoveredAuths.includes(signer)) {
                 return [false, "MISSING_AUTH"]
             }
@@ -178,6 +184,10 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
 export class TransactionPoolV2 {
     self: NewCoreService;
     txDb: Collection<TransactionDbRecordV2>
+    nonceMap: Collection<{
+        id: string
+        nonce: number
+    }>
     constructor(self: NewCoreService) {
         this.self = self
 
@@ -225,6 +235,8 @@ export class TransactionPoolV2 {
             if(isValidSig === false) { 
                 return false;
             }
+
+            
            
             //TODO: Do nonce validation
 
@@ -290,6 +302,19 @@ export class TransactionPoolV2 {
                 throw new Error('Unknown Signature Validation Error')
             }
         }
+
+        if(typeof decodedTx.headers.nonce !== 'number') {
+            throw new Error('Missing Nonce')
+        }
+
+        const nonceMap = (await this.nonceMap.findOne({
+            id: await computeKeyId(decodedTx.headers.required_auths)
+        })) || {nonce: 0}
+
+        if(nonceMap.nonce <= decodedTx.headers.nonce) {
+            throw new Error('Invalid Nonce')
+        }
+
 
 
         //TODO: Do nonce validation
@@ -488,6 +513,7 @@ export class TransactionPoolV2 {
     
     async init() {
         this.txDb = this.self.db.collection('transaction_pool')
+        this.nonceMap = this.self.db.collection('nonce_map')
 
         try {
             await this.txDb.createIndex(
@@ -499,6 +525,17 @@ export class TransactionPoolV2 {
                 },
             )
         } catch {}
+
+        try {
+
+            await this.nonceMap.createIndex({
+                id: 1
+            }, {
+                unique: true
+            })
+        } catch {
+
+        }
 
         // this.self.chainBridge.registerTickHandle('tx_pool.processTx', this.tickHandle, {
         //     type: 'tx',

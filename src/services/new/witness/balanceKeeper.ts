@@ -279,14 +279,26 @@ export class BalanceKeeper {
         if(withdrawals.length === 0) { 
             throw new Error('No withdrawals to process')
         }
+        const dedupedAccounts = {}
+        for(let withdraw of withdrawals) {
+            dedupedAccounts[withdraw.dest.split(":")[1]] = true
+        }
+
+        //Optimize this if needed
+        let existingAccounts = []
+        const existingQuery = await HiveClient.database.getAccounts(Object.keys(dedupedAccounts))
+
+        for(let account of Object.keys(dedupedAccounts)) {
+            if(!!existingQuery.find(e => e.name === account)) {
+                existingAccounts.push(account)
+            }
+        }
+
+        const filteredWithdrawals = withdrawals.filter(e => existingAccounts.includes(e.dest.split(":")[1]))
+        
         const withdrawalData = {
-            withdrawals: withdrawals.map(e => {
-                return {
-                    id: e.id,
-                    amount: e.amount,
-                    unit: e.tk,
-                    dest: e.dest
-                }
+            withdrawals: filteredWithdrawals.map(e => {
+                return e.id
             })
         }
         const packedWithdraws = (await this.self.ipfs.dag.put(withdrawalData)).toString()
@@ -304,13 +316,13 @@ export class BalanceKeeper {
                     })
                 }
             ],
-           ...withdrawals.map(e => {
+           ...filteredWithdrawals.map(e => {
             
             return [
                 'transfer',
                 {
                     from: this.multisigAccount,
-                    to: e.dest,
+                    to: e.dest.split(":")[1],
                     amount: `${(e.amount / 1_000).toFixed(3)} ${e.tk}`,
                     memo: 'Withdrawal from VSC network'
                 }
@@ -389,25 +401,13 @@ export class BalanceKeeper {
                     const json = JSON.parse(opBody.json)
                     const withdrawals = (await this.self.ipfs.dag.get(CID.parse(json.ref_id))).value.withdrawals
 
-                    for(let withdraw of withdrawals) {
+                    for(let withdrawId of withdrawals) {
                         await this.withdrawDb.findOneAndUpdate({
-                            id: withdraw.id
+                            id: withdrawId
                         }, {
                             $set: {
                                 status: "COMPLETE",
                                 withdraw_id: tx.transaction_id
-                            }
-                        })
-                    }
-
-                    for(let account of withdrawals.map(e => e.dest)) {
-                        const balanceSnapshot = await this.getSnapshot(account.dest, args.data.blkHeight)
-                        await this.balanceDb.findOneAndUpdate({
-                            account: account,
-                            block_height: balanceSnapshot.block_height
-                        }, {
-                            $set: {
-                                tokens: balanceSnapshot.tokens,
                             }
                         }, {
                             upsert: true

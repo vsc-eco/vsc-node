@@ -311,7 +311,7 @@ export class TransactionPoolV2 {
             id: await computeKeyId(decodedTx.headers.required_auths)
         })) || {nonce: 0}
 
-        if(nonceMap.nonce <= decodedTx.headers.nonce) {
+        if(nonceMap.nonce > decodedTx.headers.nonce) {
             throw new Error('Invalid Nonce')
         }
 

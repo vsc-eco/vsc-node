@@ -6,7 +6,7 @@ import { HiveClient, unwrapDagJws } from "../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { encodePayload } from 'dag-jose-utils'
 import { CID } from "kubo-rpc-client";
-import { computeKeyId, verifyTx } from "./utils";
+import { ParserFuncArgs, computeKeyId, verifyTx } from "./utils";
 import { convertEIP712Type } from "@vsc.eco/client/dist/utils";
 import * as DagCbor from '@ipld/dag-cbor'
 import NodeSchedule from 'node-schedule'
@@ -449,7 +449,7 @@ export class TransactionPoolV2 {
      * @param args 
      * @returns 
      */
-    protected async blockParser(args) {
+    protected async blockParser(args: ParserFuncArgs<'tx'>) {
         try {
 
              
@@ -466,40 +466,47 @@ export class TransactionPoolV2 {
                             continue;
                         }
             
-                        const required_auths = []
-                        required_auths.push(...opBody.required_posting_auths.map(e => {
-                            return `${e}?type=posting`
+                        const required_auths:{
+                            type?: "payer" | "active" | "posting" | undefined;
+                            value: string;
+                        }[] = []
+                        required_auths.push(...(opBody.required_posting_auths as string[]).map((e: string) => {
+                            return {
+                                value: e,
+                                type: 'posting' as const,
+                            }
                         }))
-                        required_auths.push(...opBody.required_auths.map(e => {
-                            return `${e}?type=active`
+                        required_auths.push(...(opBody.required_auths as string[]).map((e: string) => {
+                            return {
+                                value: e,
+                                type: 'active' as const
+                            }
                         }))
-                        const txData = {
-                            status: TransactionDbStatus.included,
-                            id: `${tx.transaction_id}-${i}`,
-                            required_auths,
-                            anchored_height: blkHeight,
-                            anchored_index: tx.index,
-                            anchored_op_index: i,
-                            headers: {
-                                // lock_block: fullTx.block_height + 120,
-                                type: json.tx.type
-                            },
-                            data: {
-                                contract_id: json.tx.contract_id,
-                                op: json.tx.op,
-                                payload: json.tx.payload,
-                                action: json.tx.action,
-                            },
-                            result: null,
-                            local: false,
-                            first_seen: new Date(),
-                            accessible: true,
-                            src: "hive" as any,
-                        }
                         await this.txDb.findOneAndUpdate({
-                            id: `${tx.transaction_id}-${tx.index}`,
+                            id: `${tx.transaction_id}-${i}`,
                         }, {
-                            $set: txData
+                            $set: {
+                                status: TransactionDbStatus.included,
+                                id: `${tx.transaction_id}-${i}`,
+                                required_auths,
+                                anchored_height: blkHeight,
+                                anchored_index: tx.index,
+                                anchored_op_index: i,
+                                headers: {
+                                    // lock_block: fullTx.block_height + 120,
+                                    type: json.tx.type
+                                },
+                                data: {
+                                    contract_id: json.tx.contract_id,
+                                    op: json.tx.op,
+                                    payload: json.tx.payload,
+                                    action: json.tx.action,
+                                },
+                                local: false,
+                                first_seen: new Date(),
+                                accessible: true,
+                                src: "hive",
+                            } satisfies TransactionDbRecordV2,
                         }, {
                             upsert: true
                         })

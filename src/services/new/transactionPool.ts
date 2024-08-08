@@ -2,7 +2,7 @@ import { Collection } from "mongodb";
 import { NewCoreService } from ".";
 import { MessageHandleOpts } from "./p2pService";
 import { SignatureType, TransactionContainerV2, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from "./types";
-import { HiveClient, unwrapDagJws } from "../../utils";
+import { HiveClient, sleep } from "../../utils";
 import { PrivateKey } from "@hiveio/dhive";
 import { encodePayload } from 'dag-jose-utils'
 import { CID } from "kubo-rpc-client";
@@ -17,6 +17,10 @@ import * as Block from 'multiformats/block'
 import * as codec from '@ipld/dag-cbor'
 import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'
 import {recover} from 'web3-eth-accounts'
+import pkg from 'bloom-filters';
+import Moment from 'moment'
+
+const { BloomFilter } = pkg;
 
 
 
@@ -188,11 +192,15 @@ export class TransactionPoolV2 {
         id: string
         nonce: number
     }>
+    rejectFilter: pkg.BloomFilter;
     constructor(self: NewCoreService) {
         this.self = self
 
         this.blockParser = this.blockParser.bind(this)
         this.onTxAnnounce = this.onTxAnnounce.bind(this)
+
+
+        this.rejectFilter = new BloomFilter(32 * 1024 * 8, 16)
     }
 
     /**
@@ -223,6 +231,24 @@ export class TransactionPoolV2 {
         const txRecord = await this.txDb.findOne({
             id: tx_id
         })
+        if(this.rejectFilter.has(tx_id)) {
+            // console.log('HIT filter', tx_id)
+            return;
+        } else {
+            //Verify nonce is valid
+            const nonceEntry = await this.nonceMap.findOne({
+                id: await computeKeyId(decodedTx.headers.required_auths)
+            })
+            if(nonceEntry) {
+                //Invalid nonce, reject transaction and add to filter
+                if(nonceEntry.nonce > decodedTx.headers.nonce) {
+                    // console.log('INVALID TX: adding to filter', tx_id)
+                
+                    this.rejectFilter.add(tx_id)
+                    return; 
+                }
+            }
+        }
         if(!txRecord) { 
             if(!sig_data) {
                 return;
@@ -445,6 +471,58 @@ export class TransactionPoolV2 {
     }
 
     /**
+     * Cleans invalid transactions/expired transactions
+     * TODO: in the future this should be done automatically after each new block
+     * For now we can just do this lazily
+     */
+    async transactionCleaner() {
+        const unconfirmedTxs = await this.txDb.find({ 
+            status: TransactionDbStatus.unconfirmed,
+            //Assume if transaction is not included within 1 hour that it is invalid
+            //And should be dropped (assuming it actually is invalid)
+            first_seen: {
+                $lt: Moment().subtract(1, 'hour').toDate()
+            }
+        }).toArray()
+
+        //Gather nonces to invalidate
+        let nonceMap: Record<string, number> = {}
+        for(let tx of unconfirmedTxs) { 
+            const keyId = await computeKeyId(tx.required_auths.map(e => e.value));
+            nonceMap[keyId] = ((await this.nonceMap.findOne({
+                id: keyId
+            })) || {nonce: 0}).nonce
+        }
+
+        // const currentBlock = await HiveClient.blockchain.getCurrentBlockNum()
+        for(let tx of unconfirmedTxs) {
+            //TODO: Diagram expire_block logic
+            // if(!!tx.headers.expire_block && tx.headers.expire_block < currentBlock) {
+            //     await this.txDb.deleteOne({ 
+            //         id: tx.id
+            //     })
+            //     continue;
+            // }
+            
+            const keyId = await computeKeyId(tx.required_auths.map(e => e.value));
+            if(tx.headers.nonce < nonceMap[keyId]) {
+                await this.txDb.deleteOne({ 
+                    id: tx.id
+                })
+                this.rejectFilter.add(tx.id)
+                this.self.ipfs.pin.rm(CID.parse(tx.id)).catch(() => {})
+                this.self.ipfs.pin.rm(CID.parse(tx.sig_hash)).catch(() => {})
+                
+                await sleep(100)
+
+                continue;
+            }
+
+        }
+
+    }
+
+    /**
      * Hive block parser for TX pool
      * @param args 
      * @returns 
@@ -575,6 +653,10 @@ export class TransactionPoolV2 {
                     mode: 'basic'
                 })
             }
+        })
+        //Do every 15 minutes
+        NodeSchedule.scheduleJob('*/15 * * * *', async () => { 
+            await this.transactionCleaner()
         })
     }
 

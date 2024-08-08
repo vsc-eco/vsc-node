@@ -223,7 +223,7 @@ export class BalanceKeeper {
                         id: `${blockId}-${eventIdx}`,
                     }, {
                         $set: {
-                            t: 'transfer',
+                            t: 'withdraw',
                             owner: event.owner,
                             amount: event.amt,
                             tk: event.tk,

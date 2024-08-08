@@ -296,6 +296,10 @@ export class BalanceKeeper {
 
         const filteredWithdrawals = withdrawals.filter(e => existingAccounts.includes(e.dest.split(":")[1]))
         
+        if(filteredWithdrawals.length === 0) { 
+            throw new Error('No withdrawals to process')
+        }
+
         const withdrawalData = {
             withdrawals: filteredWithdrawals.map(e => {
                 return e.id
@@ -346,7 +350,7 @@ export class BalanceKeeper {
             payload: {
                 block_height: block_height,
             },
-            streamTimeout: 5_000
+            streamTimeout: 9_000
         })
 
         const [multisigAccount] = await HiveClient.database.getAccounts([networks[this.self.config.get('network.id')].multisigAccount])

@@ -602,7 +602,9 @@ export class ChainBridgeV2 {
                                                     await this.self.transactionPool.txDb.findOneAndUpdate({ 
                                                         id: tx.id
                                                     }, {
-                                                        status: TransactionDbStatus.failed
+                                                        $set: {
+                                                            status: TransactionDbStatus.failed
+                                                        }
                                                     })
                                                 }
                                             }

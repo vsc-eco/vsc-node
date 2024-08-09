@@ -461,6 +461,7 @@ export class ContractEngineV2 {
         this.addrsDb = this.self.db.collection('addrs')
         this.contractDb = this.self.db.collection('contracts')
         this.contractOutputs = this.self.db.collection('contract_outputs')
+        this.contractVersionDb = this.self.db.collection('contract_versions')
         this.self.chainBridge.streamParser.addParser({
             name: "contract-engine",
             type: 'tx',

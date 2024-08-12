@@ -367,6 +367,7 @@ export class VmContainer {
         this.events.on('partial-result', func)
         this.events.once('timeout', (resultErr) => {
           this.events.off('partial-result', func)
+          this.child.kill('SIGKILL')
           pushable.end(CONTRACT_TIMEOUT_ERROR)
         })
         this.events.once('finish-result', () => {

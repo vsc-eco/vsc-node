@@ -424,6 +424,18 @@ export class TxContext {
     this._initalized = true
   }
 
+  /**
+   * Cleans up VM context or other services as necessary
+   */
+  close() {
+    try {
+      //in case of error don't cascade
+      this.contractVM.vm.close()
+    } catch {
+
+    }
+  }
+
   async finalize(ipfs: KuboRpcClientApi)  {
     const contractOutputs = []
 
@@ -459,6 +471,8 @@ export class TxContext {
       events: this.ledger
     }
     console.log(JSON.stringify(eventData, null, 2))
+
+    this.close()
     return {
       outputs: contractOutputs,
       events: eventData
@@ -679,6 +693,7 @@ export class WitnessServiceV2 {
         contractOutputs = outputs;
         eventsList = events;
       }
+      txExecutor.close()
       
       // for(let contractId of contractIds) {
       //   const output = await this.self.contractEngine.createContractOutput({

@@ -381,6 +381,11 @@ export class VmContainer {
       pushable.end()
       return pushable;
     }
+
+  }
+  
+  close() {
+    this.child.kill('SIGKILL')
   }
 
   async init() {

@@ -172,9 +172,13 @@ export class BalanceKeeper {
         const allEvents = []
         for(let idx in blockEvents.txs) {
             const txMap = blockEvents.txs_map[idx]
+            const txId = blockEvents.txs[idx]
 
             allEvents.push(...txMap.map(e => {
-                return blockEvents.events[e]
+                return {
+                    ...blockEvents.events[e],
+                    txId
+                }
             }))
         }
         for(let eventIdx in allEvents) {
@@ -182,7 +186,7 @@ export class BalanceKeeper {
             
             if(EventOpType['ledger:transfer'] === event.t) {
                 await this.ledgerDb.findOneAndUpdate({
-                    id: `${blockId}-${eventIdx}`,
+                    id: `${event.txId}-${eventIdx}`,
                 }, {
                     $set: {
                         t: 'transfer',
@@ -202,7 +206,7 @@ export class BalanceKeeper {
                     const [,queryString] = event.owner.split('?')
                     
                     await this.withdrawDb.findOneAndUpdate({ 
-                        id: `${blockId}-${eventIdx}`
+                        id: `${event.txId}-${eventIdx}`
                     }, {
                         $set: {
                             status: "PENDING",
@@ -220,9 +224,10 @@ export class BalanceKeeper {
                     })
                 } else {
                     await this.ledgerDb.findOneAndUpdate({
-                        id: `${blockId}-${eventIdx}`,
+                        id: `${event.txId}-${eventIdx}`,
                     }, {
                         $set: {
+                            status: "PENDING",
                             t: 'withdraw',
                             owner: event.owner,
                             amount: event.amt,

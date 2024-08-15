@@ -194,7 +194,7 @@ Object.defineProperty(Instance.prototype, 'exports', { enumerable: true })
 
 export async function instantiate(source, imports) {
   let state = new Asyncify()
-  let result = await loader.instantiate(source, state.wrapImports(imports))
+  let result = await loader.instantiate<{}>(source, state.wrapImports(imports))
   state.init(result instanceof WebAssembly.Instance ? result : result.instance, imports)
   return result
 }

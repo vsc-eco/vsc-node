@@ -870,7 +870,7 @@ class VmRunner {
             this.revertOp()
           },
           'console.log': (keyPtr) => {
-            const logMsg = (insta as any).exports.__getString(keyPtr)
+            const logMsg = insta.exports.__getString(keyPtr)
             logs.push(logMsg)
             IOGas = IOGas + logMsg.length
           },
@@ -881,8 +881,8 @@ class VmRunner {
             logs.push(Boolean(val))
           },
           'db.setObject': (keyPtr, valPtr) => {
-            const key = (insta as any).exports.__getString(keyPtr)
-            const val = (insta as any).exports.__getString(valPtr)
+            const key = insta.exports.__getString(keyPtr)
+            const val = insta.exports.__getString(valPtr)
 
             IOGas = IOGas + key.length + (val?.length || 0)
 
@@ -890,7 +890,7 @@ class VmRunner {
             return 1
           },
           'db.getObject': async (keyPtr) => {
-            const key = (insta as any).exports.__getString(keyPtr)
+            const key = insta.exports.__getString(keyPtr)
             let value
             if (wasmRunner.tmpState.has(key)) {
               value = wasmRunner.tmpState.get(key)
@@ -908,7 +908,7 @@ class VmRunner {
             return insta.exports.__newString(val)
           },
           'db.delObject': (keyPtr) => {
-            const key = (insta as any).exports.__getString(keyPtr)
+            const key = insta.exports.__getString(keyPtr)
             wasmRunner.tmpState.set(key, null)
           },
           'system.call': async (callPtr, valPtr) => {
@@ -937,7 +937,7 @@ class VmRunner {
             )
           },
         },
-      } as any)
+      })
 
       if (!insta.instance.exports[args.action]) {
         return {
@@ -954,10 +954,10 @@ class VmRunner {
       let ptr
       try {
         ptr = await (insta.instance.exports[args.action] as any)(
-          (insta as any).exports.__newString(args.payload),
+          insta.exports.__newString(args.payload),
         )
 
-        const str = (insta as any).exports.__getString(ptr)
+        const str = insta.exports.__getString(ptr)
 
         //Assume successful, save any ledger results.
         const {ledger} = this.finishOp()

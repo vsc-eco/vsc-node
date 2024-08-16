@@ -272,7 +272,7 @@ export const Resolvers = {
     let di = 0;
     let ti = 0;
     while (di < originalDepositsLength && ti < withdrawalsAndtransfers.length) {
-      if (deposits[di + ti].block_height < withdrawalsAndtransfers[ti].anchored_height!) {
+      if (deposits[di + ti].block_height > withdrawalsAndtransfers[ti].anchored_height!) {
         txs[di + ti].status = TransactionDbStatus.confirmed
         di++;
       } else {
@@ -283,6 +283,10 @@ export const Resolvers = {
 
     if (ti < withdrawalsAndtransfers.length) {
       deposits.push(...withdrawalsAndtransfers.slice(ti).map(mapTxToLedgerOp))
+    }
+
+    for (; di < originalDepositsLength; di++) {
+      txs[di + ti].status = TransactionDbStatus.confirmed
     }
 
     console.log(JSON.stringify({originalDepositsLength, withdrawalsAndtransfers: withdrawalsAndtransfers.length}, null, 2))

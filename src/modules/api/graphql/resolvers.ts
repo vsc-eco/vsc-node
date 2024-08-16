@@ -218,82 +218,77 @@ export const Resolvers = {
     }
   },
   findLedgerTXs: async (_, args) => {
-    let query = {}
-
-    if (args.byContractId) {
-      query['headers.contract_id'] = args.byContractId
+    if (!args.filterOptions?.byToFrom) {
+      throw new Error('filterOptions.byToFrom is required')
     }
+    const owner: string = args.filterOptions?.byToFrom;
+    const limit = Math.min(100, Math.max(0, args.filterOptions?.limit ?? 20))
+    const [deposits, withdrawalsAndtransfers] = await Promise.all([
+      appContainer.self.newService.witness.balanceKeeper.ledgerDb.find({
+        t: 'deposit',
+        $or: [
+          { owner },
+          ...(owner.startsWith('hive:') ? [{ from: owner.slice('hive:'.length) }] : []),
+        ],
+      }, {
+        limit,
+        sort: [
+          ['block_height', -1]
+          // TODO add tx op index
+        ]
+      }).toArray(),
+      appContainer.self.newService.transactionPool.txDb.find({
+        $and: [
+          { $or: [{ 'data.op': 'transfer' }, { 'data.op': 'withdraw' }] },
+          { $or: [{ 'data.payload.from': owner }, { 'data.payload.to': owner }] },
+        ],
+      }, {
+        limit,
+        sort: [
+          ['anchored_height', -1],
+          ['anchored_index', -1],
+        ]
+      }).toArray(),
+    ])
 
-    if (args.byToFrom) {
-      query['$or'] = [
-        {
-          'decoded_tx.from': args.byToFrom
-        },
-        {
-          'decoded_tx.dest': args.byToFrom
-        }
-      ]
-    }
+    type Tx = typeof deposits[number] & {status: TransactionDbStatus}
 
-
-    // let txs = await appContainer.self.transactionPool.transactionPool.find({
-    //   ...query
-    // }, {
-    //   limit: 100,
-    //   skip: 0,
-    //   sort: {
-    //     first_seen: -1
-    //   }
-    // }).toArray()
-    let txs = []
-
-    const dedup = {}
-    const out = []
-    txs.forEach(e => {
-      if ((e as any).decoded_tx.tx_id) {
-        if (!dedup[(e as any).decoded_tx.tx_id] || (e as any).decoded_tx.op_cateogry === 'ledger_transfer') {
-          out.push(e)
-          dedup[(e as any).decoded_tx.tx_id] = true
-        }
-      } else {
-        out.push(e)
-      }
+    const mapTxToLedgerOp = (tx: typeof withdrawalsAndtransfers[number]): Tx => ({
+      id: tx.id,
+      tk: tx.data.payload.tk,
+      amount: tx.data.payload.amount,
+      block_height: tx.anchored_height!,
+      idx: tx.anchored_op_index!,
+      owner: tx.data.payload.to,
+      from: tx.data.payload.from,
+      t: tx.data.op,
+      memo: tx.data.payload.memo,
+      status: tx.status,
+      _id: tx._id,
     })
+    
+    const txs = deposits as Tx[]
+    const originalDepositsLength = deposits.length
+    let di = 0;
+    let ti = 0;
+    while (di < originalDepositsLength && ti < withdrawalsAndtransfers.length) {
+      if (deposits[di + ti].block_height < withdrawalsAndtransfers[ti].anchored_height!) {
+        txs[di + ti].status = TransactionDbStatus.confirmed
+        di++;
+      } else {
+        deposits.splice(di+ti, 0, mapTxToLedgerOp(withdrawalsAndtransfers[ti]));
+        ti++
+      }
+    }
 
+    if (ti < withdrawalsAndtransfers.length) {
+      deposits.push(...withdrawalsAndtransfers.slice(ti).map(mapTxToLedgerOp))
+    }
+
+    console.log(JSON.stringify({originalDepositsLength, withdrawalsAndtransfers: withdrawalsAndtransfers.length}, null, 2))
 
     return {
-      txs: out.map(e => {
-        return {
-          ...e,
-          first_seen: e.first_seen.toISOString(),
-          redeem: async () => {
-            // if((e as any).decoded_tx.op_cateogry !== "wrap_redeem") {
-            //   return null
-            // }
-            // const contractInfo = await appContainer.self.contractEngine.contractDb.findOne({
-            //   id: e.headers.contract_id
-            // })
-            // console.log(contractInfo)
-            // try {
-
-            //   const redeemId = (e as any).decoded_tx.redeem_id
-
-            //   const redeemCid = await appContainer.self.ipfs.dag.resolve(IPFS.CID.parse(contractInfo.state_merkle), {
-            //     path: `redeems/${redeemId}`,
-            //   })
-
-            //   return (await appContainer.self.ipfs.dag.get(redeemCid.cid)).value
-            // } catch (ex) {
-            //   if (!ex.message.includes('no link named')) {
-            //     console.log(ex)
-            //   }
-            //   // console.log(ex)
-            //   return null
-            // }
-            return null
-          },
-        }
-      })
+      txs: txs.slice(0, limit)
     };
   },
   localNodeInfo: async () => {

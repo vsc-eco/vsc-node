@@ -60,12 +60,13 @@ export class BalanceKeeper {
     }>;
     ledgerDb: Collection<{
         id: string
-        dest: string
+        owner: string
         amount: number
         tk: "HIVE" | "HBD"
-        height: number
+        block_height: number
         idx: number
         memo?: string
+        from?: string
         t: 'deposit' | 'transfer' | 'withdraw'
 
         //Receip

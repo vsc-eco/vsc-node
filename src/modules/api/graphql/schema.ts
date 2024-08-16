@@ -175,6 +175,24 @@ export const schema = `
     type AnchorProducer {
         nextSlot(account: String): JSON
     }
+    type LedgerOp {
+        id: String!
+        amount: Int!
+        block_height: Int!
+        from: String
+        memo: String
+        owner: String!
+        t: String!
+        tk: String!
+        status: String!
+    }
+    type LedgerResults {
+        txs: [LedgerOp!]
+    }
+    input LedgerTxFilter {
+        byToFrom: String
+        limit: Int
+    }
     input FindTransactionFilter {
         byId: String
         byAccount: String
@@ -194,7 +212,7 @@ export const schema = `
         contractState(id: String): ContractState
         findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindTransactionResult
         findContractOutput(filterOptions: FindContractOutputFilter, decodedFilter: JSON): FindContractOutputResult
-        findLedgerTXs(byContractId: String, byToFrom: String): FindTransactionResult
+        findLedgerTXs(filterOptions: LedgerTxFilter): LedgerResults
 
         getAccountBalance(account: String): GetBalanceResult
         

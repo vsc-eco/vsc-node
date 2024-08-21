@@ -218,18 +218,24 @@ export const Resolvers = {
     }
   },
   findLedgerTXs: async (_, args) => {
-    if (!args.filterOptions?.byToFrom) {
-      throw new Error('filterOptions.byToFrom is required')
+    const hasFromArg = !!args.filterOptions?.byToFrom;
+    const hasTxArg = !!args.filterOptions?.byTxId;
+    if (hasFromArg === hasTxArg) {
+      throw new GraphQLError('exactly 1 of filterOptions.byToFrom or filterOptions.byTxId is required')
     }
-    const owner: string = args.filterOptions?.byToFrom;
+    const owner: string | undefined = args.filterOptions?.byToFrom;
     const limit = Math.min(100, Math.max(0, args.filterOptions?.limit ?? 20))
     const [deposits, withdrawalsAndtransfers] = await Promise.all([
       appContainer.self.newService.witness.balanceKeeper.ledgerDb.find({
         t: 'deposit',
+        ...(owner ? {
         $or: [
           { owner },
           ...(owner.startsWith('hive:') ? [{ from: owner.slice('hive:'.length) }] : []),
         ],
+      } : {
+        id: args.filterOptions?.byTxId
+      })
       }, {
         limit,
         sort: [
@@ -240,7 +246,7 @@ export const Resolvers = {
       appContainer.self.newService.transactionPool.txDb.find({
         $and: [
           { $or: [{ 'data.op': 'transfer' }, { 'data.op': 'withdraw' }] },
-          { $or: [{ 'data.payload.from': owner }, { 'data.payload.to': owner }] },
+          { ...(owner ? { $or: [{ 'data.payload.from': owner }, { 'data.payload.to': owner }] } : {id: args.filterOptions?.byTxId})},
         ],
       }, {
         limit,

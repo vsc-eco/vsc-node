@@ -583,7 +583,7 @@ export class ChainBridgeV2 {
                                             const includedTxs = await this.self.transactionPool.txDb.find({
                                                 status: TransactionDbStatus.included,
                                                 anchored_height: {
-                                                    $gte: startBlock,
+                                                    $gte: startBlock -1,
                                                     $lte: endBlock
                                                 }
                                             }).toArray()

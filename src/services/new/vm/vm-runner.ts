@@ -9,8 +9,8 @@ import { ContractErrorType, instantiate } from './utils.js'
 //Crypto imports
 import { ripemd160, sha256 } from 'bitcoinjs-lib/src/crypto.js'
 import { EventOp, EventOpType, type AnyReceivedMessage, type AnySentMessage, type Env, type ExecuteStopMessage, type FinishResultMessage, type PartialResultMessage, type ReadyMessage } from './types.js'
+import { CID } from 'multiformats'
 
-const CID = IPFS.CID
 
 const ipfs = IPFS.create({ url: process.env.IPFS_HOST || 'http://127.0.0.1:5001' })
 
@@ -39,239 +39,282 @@ function transformIntentField(intentName, fieldName, value) {
   }
 }
 
-export class WasmRunner {
+export class StateCache {
   stateCache: Map<string, any>
-  tmpState: Map<string, any>
-  constructor() {
+  opCache: Map<string, any>
+  stateMerkle: CID
+  //State Merkle for initialization
+  constructor(stateMerkle: string) {
+
+    this.stateMerkle = CID.parse(stateMerkle)
 
     //Permanent memory cache for state
     this.stateCache = new Map()
 
     //Temp memory cache for state. IF contract execution fails, this is reverted
-    this.tmpState = new Map()
+    this.opCache = new Map()
+
+
+    // this.lsCache = new Map()
   }
 
 
   /**
    * Finalize the state
    */
-  finishState() {
-    for(let [key, value] of this.tmpState.entries()) { 
+  finishOp() {
+    for(let [key, value] of this.opCache.entries()) { 
       this.stateCache.set(key, value)
     }
-    this.tmpState.clear();
+    this.opCache.clear();
   }
 
+  
   revertState() {
-    this.tmpState.clear()
+    this.opCache.clear()
   }
 
-  async contractStateRaw(id: string, stateMerkle?: string) {
-    let stateCid
-    // let contract = await this.contractDb.findOne({
-    //   id,
-    // })
-    const contract = {} as any
-    if (!contract) {
-      throw new Error('Contract Not Indexed Or Does Not Exist')
-    }
-    if (contract) {
-      if (stateMerkle) {
-        stateCid = CID.parse(stateMerkle)
+  async finalizeState(): Promise<CID> {
+    //In the future we could introduce batching to prevent many write operations
+    //stateCache gets mirrored to IPFS state
+    for(let [key, value] of this.stateCache.entries()) { 
+      if(value === null) {
+        await this.#del(key)
       } else {
-        if (contract.state_merkle) {
-          stateCid = CID.parse(contract.state_merkle)
+        await this.#put(key, value)
+      }
+    }
+    return this.stateMerkle
+  }
+
+  async #get (key: string) {
+    const ts = new Date();
+    try {
+      const out = await ipfs.dag.resolve(this.stateMerkle, {
+        path: key,
+      })
+
+      const data = await ipfs.dag.get(out.cid)
+
+      if (out.cid.code === 0x70) {
+        //If accidentally requesting PD-dag
+        const out = await ipfs.dag.resolve(this.stateMerkle, {
+          path: `${key}/.self`,
+        })
+
+        const data = await ipfs.dag.get(out.cid)
+        console.log('Finished pull ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+        return data.value
+      } else if (out.cid.code === 0x71) {
+        //CBOR dag
+        console.log('Finished pull ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+        return data.value
+      } else {
+        //This shouldn't happen unless other issues are present.
+        console.log('Finished pull ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+        return null
+      }
+    } catch (ex) {
+      console.log(ex)
+      console.log('Finished pull ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+      return null
+    }
+  }
+
+  async #put(key: string, value: string) {
+    const ts = new Date();
+
+    try {
+      if (!value) {
+        return
+      }
+
+      let linkExists
+      let dagData
+      let brokenPaths: ({
+        path: string,
+        cid: IPFS.CID,
+        wrongFormat: true,
+      } | {
+        path: string, 
+        wrongFormat?: never,
+      })[] = []
+      try {
+        const resolvedCid = await ipfs.dag.resolve(this.stateMerkle, {
+          path: key,
+        })
+
+        const rawData = await ipfs.dag.get(resolvedCid.cid)
+        if (resolvedCid.cid.code === 0x70) {
+          dagData = JSON.parse(Buffer.from(rawData.value.Data).toString())
+        } else if (resolvedCid.cid.code === 0x71) {
+          dagData = rawData.value
+        }
+      } catch (ex) {
+        linkExists = false
+        let splitKey = key.split('/')
+        for (let x = 0; x < splitKey.length; x++) {
+          let partialKey = splitKey.slice(0, splitKey.length - 1 - x)
+          console.log(partialKey)
+
+          try {
+            const cid = await ipfs.dag.resolve(this.stateMerkle, {
+              path: partialKey.join('/'),
+            })
+            console.log(cid.cid.code)
+            if (cid.cid.code === 0x70) {
+              break
+            } else {
+              brokenPaths.push({
+                path: partialKey.join('/'),
+                cid: cid.cid,
+                wrongFormat: true,
+              })
+            }
+          } catch {
+            brokenPaths.push({ path: partialKey.join('/') })
+          }
+        }
+      }
+
+      for (let brokenPath of brokenPaths.reverse()) {
+        if (brokenPath.wrongFormat) {
+          this.stateMerkle = await ipfs.object.patch.addLink(this.stateMerkle, {
+            Name: brokenPath.path,
+            // @ts-ignore weird deps CID types don't. no need to worry about it
+            Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
+          })
+
+          this.stateMerkle = await ipfs.object.patch.addLink(this.stateMerkle, {
+            Name: `${brokenPath.path}/.self`,
+            // @ts-ignore weird deps CID types don't. no need to worry about it
+            Hash: brokenPath.cid,
+          })
         } else {
-          stateCid = CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn')
+          this.stateMerkle = await ipfs.object.patch.addLink(this.stateMerkle, {
+            Name: brokenPath.path,
+            // @ts-ignore weird deps CID types don't. no need to worry about it
+            Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
+          })
+        }
+      }
+
+      const dataCid = await ipfs.dag.put(value)
+      const stat = await ipfs.block.stat(dataCid)
+
+      this.stateMerkle = (
+        await addLink(ipfs, {
+          parentCid: this.stateMerkle,
+          name: key,
+          size: stat.size,
+
+          cid: dataCid,
+          hashAlg: 'sha2-256',
+          cidVersion: 1,
+          flush: true,
+          shardSplitThreshold: 2_000,
+        })
+      ).cid
+
+    } catch (ex) {
+      console.log(ex)
+    }
+
+    console.log('Update ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+    //TODO make this happen after contract call has been completely executed
+    //stateCid = obj;
+  }
+
+  async #ls(prefix: string) {
+    const ts = new Date();
+    try {
+      const pBufNode = await ipfs.object.get(`${this.stateMerkle}/${prefix}` as any)
+      console.log(pBufNode.Links)
+      console.log('Ls ts.ms', new Date().getTime() -  ts.getTime(), 'ms')
+      return pBufNode.Links.map((e) => e.Name)
+    } catch {
+      return []
+    }
+  }
+
+
+  async #del(key: string) {
+    if (!key) {
+      return
+    }
+    //To be implemented!
+    this.stateMerkle = (await removeLink(ipfs, {
+      parentCid: this.stateMerkle,
+      name: key,
+      size: 0,
+
+      hashAlg: 'sha2-256',
+      cidVersion: 1,
+      flush: true,
+      shardSplitThreshold: 2_000,
+    })).cid
+  }
+
+
+
+  async get(key: string) {
+    if(this.opCache.has(key)) { 
+      return this.opCache.get(key)
+    } else if(this.stateCache.has(key)) { 
+      return this.stateCache.get(key)
+    } else {
+      const value = await this.#get(key)
+      this.stateCache.set(key, value)
+      return value
+    }
+  }
+
+  async set(key: string, value: string) {
+    this.opCache.set(key, value)
+    
+  }
+
+  /**
+   * This might be problematic for large directories.
+   * Research better ways to do this. (might include in memory HAMT)
+   * Not used yet
+   * @param prefix 
+   * @returns 
+   */
+  async ls(prefix: string) {
+    const keys = new Map()
+
+    //TODO: Pull keys from HAMT permanent state
+    
+
+    for(let [key, value] of this.stateCache.entries()) { 
+      if(key.startsWith(prefix)) { 
+        if(value === null) {
+          keys.delete(key)
+        } else {
+          keys.set(key, '1')
+        }
+      }
+    }
+    for(let [key, value] of this.opCache.entries()) { 
+      if(key.startsWith(prefix)) { 
+        if(value === null) {
+          keys.delete(key)
+        } else {
+          keys.set(key, '1')
         }
       }
     }
 
-    return {
-      client: {
-        /**
-         *
-         * @param id Contract ID
-         */
-        remoteState: async (id: string) => {
-          const state = await this.contractStateRaw(id)
 
-          return {
-            pull: state.client.pull,
-            ls: state.client.ls,
-          }
-        },
-        pull: async (key: string) => {
-          try {
-            console.log(stateCid)
-            const out = await ipfs.dag.resolve(stateCid, {
-              path: key,
-            })
 
-            const data = await ipfs.dag.get(out.cid)
 
-            console.log(data)
-            if (out.cid.code === 0x70) {
-              //If accidentally requesting PD-dag
-              const out = await ipfs.dag.resolve(stateCid, {
-                path: `${key}/.self`,
-              })
-
-              const data = await ipfs.dag.get(out.cid)
-              return data.value
-            } else if (out.cid.code === 0x71) {
-              //CBOR dag
-              return data.value
-            } else {
-              //This shouldn't happen unless other issues are present.
-              return null
-            }
-          } catch (ex) {
-            console.log(ex)
-            return null
-          }
-        },
-        update: async (key, value: any) => {
-          try {
-            if (!value) {
-              return
-            }
-            let merkleCid = stateCid
-
-            let linkExists
-            let dagData
-            let brokenPaths: ({
-              path: string,
-              cid: IPFS.CID,
-              wrongFormat: true,
-            } | {
-              path: string, 
-              wrongFormat?: never,
-            })[] = []
-            try {
-              const resolvedCid = await ipfs.dag.resolve(merkleCid, {
-                path: key,
-              })
-
-              const rawData = await ipfs.dag.get(resolvedCid.cid)
-              if (resolvedCid.cid.code === 0x70) {
-                dagData = JSON.parse(Buffer.from(rawData.value.Data).toString())
-              } else if (resolvedCid.cid.code === 0x71) {
-                dagData = rawData.value
-              }
-            } catch (ex) {
-              linkExists = false
-              let splitKey = key.split('/')
-              for (let x = 0; x < splitKey.length; x++) {
-                let partialKey = splitKey.slice(0, splitKey.length - 1 - x)
-                console.log(partialKey)
-
-                try {
-                  const cid = await ipfs.dag.resolve(merkleCid, {
-                    path: partialKey.join('/'),
-                  })
-                  console.log(cid.cid.code)
-                  if (cid.cid.code === 0x70) {
-                    break
-                  } else {
-                    brokenPaths.push({
-                      path: partialKey.join('/'),
-                      cid: cid.cid,
-                      wrongFormat: true,
-                    })
-                  }
-                } catch {
-                  brokenPaths.push({ path: partialKey.join('/') })
-                }
-              }
-            }
-
-            for (let brokenPath of brokenPaths.reverse()) {
-              if (brokenPath.wrongFormat) {
-                merkleCid = await ipfs.object.patch.addLink(merkleCid, {
-                  Name: brokenPath.path,
-                  // @ts-ignore weird deps CID types don't. no need to worry about it
-                  Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
-                })
-
-                merkleCid = await ipfs.object.patch.addLink(merkleCid, {
-                  Name: `${brokenPath.path}/.self`,
-                  // @ts-ignore weird deps CID types don't. no need to worry about it
-                  Hash: brokenPath.cid,
-                })
-              } else {
-                merkleCid = await ipfs.object.patch.addLink(merkleCid, {
-                  Name: brokenPath.path,
-                  // @ts-ignore weird deps CID types don't. no need to worry about it
-                  Hash: CID.parse('QmUNLLsPACCz1vLxQVkXqqLX5R1X345qqfHbsf67hvA3Nn'),
-                })
-              }
-            }
-
-            const dataCid = await ipfs.dag.put(value)
-            const stat = await ipfs.block.stat(dataCid)
-
-            merkleCid = (
-              await addLink(ipfs, {
-                parentCid: merkleCid,
-                name: key,
-                size: stat.size,
-
-                cid: dataCid,
-                hashAlg: 'sha2-256',
-                cidVersion: 1,
-                flush: true,
-                shardSplitThreshold: 2_000,
-              })
-            ).cid
-
-            stateCid = merkleCid
-          } catch (ex) {
-            console.log(ex)
-          }
-          //TODO make this happen after contract call has been completely executed
-          //stateCid = obj;
-        },
-        /**
-         * WIP: needs DAG type updates
-         * @param key
-         * @returns
-         */
-        ls: async (key) => {
-          try {
-            const pBufNode = await ipfs.object.get(`${stateCid}/${key}` as any)
-            console.log(pBufNode.Links)
-            return pBufNode.Links.map((e) => e.Name)
-          } catch {
-            return []
-          }
-        },
-        del: async (key) => {
-          if (!key) {
-            return
-          }
-          let merkleCid = stateCid
-          //To be implemented!
-          merkleCid = await removeLink(ipfs, {
-            parentCid: merkleCid,
-            name: key,
-            size: 0,
-
-            hashAlg: 'sha2-256',
-            cidVersion: 1,
-            flush: true,
-            shardSplitThreshold: 2_000,
-          })
-          stateCid = merkleCid
-        },
-      },
-      finish: () => {
-        return {
-          stateMerkle: stateCid,
-        }
-      },
-      startMerkle: stateCid,
-    }
+    
+    return this.#ls(prefix)
+  }
+  
+  async del(key: string) {
+    this.opCache.set(key, null)
   }
 }
 
@@ -281,14 +324,14 @@ export class WasmRunner {
 class VmRunner {
   balanceDb: Collection
   ledgerDb: Collection
+  contractOuputs: Collection
 
   ledgerStack: EventOp[]
   outputStack: any[]
   balanceSnapshots: Map<string, any>
 
   state: Record<string, {
-    wasmRunner: WasmRunner
-    stateAccess: any
+    stateCache: StateCache
     stateCid: string
   } | undefined>
   modules: any
@@ -451,8 +494,8 @@ class VmRunner {
    */
   revertOp() {
     this.ledgerStack = []
-    for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
-      wasmRunner?.revertState()
+    for(let [, {stateCache} = {stateCache: undefined}] of Object.entries(this.state)) { 
+      stateCache?.revertState()
     }
   }
 
@@ -461,8 +504,8 @@ class VmRunner {
     const ledger = [...this.ledgerStack]
     this.ledgerStack = []
 
-    for(let [, {wasmRunner} = {wasmRunner: undefined}] of Object.entries(this.state)) { 
-      wasmRunner?.finishState()
+    for(let [, {stateCache} = {stateCache: undefined}] of Object.entries(this.state)) { 
+      stateCache?.finishOp()
     }
     return {
       ledger
@@ -574,11 +617,9 @@ class VmRunner {
       if (!stateCid) {
         continue;
       }
-      const wasmRunner = new WasmRunner()
-      const stateAccess = await wasmRunner.contractStateRaw(contract_id, stateCid)
+      const stateCache = new StateCache(stateCid)
       state[contract_id] = {
-        wasmRunner,
-        stateAccess,
+        stateCache
       }
     }
     this.state = state;
@@ -635,7 +676,7 @@ class VmRunner {
         ledger: []
       }
     }
-    const { wasmRunner, stateAccess } = state
+    const { stateCache } = state
 
     const contractEnv = {
       ...args.env,
@@ -840,6 +881,51 @@ class VmRunner {
             result: "INSUFFICIENT_FUNDS"
           }
         }
+      },
+      //Intercontract read
+      'ic.read': async (contractId: string, key: string, value: string) => { 
+        if(this.state[contractId]) { 
+          const state = this.state[contractId]
+          const {stateCache} = state
+          const result = await stateCache.get(key)
+          return result
+        } else {
+          const contractOutput = await this.contractOuputs.findOne({
+            contractId: contractId,
+            anchored_height: {
+              $lte: this.op.block_height
+            }
+          }, {
+            //Latest height
+            sort: {
+              anchored_height: -1
+            }
+          })
+          console.log('contractOutput', contractOutput)
+
+          const stateCache = new StateCache(contractOutput.state_merkle)
+          this.state[contractId] = {
+            stateCache,
+            stateCid: contractOutput.state_merkle
+          }
+          const result = await stateCache.get(key)
+          return result
+        }
+      },
+      //Intercontract write
+      'ic.call': async (value) => { 
+
+      },
+      //Links contract for writes in the future
+      //It is required to link a contract first to allow for VM loading
+      //In the future, links can be dynamically set within the sending TX itself to ensure proper gas is allocated
+      //..and vm is loaded properly
+      'ic.link': async (value) => { 
+
+      },
+      //Unlinks intercontract call
+      'ic.unlink': async (value) => { 
+
       }
     }
 
@@ -886,20 +972,13 @@ class VmRunner {
 
             IOGas = IOGas + key.length + (val?.length || 0)
 
-            wasmRunner.tmpState.set(key, val)
+            stateCache.set(key, val)
             return 1
           },
           'db.getObject': async (keyPtr) => {
             const key = insta.exports.__getString(keyPtr)
-            let value
-            if (wasmRunner.tmpState.has(key)) {
-              value = wasmRunner.tmpState.get(key)
-            } else if (wasmRunner.stateCache.has(key)) { 
-              value = wasmRunner.stateCache.get(key)
-            } else {
-              value = await stateAccess.client.pull(key)
-              wasmRunner.tmpState.set(key, value)
-            }
+            let value = await stateCache.get(key)
+
 
             const val = JSON.stringify(value)
 
@@ -907,9 +986,9 @@ class VmRunner {
 
             return insta.exports.__newString(val)
           },
-          'db.delObject': (keyPtr) => {
+          'db.delObject': async(keyPtr) => {
             const key = insta.exports.__getString(keyPtr)
-            wasmRunner.tmpState.set(key, null)
+            await stateCache.del(key)
           },
           'system.call': async (callPtr, valPtr) => {
             const callArg = insta.exports.__getString(callPtr)
@@ -1025,24 +1104,14 @@ class VmRunner {
       if (!entry) {
         continue;
       }
-      const { wasmRunner, stateAccess } = entry
-      for (let [key, value] of wasmRunner.stateCache.entries()) {
-        //Try catch safety
-        try {
-          if (value === null) {
-            //Assume deleted
-            await stateAccess.client.del(key)
-          } else {
-            await stateAccess.client.update(key, JSON.parse(value))
-          }
-        } catch {}
-      }
+      const { stateCache } = entry
+      const stateMerkle = await stateCache.finalizeState()
       console.log('sending result')
       yield {
         type: 'partial-result',
         contract_id,
         index,
-        stateMerkle: stateAccess.finish().stateMerkle.toString(),
+        stateMerkle: stateMerkle.toString()
       }
     }
     yield {

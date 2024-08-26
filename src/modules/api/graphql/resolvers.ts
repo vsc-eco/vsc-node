@@ -225,6 +225,7 @@ export const Resolvers = {
     }
     const owner: string | undefined = args.filterOptions?.byToFrom;
     const limit = Math.min(100, Math.max(0, args.filterOptions?.limit ?? 20))
+    const offset = Math.max(0, args.filterOptions?.offset ?? 0)
     const [deposits, withdrawalsAndtransfers] = await Promise.all([
       appContainer.self.newService.witness.balanceKeeper.ledgerDb.find({
         t: 'deposit',
@@ -237,6 +238,7 @@ export const Resolvers = {
         id: args.filterOptions?.byTxId
       })
       }, {
+        skip: offset,
         limit,
         sort: [
           ['block_height', -1]
@@ -249,6 +251,7 @@ export const Resolvers = {
           { ...(owner ? { $or: [{ 'data.payload.from': owner }, { 'data.payload.to': owner }] } : {id: args.filterOptions?.byTxId})},
         ],
       }, {
+        skip: offset,
         limit,
         sort: [
           ['anchored_height', -1],
@@ -298,7 +301,7 @@ export const Resolvers = {
     console.log(JSON.stringify({originalDepositsLength, withdrawalsAndtransfers: withdrawalsAndtransfers.length}, null, 2))
 
     return {
-      txs: txs.slice(0, limit)
+      txs,
     };
   },
   localNodeInfo: async () => {

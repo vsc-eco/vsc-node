@@ -192,6 +192,7 @@ export const schema = `
     input LedgerTxFilter {
         byToFrom: String
         byTxId: String
+        offset: Int
         limit: Int
     }
     input FindTransactionFilter {

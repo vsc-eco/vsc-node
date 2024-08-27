@@ -444,9 +444,13 @@ export class BalanceKeeper {
                     try {
                         decodedMemo = JSON.parse(opBody.memo)
                     } catch {
-                        const queryString = new URLSearchParams(opBody.memo)
-                        for(let [key, value] of queryString.entries()) {
-                            decodedMemo[key] = value
+                        try {
+                            const queryString = new URLSearchParams(opBody.memo)
+                            for(let [key, value] of queryString.entries()) {
+                                decodedMemo[key] = value
+                            }
+                        } catch {
+                            continue
                         }
                     }
                     
@@ -468,7 +472,7 @@ export class BalanceKeeper {
                             normalDest = `hive:${opBody.from}`
                         }
                     } else if(decodedMemo['to']?.startsWith('@')) {
-                        const [,username] = decodedMemo['to'].split('@')[":"]
+                        const username = (decodedMemo['to'] as string).slice('@'.length)
 
                         if(hiveReg.test(username)) { 
                             normalDest = `hive:${username}`
@@ -478,7 +482,7 @@ export class BalanceKeeper {
                         }
                     } else if(decodedMemo['to']?.startsWith('hive:')) {
                         //In the future apply hive regex to verify proper deposit
-                        const [,username] = decodedMemo['to'].split('hive:')[":"]
+                        const username = decodedMemo['to'].slice('hive:'.length)
 
                         if(hiveReg.test(username)) { 
                             normalDest = decodedMemo['to']
@@ -494,12 +498,12 @@ export class BalanceKeeper {
 
                     if(decodedMemo['action'] === 'donate_fill') {
                         //For now don't account anything
-                        return;
+                        continue;
                     }
 
                     if(decodedMemo['action'] === 'donate') { 
                         //In the future donate to consensus running witnesses
-                        return;
+                        continue;
                     }
 
                     

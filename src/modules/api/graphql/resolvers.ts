@@ -118,12 +118,24 @@ export const Resolvers = {
           const out = await appContainer.self.ipfs.dag.get(obj.cid)
           console.log(out)
 
+          const recursiveFetch = async (initialNode) => {
+            let result = {}
+            const dagVal = await appContainer.self.ipfs.dag.get(initialNode.Hash)
+            if ('Links' in dagVal.value) {
+              for (let link of dagVal.value.Links as any) {
+                result[link.Name] = await recursiveFetch(link)
+              }
+            } else {
+              return dagVal.value
+            }
+
+            return result
+          }
 
           if (key === null) {
             let recursiveOutput = {}
             for (let key of out.value.Links) {
-              const dagVal = await appContainer.self.ipfs.dag.get(key.Hash)
-              recursiveOutput[key.Name] = dagVal.value
+              recursiveOutput[key.Name] = await recursiveFetch(key)
             }
             return recursiveOutput;
           }

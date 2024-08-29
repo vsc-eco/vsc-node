@@ -1,64 +1,88 @@
 version: "3.3"
 
 services:
-  vsc-node: # name of the service
-    build: .
-    image: vsc-node # the image to use
-    container_name: vsc-node # what to label the container for docker ps
-    restart: always # restart if failed, until we stop it ourselves
-    #external_links:
-      #- mongo
-    depends_on:
-      - ipfs
-      - mongo
-    networks:
-      - vsc-node
-    env_file:
-      - .env
+  # vsc-node: # name of the service
+  #   build: .
+  #   image: vsc-node # the image to use
+  #   container_name: vsc-node # what to label the container for docker ps
+  #   restart: always # restart if failed, until we stop it ourselves
+  #   #external_links:
+  #     #- mongo
+  #   depends_on:
+  #     - ipfs
+  #     - mongo
+  #   networks:
+  #     - vsc-node
+  #   env_file:
+  #     - .env
+  #   ports:
+  #     - 1337:1337
+  #   environment:
+  #     IPFS_HOST: http://ipfs:5001
+  #     MONGO_HOST: mongo:27017
+  #   volumes:
+  #     - node-modules-store:/home/github/app/node_modules
+  #     - ./data/vsc-node:/root/.vsc-node
+  #     - ./seed-backup.json:/root/.vsc-seed-backup.json
+  #     - ./.git/refs/heads/main:/root/git_commit
+
+  # mongo:
+  #   container_name: mongo_vsc
+  #   image: mongo:4.4.18
+  #   restart: always
+  #   ports:
+  #     - 127.0.0.1:27021:27017
+  #   networks:
+  #     - vsc-node
+  #   volumes:
+  #     - ./data/vsc-db:/data/db
+
+  # ipfs:
+  #   container_name: ipfs-vsc
+  #   image: ipfs/kubo:v0.18.1
+  #   restart: always
+  #   command:
+  #     - daemon
+  #     - --enable-pubsub-experiment
+  #     - --init-profile
+  #     - server
+  #   networks:
+  #     - vsc-node
+  #   ports:
+  #     - "4001:4001"
+  #     - "127.0.0.1:5101:5001"
+  #   environment: 
+  #     IPFS_PATH: /etc/ipfs
+  #   volumes:
+  #     - ./data/ipfs:/etc/ipfs
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
     ports:
-      - 1337:1337
+      - "3000:3000"
     environment:
-      IPFS_HOST: http://ipfs:5001
-      MONGO_HOST: mongo:27017
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      - node-modules-store:/home/github/app/node_modules
-      - ./data/vsc-node:/root/.vsc-node
-      - ./seed-backup.json:/root/.vsc-seed-backup.json
-      - ./.git/refs/heads/main:/root/git_commit
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
 
-  mongo:
-    container_name: mongo_vsc
-    image: mongo:4.4.18
-    restart: always
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
-      - 127.0.0.1:27021:27017
-    networks:
-      - vsc-node
+      - "9090:9090"
     volumes:
-      - ./data/vsc-db:/data/db
-
-  ipfs:
-    container_name: ipfs-vsc
-    image: ipfs/kubo:v0.18.1
-    restart: always
-    command:
-      - daemon
-      - --enable-pubsub-experiment
-      - --init-profile
-      - server
-    networks:
-      - vsc-node
-    ports:
-      - "4001:4001"
-      - "127.0.0.1:5101:5001"
-    environment: 
-      IPFS_PATH: /etc/ipfs
-    volumes:
-      - ./data/ipfs:/etc/ipfs
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
 
 volumes:
   node-modules-store: {}
   mongodb: {}
+  grafana-data:
+  prometheus-data:
       
 networks:
   vsc-node:

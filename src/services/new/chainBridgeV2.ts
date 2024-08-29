@@ -12,6 +12,7 @@ import BitSet from 'bitset';
 import { EventRecord, ParserFuncArgs, StreamParser, computeKeyId } from './utils';
 import { CID } from 'multiformats';
 import { EventOp, EventOpType } from './vm/types';
+import { Gauge } from 'prom-client';
 
 
 interface BlockHeaderDbRecord {
@@ -60,7 +61,9 @@ export class ChainBridgeV2 {
     contractOutputDb: Collection
     pinQueue: PQueue;
     self: NewCoreService;
-
+    blockLagMetric: Gauge = new Gauge({ name: 'block_lag', help: 'Block lag' });
+    parseLagMetric: Gauge = new Gauge({ name: 'parse_lag', help: 'Block parse lag' });
+    streamRateMetric: Gauge = new Gauge({ name: 'block_stream_rate', help: 'Block stream rate' });
     
 
     constructor(coreService) {
@@ -816,6 +819,13 @@ export class ChainBridgeV2 {
             const stateHeader = await this.streamState.findOne({
                 id: 'last_hb_processed'
             })
+
+            
+            const parseLag = this.streamParser.stream.calcHeight - stateHeader.val
+            const streamRate = Math.round(diff / 15)
+            this.blockLagMetric.set(this.blockLag)
+            this.parseLagMetric.set(parseLag)
+            this.streamRateMetric.set(streamRate)
             this.self.logger.info(`blockLag blockLag=${this.blockLag} streamRate=${Math.round(diff / 15)} parseLag=${this.streamParser.stream.calcHeight - stateHeader.val}`)
         }, 15_000)
 

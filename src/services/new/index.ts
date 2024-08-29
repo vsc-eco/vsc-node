@@ -19,6 +19,7 @@ import { ContractEngineV2 } from './contractEngineV2';
 import { VersionManager } from './witness/versionManager';
 import { ElectionManager } from './witness/electionManager';
 import { FileUploadManager } from './fileUploadManager';
+import { Gauge } from 'prom-client';
 
 
 export class NewCoreService {
@@ -41,6 +42,7 @@ export class NewCoreService {
     electionManager: ElectionManager
     fileUploadManager: FileUploadManager;
     nonceMap: Collection;
+    nodeIdMetric = new Gauge({ name: 'node_id', help: 'Node id', labelNames: ['node_id'] });
     
     constructor() {
         this.config = new Config(Config.getConfigDir())
@@ -79,6 +81,8 @@ export class NewCoreService {
         const did = new DID({ provider: keyPrivate, resolver: KeyResolver.getResolver() })
         await did.authenticate()
         this.identity = did
+        this.nodeIdMetric.reset();
+        this.nodeIdMetric.labels(did.id).set(1)
 
         await this.versionManager.init()
 

@@ -24,6 +24,7 @@ import { DID } from 'dids';
 import KeyResolver from 'key-did-resolver'
 import { createJwsMultsign, verifyMultiJWS } from '../../utils';
 import type { Message } from '@libp2p/interface-pubsub'
+import { Gauge } from 'prom-client';
 
 
 
@@ -385,6 +386,7 @@ export class P2PService {
     events: EventEmitter;
     multicastChannel: PeerChannel;
     memoryPoolChannel: PeerChannel;
+    directPeersMetric: Gauge = new Gauge({ name: 'connected_peers', help: 'Connected Peers', labelNames: ['connected_peers'] });
 
     constructor(self) {
         this.self = self;
@@ -483,6 +485,13 @@ export class P2PService {
         }
     }
 
+    private updateDirectPeersMetric() {
+        this.directPeersMetric.reset();
+        this.directPeers.forEach((peer) => {
+            this.directPeersMetric.labels(peer).set(1);
+        });
+    }   
+
     private async handleUnicast(msg) {
         try {
             const raw_payload = Buffer.from(msg.data).toString()
@@ -505,7 +514,6 @@ export class P2PService {
     
                     this.self.logger.debug('Call Test Result', await result())
     
-                    
                     await this.peerDb.findOneAndUpdate({
                         peer_id: peer
                     }, {
@@ -514,6 +522,7 @@ export class P2PService {
                         }
                     })
                     this.directPeers.push(peer)
+                    this.updateDirectPeersMetric()
                     this.self.logger.info(`Direct Peers ${JSON.stringify(this.directPeers)}`)
                 }
             }
@@ -676,6 +685,7 @@ export class P2PService {
                         }
                     })
                     this.directPeers.push(peer.toString())
+                    this.updateDirectPeersMetric()
                     this.self.logger.info(`Direct Peers ${JSON.stringify(this.directPeers)}`)
                 }
             }
@@ -735,6 +745,7 @@ export class P2PService {
                 connected: false
             }
         })
+        this.updateDirectPeersMetric()
         // this.announceNode()
         // NodeSchedule.scheduleJob('*/15 * * * * ', this.announceNode)
         // NodeSchedule.scheduleJob('* * * * * ', this.announceNode)

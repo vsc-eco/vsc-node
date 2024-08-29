@@ -3,6 +3,7 @@ import { NewCoreService } from "..";
 import { HiveClient } from "../../../utils";
 import { Collection } from "mongodb";
 import { TransactionDbStatus } from "../types";
+import { Gauge } from "prom-client";
 
 
 
@@ -44,6 +45,8 @@ export class VersionManager {
         id: 'hive_block',
         key: number
     }>;
+    dbResetIdMetric = new Gauge({ name: 'db_reset_id', help: 'Db reset id' });
+
     constructor(self: NewCoreService) {
         this.self = self;
 
@@ -104,7 +107,8 @@ export class VersionManager {
         const resetBlocksEntry = await this.streamState.findOne({
             id: 'index_block_reset'
         });
-
+        this.dbResetIdMetric.set(resetBlocksEntry?.val ?? 0);
+        
         if(missingGenesis || (resetBlocksEntry !== null && resetBlocksEntry.val !== VersionConfig.index_block_reset_id)) {
             const index = resetBlocksEntry?.val ?? 0;
             const lastBlockToKeep = missingGenesis ? network.genesisDay - 1 : Math.min(...VersionConfig.last_block_to_keep.slice(index));

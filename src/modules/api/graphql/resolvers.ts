@@ -253,7 +253,8 @@ export const Resolvers = {
         skip: offset,
         limit,
         sort: [
-          ['block_height', -1]
+          ['block_height', -1],
+          ['idx', -1]
           // TODO add tx op index
         ]
       }).toArray(),
@@ -268,18 +269,22 @@ export const Resolvers = {
         sort: [
           ['anchored_height', -1],
           ['anchored_index', -1],
+          ['anchored_op_index', -1],
+          ['header.nonce', -1]
         ]
       }).toArray(),
     ])
 
     type Tx = typeof deposits[number] & {status: TransactionDbStatus}
 
+    let unconfirmedOpCount = 0
+
     const mapTxToLedgerOp = (tx: typeof withdrawalsAndtransfers[number]): Tx => ({
       id: tx.id,
       tk: tx.data.payload.tk,
       amount: tx.data.payload.amount,
-      block_height: tx.anchored_height!,
-      idx: tx.anchored_op_index!,
+      block_height: tx.anchored_height || appContainer.self.newService.chainBridge.streamParser.stream.lastBlock,
+      idx: parseFloat(`${tx.anchored_index || 0}.${tx.anchored_op_index ?? unconfirmedOpCount++}`),
       owner: tx.data.payload.to,
       from: tx.data.payload.from,
       t: tx.data.op,
@@ -289,15 +294,23 @@ export const Resolvers = {
     })
     
     const txs = deposits as Tx[]
+    const unconfirmedTxs: Tx[] = []
     const originalDepositsLength = deposits.length
     let di = 0;
     let ti = 0;
     while (di < originalDepositsLength && ti < withdrawalsAndtransfers.length) {
-      if (deposits[di + ti].block_height > withdrawalsAndtransfers[ti].anchored_height!) {
-        txs[di + ti].status = TransactionDbStatus.confirmed
+      const i = di + ti - unconfirmedOpCount
+      if (deposits[i].block_height > withdrawalsAndtransfers[ti].anchored_height!) {
+        txs[i].status = TransactionDbStatus.confirmed
+        txs[i].idx = 0
         di++;
       } else {
-        deposits.splice(di+ti, 0, mapTxToLedgerOp(withdrawalsAndtransfers[ti]));
+        const ledgerOp = mapTxToLedgerOp(withdrawalsAndtransfers[ti])
+        if (ledgerOp.status === TransactionDbStatus.unconfirmed) {
+          unconfirmedTxs.push(ledgerOp)
+        } else {
+          deposits.splice(i, 0, ledgerOp);
+        }
         ti++
       }
     }
@@ -307,10 +320,11 @@ export const Resolvers = {
     }
 
     for (; di < originalDepositsLength; di++) {
-      txs[di + ti].status = TransactionDbStatus.confirmed
+      txs[di + ti - unconfirmedOpCount].status = TransactionDbStatus.confirmed
+      txs[di + ti - unconfirmedOpCount].idx = 0
     }
 
-    console.log(JSON.stringify({originalDepositsLength, withdrawalsAndtransfers: withdrawalsAndtransfers.length}, null, 2))
+    txs.unshift(...unconfirmedTxs)
 
     return {
       txs,

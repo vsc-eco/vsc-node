@@ -179,6 +179,7 @@ export const schema = `
         id: String!
         amount: Int!
         block_height: Int!
+        idx: Float!
         from: String
         memo: String
         owner: String!

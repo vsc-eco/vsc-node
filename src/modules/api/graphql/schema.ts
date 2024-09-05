@@ -74,6 +74,9 @@ export const schema = `
     type Gas {
         IO: Int
     }
+    type ContractDiff {
+        diff: JSON
+    }
     type ContractState {
         id: String
         state(key: String): JSON
@@ -212,6 +215,7 @@ export const schema = `
         limit: Int
     }
     type Query {
+        contractStateDiff(id: String): ContractDiff
         contractState(id: String): ContractState
         findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindTransactionResult
         findContractOutput(filterOptions: FindContractOutputFilter, decodedFilter: JSON): FindContractOutputResult

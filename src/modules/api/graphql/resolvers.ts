@@ -284,7 +284,8 @@ export const Resolvers = {
       tk: tx.data.payload.tk,
       amount: tx.data.payload.amount,
       block_height: tx.anchored_height || appContainer.self.newService.chainBridge.streamParser.stream.lastBlock,
-      idx: parseFloat(`${tx.anchored_index || 0}.${tx.anchored_op_index ?? unconfirmedOpCount++}`),
+      // TODO some txs that are not unconfirmed are missing anchored_op_index
+      idx: parseFloat(`${tx.anchored_index || 0}.${tx.status === TransactionDbStatus.unconfirmed ? unconfirmedOpCount++ : tx.anchored_op_index || 0}`),
       owner: tx.data.payload.to,
       from: tx.data.payload.from,
       t: tx.data.op,
@@ -314,20 +315,47 @@ export const Resolvers = {
         ti++
       }
     }
+    const nums: number[] = []
+    nums.push(di, ti, -1)
 
     if (ti < withdrawalsAndtransfers.length) {
       deposits.push(...withdrawalsAndtransfers.slice(ti).map(mapTxToLedgerOp))
     }
 
     for (; di < originalDepositsLength; di++) {
-      txs[di + ti - unconfirmedOpCount].status = TransactionDbStatus.confirmed
-      txs[di + ti - unconfirmedOpCount].idx = 0
+      const i = di + ti - unconfirmedOpCount
+      nums.push(i)
+      txs[i].status = TransactionDbStatus.confirmed
+      txs[i].idx = 0
     }
 
+    nums.push(-1)
     txs.unshift(...unconfirmedTxs)
+    nums.push(originalDepositsLength, withdrawalsAndtransfers.length, unconfirmedOpCount, unconfirmedTxs.length, -1)
+// [41, 42, 43, 44, 45, 46]
+    let i = 0;
+    for (const tx of txs) {
+      if (typeof tx.idx !== 'number') {
+        let num: number
+        switch (tx.t) {
+          case 'deposit':
+            num = 0;
+            break
+          case 'transfer':
+            num = 1;
+            break;
+          case 'withdraw':
+            num = 2;
+            break
+        }
+        nums.push(num)
+      }
+      i++
+    }
 
     return {
       txs,
+      nums,
     };
   },
   localNodeInfo: async () => {

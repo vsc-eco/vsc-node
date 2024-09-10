@@ -79,13 +79,11 @@ export const Resolvers = {
       { inputs: { $elemMatch: { $eq: args.id } } }
     );
 
-    // ALP: revisit when deterministic mechanism for arranging order of tx in a block is found, currently not save when multiple executions in block happen
     const previousContractOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
-      { anchored_height: { $lt: inputTxMatchingOutputTx.anchored_height } },
-      { sort: { anchored_height: 1 } }
+      { _id: { $lt: inputTxMatchingOutputTx._id } },
+      { limit: 1, sort: [['_id', -1]] }
     );
 
-    // use vsc api here to fetch contractState
     const outputTxState = await fetchState(null, inputTxMatchingOutputTx.state_merkle);
     const previousContractState = await fetchState(null, previousContractOutputTx.state_merkle);
 

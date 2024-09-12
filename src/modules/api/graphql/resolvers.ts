@@ -10,7 +10,6 @@ import { TransactionDbStatus, TransactionDbType } from '../../../types';
 import { computeKeyId, verifyTx } from '../../../services/new/utils';
 import { TransactionContainerV2, WitnessDbRecord } from '../../../services/new/types';
 import { HiveClient } from '../../../utils';
-import { diff } from 'json-diff';
 
 const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
 
@@ -28,41 +27,7 @@ ajv.compile({
   additionalProperties: false
 })
 
-async function fetchState(key: string, stateMerkle: string) {
-  try {
-    const obj = await appContainer.self.ipfs.dag.resolve(stateMerkle, {
-      path: key,
-    })
-    const out = await appContainer.self.ipfs.dag.get(obj.cid)
-    console.log(out)
 
-    const recursiveFetch = async (initialNode) => {
-      let result = {}
-      const dagVal = await appContainer.self.ipfs.dag.get(initialNode.Hash)
-      if ('Links' in dagVal.value) {
-        for (let link of dagVal.value.Links as any) {
-          result[link.Name] = await recursiveFetch(link)
-        }
-      } else {
-        return dagVal.value
-      }
-
-      return result
-    }
-
-    if (key === null) {
-      let recursiveOutput = {}
-      for (let key of out.value.Links) {
-        recursiveOutput[key.Name] = await recursiveFetch(key)
-      }
-      return recursiveOutput;
-    }
-
-    return out.value
-  } catch {
-    return null;
-  }
-}
 
 export const DebugResolvers = {
   peers: async (_, args) => {
@@ -74,25 +39,6 @@ export const DebugResolvers = {
 }
 
 export const Resolvers = {
-  contractStateDiff: async (_, args) => {
-    const inputTxMatchingOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
-      { inputs: { $elemMatch: { $eq: args.id } } }
-    );
-
-    // ALP: revisit when deterministic mechanism for arranging order of tx in a block is found, currently not save when multiple executions in block happen
-    const previousContractOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
-      { anchored_height: { $lt: inputTxMatchingOutputTx.anchored_height } },
-      { sort: { anchored_height: 1 } }
-    );
-
-    // use vsc api here to fetch contractState
-    const outputTxState = await fetchState(null, inputTxMatchingOutputTx.state_merkle);
-    const previousContractState = await fetchState(null, previousContractOutputTx.state_merkle);
-
-    return {
-      diff: diff(previousContractState, outputTxState)
-    }
-  },
   contractState: async (_, args) => {
     const data = await appContainer.self.newService.chainBridge.contractOutputDb.findOne({
       id: args.id,
@@ -163,8 +109,41 @@ export const Resolvers = {
         }
       },
       state: async (args) => {
+        try {
           let key = args.key ? `${args.key}` : null
-        return await fetchState(key, data.state_merkle)
+
+          const obj = await appContainer.self.ipfs.dag.resolve(data.state_merkle, {
+            path: key,
+          })
+          const out = await appContainer.self.ipfs.dag.get(obj.cid)
+          console.log(out)
+
+          const recursiveFetch = async (initialNode) => {
+            let result = {}
+            const dagVal = await appContainer.self.ipfs.dag.get(initialNode.Hash)
+            if ('Links' in dagVal.value) {
+              for (let link of dagVal.value.Links as any) {
+                result[link.Name] = await recursiveFetch(link)
+              }
+            } else {
+              return dagVal.value
+            }
+
+            return result
+          }
+
+          if (key === null) {
+            let recursiveOutput = {}
+            for (let key of out.value.Links) {
+              recursiveOutput[key.Name] = await recursiveFetch(key)
+            }
+            return recursiveOutput;
+          }
+
+          return out.value
+        } catch {
+          return null;
+        }
       },
     }
   },

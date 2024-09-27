@@ -76,6 +76,7 @@ export const schema = `
     }
     type ContractDiff {
         diff: JSON
+        previousContractStateId: String!
     }
     type ContractState {
         id: String

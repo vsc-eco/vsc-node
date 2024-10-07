@@ -10,6 +10,7 @@ import { TransactionDbStatus, TransactionDbType } from '../../../types';
 import { computeKeyId, verifyTx } from '../../../services/new/utils';
 import { TransactionContainerV2, WitnessDbRecord } from '../../../services/new/types';
 import { HiveClient } from '../../../utils';
+import { diff } from 'json-diff';
 
 const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
 
@@ -27,7 +28,66 @@ ajv.compile({
   additionalProperties: false
 })
 
+async function listAllEntries(
+  cid: string,
+  path: string = ''
+): Promise<{ path: string; type: string; cid: string }[]> {
+  const entriesList: { path: string; type: string; cid: string }[] = [];
+  const entries = await appContainer.self.ipfs.ls(cid);
 
+  for await (const entry of entries) {
+    const fullPath = path ? `${path}/${entry.name}` : entry.name;
+    entriesList.push({
+      path: fullPath,
+      type: entry.type,
+      cid: entry.cid.toString(),
+    });
+
+    if (entry.type === 'dir') {
+      const subEntries = await listAllEntries(entry.cid.toString(), fullPath);
+      entriesList.push(...subEntries);
+    }
+  }
+
+  return entriesList;
+}
+
+async function buildDataMap(rootCid: string): Promise<{ [key: string]: any }> {
+  const dataMap: { [key: string]: any } = {};
+  const entries = await listAllEntries(rootCid);
+
+  for (const entry of entries) {
+    const { path, type, cid } = entry;
+
+    if (type === 'file') {
+      try {
+        dataMap[path] = (await appContainer.self.ipfs.dag.get(CID.parse(cid))).value!;
+      } catch (error) {
+        console.error(`Error fetching data at path ${path}:`, error);
+      }
+    } else if (type === 'dir') {
+      // we dont return directories
+    }
+  }
+
+  return dataMap;
+}
+
+async function fetchState(key: string, stateMerkle: string) {
+  try {
+    if (key === null) {
+      return await buildDataMap(stateMerkle)
+    } else {
+      const obj = await appContainer.self.ipfs.dag.resolve(stateMerkle, {
+        path: key,
+      })
+      const out = await appContainer.self.ipfs.dag.get(obj.cid)
+      return out.value
+    }
+  } catch {
+    return null;
+  }
+}
 
 export const DebugResolvers = {
   peers: async (_, args) => {
@@ -38,7 +98,29 @@ export const DebugResolvers = {
   }
 }
 
+const calculateContractDiff = async (initialStateMerkle: string, outputStateMerkle) => {
+  const previousContractState = await fetchState(null, initialStateMerkle);
+  const outputTxState = await fetchState(null, outputStateMerkle);
+
+  return diff(previousContractState, outputTxState)
+}
+
 export const Resolvers = {
+  contractStateDiff: async (_, args) => {
+    const inputTxMatchingOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
+      { inputs: { $elemMatch: { $eq: args.id } } }
+    );
+
+    const previousContractOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
+      { _id: { $lt: inputTxMatchingOutputTx._id } },
+      { limit: 1, sort: [['_id', -1]] }
+    );
+
+    return {
+      diff: calculateContractDiff.bind(null, previousContractOutputTx.state_merkle, inputTxMatchingOutputTx.state_merkle),
+      previousContractStateId: previousContractOutputTx.id
+    }
+  },
   contractState: async (_, args) => {
     const data = await appContainer.self.newService.chainBridge.contractOutputDb.findOne({
       id: args.id,
@@ -109,41 +191,8 @@ export const Resolvers = {
         }
       },
       state: async (args) => {
-        try {
           let key = args.key ? `${args.key}` : null
-
-          const obj = await appContainer.self.ipfs.dag.resolve(data.state_merkle, {
-            path: key,
-          })
-          const out = await appContainer.self.ipfs.dag.get(obj.cid)
-          console.log(out)
-
-          const recursiveFetch = async (initialNode) => {
-            let result = {}
-            const dagVal = await appContainer.self.ipfs.dag.get(initialNode.Hash)
-            if ('Links' in dagVal.value) {
-              for (let link of dagVal.value.Links as any) {
-                result[link.Name] = await recursiveFetch(link)
-              }
-            } else {
-              return dagVal.value
-            }
-
-            return result
-          }
-
-          if (key === null) {
-            let recursiveOutput = {}
-            for (let key of out.value.Links) {
-              recursiveOutput[key.Name] = await recursiveFetch(key)
-            }
-            return recursiveOutput;
-          }
-
-          return out.value
-        } catch {
-          return null;
-        }
+        return await fetchState(key, data.state_merkle)
       },
     }
   },

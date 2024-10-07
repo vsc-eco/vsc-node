@@ -117,7 +117,7 @@ export const Resolvers = {
     );
 
     return {
-      diff: calculateContractDiff(previousContractOutputTx.state_merkle, inputTxMatchingOutputTx.state_merkle),
+      diff: calculateContractDiff.bind(null, previousContractOutputTx.state_merkle, inputTxMatchingOutputTx.state_merkle),
       previousContractStateId: previousContractOutputTx.id
     }
   },

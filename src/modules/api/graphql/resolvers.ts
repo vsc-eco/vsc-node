@@ -98,6 +98,13 @@ export const DebugResolvers = {
   }
 }
 
+const calculateContractDiff = async (initialStateMerkle: string, outputStateMerkle) => {
+  const previousContractState = await fetchState(null, initialStateMerkle);
+  const outputTxState = await fetchState(null, outputStateMerkle);
+
+  return diff(previousContractState, outputTxState)
+}
+
 export const Resolvers = {
   contractStateDiff: async (_, args) => {
     const inputTxMatchingOutputTx = await appContainer.self.newService.chainBridge.contractOutputDb.findOne(
@@ -109,11 +116,8 @@ export const Resolvers = {
       { limit: 1, sort: [['_id', -1]] }
     );
 
-    const outputTxState = await fetchState(null, inputTxMatchingOutputTx.state_merkle);
-    const previousContractState = await fetchState(null, previousContractOutputTx.state_merkle);
-
     return {
-      diff: diff(previousContractState, outputTxState),
+      diff: calculateContractDiff(previousContractOutputTx.state_merkle, inputTxMatchingOutputTx.state_merkle),
       previousContractStateId: previousContractOutputTx.id
     }
   },

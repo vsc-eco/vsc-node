@@ -39,7 +39,7 @@ interface BalanceType {
     block_height: number
 }
 
-
+const CONTRACT_DEPOSIT_START_BLOCK_HEIGHT = 91007000
 
 /**
  * Manages multisig balances, deposits, and withdrawals
@@ -490,6 +490,8 @@ export class BalanceKeeper {
                             //Make sure it defaults correctly
                             normalDest = `hive:${opBody.from}`
                         }
+                    } else if (decodedMemo['to']?.startsWith('vs4') && args.data.blkHeight > CONTRACT_DEPOSIT_START_BLOCK_HEIGHT) {
+                      normalDest = decodedMemo['to']
                     } else if(ethReg.test(decodedMemo['to'])) {
                         normalDest = `did:pkh:eip155:1:${eip55.encode(decodedMemo['to'])}`
                     } else {

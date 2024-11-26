@@ -421,7 +421,7 @@ class VmRunner {
       }
     } else {
       const balanceSnapshot = await this.getBalanceSnapshotDirect({account}, block_height);
-      this.balanceSnapshots.set(account, balanceSnapshot)
+      this.balanceSnapshots.set(account, balanceSnapshot.tokens)
       return balanceSnapshot
     }
   }

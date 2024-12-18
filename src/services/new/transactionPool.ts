@@ -4,21 +4,21 @@ import { MessageHandleOpts } from "./p2pService";
 import { SignatureType, TransactionContainerV2, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from "./types";
 import { HiveClient, sleep } from "../../utils";
 import { PrivateKey } from "@hiveio/dhive";
-import { encodePayload } from 'dag-jose-utils'
+import { encode } from '@ipld/dag-cbor'
 import { CID } from "kubo-rpc-client";
-import { ParserFuncArgs, computeKeyId, verifyTx } from "./utils";
-import { convertEIP712Type } from "@vsc.eco/client/dist/utils";
+import { ParserFuncArgs, computeKeyId } from "./utils";
 import * as DagCbor from '@ipld/dag-cbor'
 import NodeSchedule from 'node-schedule'
 import {recoverTypedDataAddress, hashTypedData} from 'viem'
 import { AccountId } from "caip";
-import { DID, DagJWS, GeneralJWS } from "dids";
-import * as Block from 'multiformats/block'
+import { DID, DagJWS } from "dids";
 import * as codec from '@ipld/dag-cbor'
-import { sha256 as hasher, sha256 } from 'multiformats/hashes/sha2'
+import { sha256 } from 'multiformats/hashes/sha2'
 import {recover} from 'web3-eth-accounts'
 import pkg from 'bloom-filters';
 import Moment from 'moment'
+import { convertCBORToEIP712TypedData } from "./utils/cbor/cbor_to_eip712_converter";
+import './utils/cbor/cborg_utils/jump.js';
 
 const { BloomFilter } = pkg;
 
@@ -99,7 +99,7 @@ async function verifyTxSignature(did: DID, tx: string, sig: string): Promise<[
         if(sig.t === 'eip191') {
             //Verify via EIP191 
 
-            const typedData = sigDecoded.eip712_type || convertEIP712Type(decodedTx)
+            const typedData = sigDecoded.eip712_type || convertCBORToEIP712TypedData('vsc.network', encode(decodedTx), 'tx_container_v0')
 
             const signature = (sig as SigEIP191).s
             const hash = hashTypedData({

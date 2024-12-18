@@ -18,7 +18,6 @@ import {recover} from 'web3-eth-accounts'
 import pkg from 'bloom-filters';
 import Moment from 'moment'
 import { convertCBORToEIP712TypedData } from "./utils/cbor/cbor_to_eip712_converter";
-import './utils/cbor/cborg_utils/jump.js';
 
 const { BloomFilter } = pkg;
 

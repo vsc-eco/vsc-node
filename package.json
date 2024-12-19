@@ -57,7 +57,7 @@
     "eip55": "^2.1.1",
     "embed-table": "^4.2.3",
     "fast-json-patch": "^3.1.1",
-    "got": "^14.0.0",
+    "got": "12",
     "graphql": "^16.5.0",
     "graphql-type-json": "^0.3.2",
     "graphql-yoga": "^3.6.0",

@@ -14,7 +14,7 @@ import fs from 'fs/promises'
 import { BlockHeader, BlockHeaderDbRecord, TransactionDbRecordV2, TransactionDbStatus, TransactionDbType } from '../types';
 import { PrivateKey } from '@hiveio/dhive';
 import { DelayMonitor } from './delayMonitor';
-import { simpleMerkleTree } from '../utils/crypto';
+import { sha256, simpleMerkleTree } from '../utils/crypto';
 import { ParserFuncArgs, computeKeyId, sortTransactions } from '../utils';
 import { MultisigSystem } from './multisig';
 import { BalanceKeeper } from './balanceKeeper';
@@ -287,6 +287,11 @@ export class TxContext {
     if(op === "call_contract") {
       const contract_id = tx.data.contract_id
       
+      if (typeof contract_id !== 'string') { 
+        return {
+          ok: false,
+        }
+      }
       let balMap = {}
       for(let key of this.balances.keys()) { 
         balMap[key] = this.balances.get(key)
@@ -581,10 +586,27 @@ export class WitnessServiceV2 {
       }, {
         sort: {
           "headers.nonce": 1,
-          first_seen: -1
+          id: -1
         },
         limit: 2048
       }).toArray()
+
+
+      // console.log('Getting Hive block key')
+      // const blockKey = await this.self.chainBridge.events.findOne({
+      //   id: "hive_block",
+      //   key: start_height
+      // })
+
+      // console.log('blockKey', blockKey)
+
+      // let seed = blockKey.block_id
+      // console.log('blockKey', blockKey, seed)
+      
+      // const toSort = JSON.parse(JSON.stringify(offchainTxsUnfiltered))
+
+      // const sortedTxs =  await sortTransactions(toSort, sha256(seed).toString('hex'))
+      // console.log("sorted TXs", sortedTxs.map(e => e.id), offchainTxsUnfiltered.map(e => e.id))
 
       const nonceMap:Record<string, number> = {}
       const offchainTxs: TransactionDbRecordV2[] = []

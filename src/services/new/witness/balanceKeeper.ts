@@ -39,7 +39,7 @@ interface BalanceType {
     block_height: number
 }
 
-
+const CONTRACT_DEPOSIT_START_BLOCK_HEIGHT = 91007000
 
 /**
  * Manages multisig balances, deposits, and withdrawals
@@ -444,9 +444,13 @@ export class BalanceKeeper {
                     try {
                         decodedMemo = JSON.parse(opBody.memo)
                     } catch {
-                        const queryString = new URLSearchParams(opBody.memo)
-                        for(let [key, value] of queryString.entries()) {
-                            decodedMemo[key] = value
+                        try {
+                            const queryString = new URLSearchParams(opBody.memo)
+                            for(let [key, value] of queryString.entries()) {
+                                decodedMemo[key] = value
+                            }
+                        } catch {
+                            continue
                         }
                     }
                     
@@ -468,7 +472,7 @@ export class BalanceKeeper {
                             normalDest = `hive:${opBody.from}`
                         }
                     } else if(decodedMemo['to']?.startsWith('@')) {
-                        const [,username] = decodedMemo['to'].split('@')[":"]
+                        const username = (decodedMemo['to'] as string).slice('@'.length)
 
                         if(hiveReg.test(username)) { 
                             normalDest = `hive:${username}`
@@ -478,7 +482,7 @@ export class BalanceKeeper {
                         }
                     } else if(decodedMemo['to']?.startsWith('hive:')) {
                         //In the future apply hive regex to verify proper deposit
-                        const [,username] = decodedMemo['to'].split('hive:')[":"]
+                        const username = decodedMemo['to'].slice('hive:'.length)
 
                         if(hiveReg.test(username)) { 
                             normalDest = decodedMemo['to']
@@ -486,6 +490,8 @@ export class BalanceKeeper {
                             //Make sure it defaults correctly
                             normalDest = `hive:${opBody.from}`
                         }
+                    } else if (decodedMemo['to']?.startsWith('vs4') && args.data.blkHeight > CONTRACT_DEPOSIT_START_BLOCK_HEIGHT) {
+                      normalDest = decodedMemo['to']
                     } else if(ethReg.test(decodedMemo['to'])) {
                         normalDest = `did:pkh:eip155:1:${eip55.encode(decodedMemo['to'])}`
                     } else {
@@ -494,12 +500,12 @@ export class BalanceKeeper {
 
                     if(decodedMemo['action'] === 'donate_fill') {
                         //For now don't account anything
-                        return;
+                        continue;
                     }
 
                     if(decodedMemo['action'] === 'donate') { 
                         //In the future donate to consensus running witnesses
-                        return;
+                        continue;
                     }
 
                     

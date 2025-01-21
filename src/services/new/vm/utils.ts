@@ -1,4 +1,4 @@
-import loader from '@assemblyscript/loader'
+import {instantiate as assemblyscriptInstantiate} from '@assemblyscript/loader'
 import Path, {dirname} from 'path'
 import {fork, ChildProcess} from 'child_process'
 import { fileURLToPath } from 'url';
@@ -194,7 +194,7 @@ Object.defineProperty(Instance.prototype, 'exports', { enumerable: true })
 
 export async function instantiate(source, imports) {
   let state = new Asyncify()
-  let result = await loader.instantiate<{}>(source, state.wrapImports(imports))
+  let result = await assemblyscriptInstantiate<{}>(source, state.wrapImports(imports))
   state.init(result instanceof WebAssembly.Instance ? result : result.instance, imports)
   return result
 }

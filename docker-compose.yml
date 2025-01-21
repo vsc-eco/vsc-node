@@ -63,3 +63,4 @@ volumes:
 networks:
   vsc-node:
     driver: bridge
+    

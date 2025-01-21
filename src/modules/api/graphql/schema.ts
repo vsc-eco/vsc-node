@@ -74,6 +74,10 @@ export const schema = `
     type Gas {
         IO: Int
     }
+    type ContractDiff {
+        diff: JSON
+        previousContractStateId: String!
+    }
     type ContractState {
         id: String
         state(key: String): JSON
@@ -179,6 +183,7 @@ export const schema = `
         id: String!
         amount: Int!
         block_height: Int!
+        idx: Float!
         from: String
         memo: String
         owner: String!
@@ -191,6 +196,8 @@ export const schema = `
     }
     input LedgerTxFilter {
         byToFrom: String
+        byTxId: String
+        offset: Int
         limit: Int
     }
     input FindTransactionFilter {
@@ -209,6 +216,7 @@ export const schema = `
         limit: Int
     }
     type Query {
+        contractStateDiff(id: String): ContractDiff
         contractState(id: String): ContractState
         findTransaction(filterOptions: FindTransactionFilter, decodedFilter: JSON): FindTransactionResult
         findContractOutput(filterOptions: FindContractOutputFilter, decodedFilter: JSON): FindContractOutputResult
